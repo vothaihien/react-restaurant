@@ -36,6 +36,18 @@
       ],
       "@infrastructure/*": [
         "./infrastructure/*"
+      ],
+      "@/features/*": [
+        "./src/features/*"
+      ],
+      "@/shared/*": [
+        "./src/shared/*"
+      ],
+      "@/core/*": [
+        "./src/core/*"
+      ],
+      "@/infrastructure/*": [
+        "./src/infrastructure/*"
       ]
     },
     "allowImportingTsExtensions": true,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '@/core/context/AppContext';
 
 const viKdsStatus = (s: string) => {
     switch (s) {

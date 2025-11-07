@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useAppContext } from '../context/AppContext';
-import TableCard from '../components/TableCard';
-import OrderModal from '../components/OrderModal';
-import PaymentModal from '../components/PaymentModal';
-import type { Table, Order } from '../types';
-import { TableStatus } from '../types';
+import { useAppContext } from '@/core/context/AppContext';
+import TableCard from '@/components/TableCard';
+import OrderModal from '@/components/OrderModal';
+import PaymentModal from '@/components/PaymentModal';
+import type { Table, Order } from '@/core/types';
+import { TableStatus } from '@/features/tables/domain/types';
 
 const DashboardView: React.FC = () => {
     const { tables, getOrderForTable } = useAppContext();
@@ -18,12 +18,12 @@ const DashboardView: React.FC = () => {
             setOrderModalOpen(true);
         }
     };
-    
+
     const handleOpenPayment = () => {
-      setOrderModalOpen(false);
-      setPaymentModalOpen(true);
+        setOrderModalOpen(false);
+        setPaymentModalOpen(true);
     }
-    
+
     const closeAllModals = () => {
         setSelectedTable(null);
         setOrderModalOpen(false);
@@ -39,7 +39,7 @@ const DashboardView: React.FC = () => {
                     <TableCard key={table.id} table={table} onClick={() => handleTableClick(table)} />
                 ))}
             </div>
-            
+
             {selectedTable && isOrderModalOpen && (
                 <OrderModal
                     table={selectedTable}

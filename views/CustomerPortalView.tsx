@@ -1,13 +1,13 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useAppContext } from '../context/AppContext';
-import { TableStatus } from '../types';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { DateTimePicker } from '@/components/ui/date-time-picker';
-import { formatVND } from '../lib/utils';
-import { useFeedback } from '../context/FeedbackContext';
+import { useAppContext } from '@/core/context/AppContext';
+import { TableStatus } from '@/features/tables/domain/types';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/shared/components/ui/tabs';
+import { Button } from '@/shared/components/ui/button';
+import { Input } from '@/shared/components/ui/input';
+import { Card, CardHeader, CardTitle, CardContent } from '@/shared/components/ui/card';
+import { DateTimePicker } from '@/shared/components/ui/date-time-picker';
+import { formatVND } from '@/shared/utils';
+import { useFeedback } from '@/core/context/FeedbackContext';
 
 const CustomerPortalView: React.FC = () => {
     const { menuItems, createReservation, tables } = useAppContext() as any;
@@ -25,7 +25,7 @@ const CustomerPortalView: React.FC = () => {
     const [party, setParty] = useState(2);
     const [dateTime, setDateTime] = useState<Date | undefined>(undefined);
     const [notes, setNotes] = useState('');
-    const [selectedTableId, setSelectedTableId] = useState<string>('');
+    const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
 
     // Cart (shared for booking pre-order & order tab)
     const [cart, setCart] = useState<any[]>([]);
@@ -45,8 +45,21 @@ const CustomerPortalView: React.FC = () => {
         const preorder = cart.length
             ? `\n[Đặt món trước] ${cart.map(c => `${c.qty}x ${c.name} (${c.size})`).join(', ')}`
             : '';
-        createReservation({ customerName: name, phone, partySize: party, time: ts, tableId: selectedTableId || null, source: 'App', notes: (notes || '') + preorder });
-        setName(''); setPhone(''); setParty(2); setDateTime(undefined); setNotes(''); setSelectedTableId(''); setCart([]);
+        const reservationData: any = {
+            customerName: name,
+            phone,
+            partySize: party,
+            time: ts,
+            source: 'App',
+            notes: (notes || '') + preorder
+        };
+        if (selectedTableIds.length > 0) {
+            reservationData.tableIds = selectedTableIds;
+        } else {
+            reservationData.tableId = null;
+        }
+        createReservation(reservationData);
+        setName(''); setPhone(''); setParty(2); setDateTime(undefined); setNotes(''); setSelectedTableIds([]); setCart([]);
         notify({
             tone: 'success',
             title: 'Đã gửi yêu cầu',
@@ -169,14 +182,20 @@ const CustomerPortalView: React.FC = () => {
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                                 {(tables || []).map((t: any) => {
                                     const disabled = t.status !== TableStatus.Available;
-                                    const selected = selectedTableId === t.id;
+                                    const selected = selectedTableIds.includes(t.id);
                                     return (
                                         <button
                                             key={t.id}
                                             disabled={disabled}
-                                            onClick={() => setSelectedTableId(selected ? '' : t.id)}
+                                            onClick={() => {
+                                                if (selected) {
+                                                    setSelectedTableIds(selectedTableIds.filter(id => id !== t.id));
+                                                } else {
+                                                    setSelectedTableIds([...selectedTableIds, t.id]);
+                                                }
+                                            }}
                                             className={statusClass(t.status, selected)}
-                                            title={disabled ? 'Bàn không khả dụng' : 'Chọn bàn này'}
+                                            title={disabled ? 'Bàn không khả dụng' : selected ? 'Bỏ chọn bàn này' : 'Chọn bàn này'}
                                         >
                                             <div className="flex items-center justify-between">
                                                 <span className="font-semibold text-gray-900">{t.name}</span>
@@ -247,7 +266,11 @@ const CustomerPortalView: React.FC = () => {
                                 </div>
                                 <Input className="md:col-span-3" placeholder="Ghi chú (dịp, yêu cầu đặc biệt)" value={notes} onChange={e => setNotes(e.target.value)} />
                                 <div className="md:col-span-3 flex items-center justify-between">
-                                    <div className="text-sm text-muted-foreground">Bàn đã chọn: {selectedTableId || 'Chưa chọn (tuỳ chọn)'}</div>
+                                    <div className="text-sm text-muted-foreground">
+                                        {selectedTableIds.length > 0
+                                            ? `Đã chọn ${selectedTableIds.length} bàn: ${selectedTableIds.map(id => (tables || []).find((t: any) => t.id === id)?.name || id).join(', ')}`
+                                            : 'Chưa chọn bàn (tuỳ chọn)'}
+                                    </div>
                                     <Button type="submit">Gửi yêu cầu</Button>
                                 </div>
                             </form>

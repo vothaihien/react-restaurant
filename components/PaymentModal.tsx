@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import type { Order } from '../types';
-import { PaymentMethod } from '../types';
-import { useAppContext } from '../context/AppContext';
-import { useFeedback } from '../context/FeedbackContext';
-import { XIcon } from './Icons';
-import { formatVND } from '../lib/utils';
+import type { Order } from '@/core/types';
+import { PaymentMethod } from '@/features/orders/domain/types';
+import { useAppContext } from '@/core/context/AppContext';
+import { useFeedback } from '@/core/context/FeedbackContext';
+import { XIcon } from '@/shared/components/Icons';
+import { formatVND } from '@/shared/utils';
 
 interface PaymentModalProps {
     order: Order;

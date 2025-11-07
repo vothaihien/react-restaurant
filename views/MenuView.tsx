@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useAppContext } from '../context/AppContext';
-import MenuItemModal from '../components/MenuItemModal';
-import type { MenuItem } from '../types';
-import { PlusCircleIcon, EditIcon, TrashIcon } from '../components/Icons';
-import { formatVND } from '../lib/utils';
-import { useFeedback } from '../context/FeedbackContext';
+import { useAppContext } from '@/core/context/AppContext';
+import MenuItemModal from '@/components/MenuItemModal';
+import type { MenuItem } from '@/features/menu/domain/types';
+import { PlusCircleIcon, EditIcon, TrashIcon } from '@/shared/components/Icons';
+import { formatVND } from '@/shared/utils';
+import { useFeedback } from '@/core/context/FeedbackContext';
 
 const MenuView: React.FC = () => {
     const { menuItems, deleteMenuItem } = useAppContext();

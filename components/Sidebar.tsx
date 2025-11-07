@@ -1,7 +1,7 @@
 
 import React from 'react';
-import type { View } from '../types';
-import { ChefHatIcon, GridIcon, MenuIcon, ChartIcon, SettingsIcon } from './Icons';
+import type { View } from '@/core/types';
+import { ChefHatIcon, GridIcon, MenuIcon, ChartIcon, SettingsIcon } from '@/shared/components/Icons';
 
 interface SidebarProps {
     currentView: View;

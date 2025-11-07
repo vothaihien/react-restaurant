@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
-import { useAppContext } from '../context/AppContext';
-import { formatVND } from '../lib/utils';
+import { useAppContext } from '@/core/context/AppContext';
+import { formatVND } from '@/shared/utils';
 
 const currency = formatVND;
 

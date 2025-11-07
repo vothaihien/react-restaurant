@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import type { MenuItem, MenuItemSize } from '../types';
-import { formatVND } from '../lib/utils';
+import type { MenuItem, MenuItemSize } from '@/features/menu/domain/types';
+import { formatVND } from '@/shared/utils';
 
 interface MenuItemCardProps {
     item: MenuItem;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '@/core/context/AppContext';
 
 const viResStatus = (s: string) => {
     switch (s) {
@@ -21,6 +21,14 @@ const ReservationsView: React.FC = () => {
     const todays = (reservations || []).filter((r: any) => r.time >= start && r.time < end);
 
     const getTableName = (id?: string | null) => (tables || []).find((t: any) => t.id === id)?.name || 'N/A';
+    const getTableNames = (r: any) => {
+        if (r.tableIds && r.tableIds.length > 0) {
+            return r.tableIds.map((id: string) => getTableName(id)).join(', ');
+        } else if (r.tableId) {
+            return getTableName(r.tableId);
+        }
+        return 'N/A';
+    };
 
     // quick create
     const [name, setName] = useState('');
@@ -60,7 +68,7 @@ const ReservationsView: React.FC = () => {
                     <div key={r.id} className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between">
                         <div>
                             <div className="text-gray-900 font-semibold">{r.customerName} · {r.partySize} khách</div>
-                            <div className="text-gray-600 text-sm">{new Date(r.time).toLocaleTimeString()} · Bàn: {getTableName(r.tableId)} · Trạng thái: {viResStatus(r.status)}</div>
+                            <div className="text-gray-600 text-sm">{new Date(r.time).toLocaleTimeString()} · Bàn: {getTableNames(r)} · Trạng thái: {viResStatus(r.status)}</div>
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => confirmArrival(r.id)} className="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white">Check-in</button>

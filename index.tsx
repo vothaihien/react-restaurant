@@ -3,8 +3,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import AdminApp from '@admin/presentation/AdminApp.tsx';
 import CustomerApp from '@customer/presentation/CustomerApp.tsx';
-import { AppProvider } from './context/AppContext';
-import { FeedbackProvider } from './context/FeedbackContext';
+import { AppProvider } from '@/core/context/AppContext';
+import { FeedbackProvider } from '@/core/context/FeedbackContext';
 import './index.css';
 
 const rootElement = document.getElementById('root');
