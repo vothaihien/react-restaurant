@@ -1,7 +1,7 @@
 
 import React from 'react';
-import type { Table } from '../types';
-import { TableStatus } from '../types';
+import type { Table } from '@/features/tables/domain/types';
+import { TableStatus } from '@/features/tables/domain/types';
 
 interface TableCardProps {
     table: Table;

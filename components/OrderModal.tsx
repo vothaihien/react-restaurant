@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import type { Table, Order, MenuItem, OrderItem, MenuItemSize } from '../types';
-import { useAppContext } from '../context/AppContext';
-import { XIcon, TrashIcon } from './Icons';
+import type { Table } from '@/features/tables/domain/types';
+import type { Order, OrderItem } from '@/features/orders/domain/types';
+import type { MenuItem, MenuItemSize } from '@/features/menu/domain/types';
+import { useAppContext } from '@/core/context/AppContext';
+import { XIcon, TrashIcon } from '@/shared/components/Icons';
 import MenuItemCard from './MenuItemCard';
-import { CATEGORIES } from '../constants';
-import { formatVND } from '../lib/utils';
+import { CATEGORIES } from '@/features/menu/domain/constants';
+import { formatVND } from '@/shared/utils';
 
 interface OrderModalProps {
     table: Table;

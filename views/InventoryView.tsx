@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '@/core/context/AppContext';
 
 const InventoryView: React.FC = () => {
     const { ingredients, lowStockIds, recordInventoryIn } = useAppContext() as any;

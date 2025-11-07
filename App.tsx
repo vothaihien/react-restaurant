@@ -6,7 +6,7 @@ import DashboardView from './views/DashboardView';
 import MenuView from './views/MenuView';
 import ReportsView from './views/ReportsView';
 import SettingsView from './views/SettingsView';
-import type { View } from './types';
+import type { View } from '@/core/types';
 import ReservationsView from './views/ReservationsView.tsx';
 import InventoryView from './views/InventoryView.tsx';
 import MasterDataView from './views/MasterDataView.tsx';

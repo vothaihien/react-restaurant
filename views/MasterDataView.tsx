@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '@/core/context/AppContext';
 
 const MasterDataView: React.FC = () => {
     const { suppliers, addSupplier, tables, addTable, deleteTable, staff, addStaff, deleteStaff } = useAppContext() as any;

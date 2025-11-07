@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { MenuItem, MenuItemSize, RecipeIngredient, Ingredient, Recipe } from '../types';
-import { useAppContext } from '../context/AppContext';
-import { useFeedback } from '../context/FeedbackContext';
-import { CATEGORIES, PREDEFINED_SIZES } from '../constants';
-import { XIcon, PlusIcon, TrashIcon, ChevronDownIcon } from './Icons';
+import type { MenuItem, MenuItemSize, RecipeIngredient, Ingredient, Recipe } from '@/features/menu/domain/types';
+import { useAppContext } from '@/core/context/AppContext';
+import { useFeedback } from '@/core/context/FeedbackContext';
+import { CATEGORIES, PREDEFINED_SIZES } from '@/features/menu/domain/constants';
+import { XIcon, PlusIcon, TrashIcon, ChevronDownIcon } from '@/shared/components/Icons';
 
 interface MenuItemModalProps {
     isOpen: boolean;

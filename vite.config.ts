@@ -22,6 +22,10 @@ export default defineConfig(({ mode }) => {
         '@domain': path.resolve(__dirname, 'domain'),
         '@application': path.resolve(__dirname, 'application'),
         '@infrastructure': path.resolve(__dirname, 'infrastructure'),
+        '@/features': path.resolve(__dirname, 'src/features'),
+        '@/shared': path.resolve(__dirname, 'src/shared'),
+        '@/core': path.resolve(__dirname, 'src/core'),
+        '@/infrastructure': path.resolve(__dirname, 'src/infrastructure'),
       }
     }
   };
