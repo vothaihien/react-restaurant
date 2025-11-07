@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import AdminApp from '@admin/presentation/AdminApp.tsx';
 import CustomerApp from '@customer/presentation/CustomerApp.tsx';
 import { AppProvider } from './context/AppContext';
+import { FeedbackProvider } from './context/FeedbackContext';
 import './index.css';
 
 const rootElement = document.getElementById('root');
@@ -17,8 +18,10 @@ const isCustomer = path.startsWith('/customer');
 
 root.render(
   <React.StrictMode>
-    <AppProvider>
-      {isCustomer ? <CustomerApp /> : <AdminApp />}
-    </AppProvider>
+    <FeedbackProvider>
+      <AppProvider>
+        {isCustomer ? <CustomerApp /> : <AdminApp />}
+      </AppProvider>
+    </FeedbackProvider>
   </React.StrictMode>
 );

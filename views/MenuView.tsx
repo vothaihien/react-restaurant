@@ -4,11 +4,13 @@ import MenuItemModal from '../components/MenuItemModal';
 import type { MenuItem } from '../types';
 import { PlusCircleIcon, EditIcon, TrashIcon } from '../components/Icons';
 import { formatVND } from '../lib/utils';
+import { useFeedback } from '../context/FeedbackContext';
 
 const MenuView: React.FC = () => {
     const { menuItems, deleteMenuItem } = useAppContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+    const { notify, confirm } = useFeedback();
 
     const handleOpenAddModal = () => {
         setEditingItem(null);
@@ -25,9 +27,21 @@ const MenuView: React.FC = () => {
         setEditingItem(null);
     };
 
-    const handleDeleteItem = (itemId: string) => {
-        if (window.confirm('Bạn có chắc chắn muốn xóa món này không?')) {
-            deleteMenuItem(itemId);
+    const handleDeleteItem = async (item: MenuItem) => {
+        const shouldDelete = await confirm({
+            title: 'Xóa món khỏi thực đơn',
+            description: `Bạn có chắc chắn muốn xóa "${item.name}" khỏi thực đơn? Thao tác này không thể hoàn tác.`,
+            confirmText: 'Xóa món',
+            cancelText: 'Giữ lại',
+            tone: 'danger',
+        });
+        if (shouldDelete) {
+            deleteMenuItem(item.id);
+            notify({
+                tone: 'success',
+                title: 'Đã xóa món',
+                description: `${item.name} đã được xóa khỏi thực đơn.`,
+            });
         }
     };
 
@@ -97,7 +111,7 @@ const MenuView: React.FC = () => {
                                             <button onClick={() => handleOpenEditModal(item)} className="text-indigo-600 hover:text-indigo-700 transition">
                                                 <EditIcon className="w-5 h-5" />
                                             </button>
-                                            <button onClick={() => handleDeleteItem(item.id)} className="text-red-600 hover:text-red-700 transition">
+                                            <button onClick={() => handleDeleteItem(item)} className="text-red-600 hover:text-red-700 transition">
                                                 <TrashIcon className="w-5 h-5" />
                                             </button>
                                         </div>

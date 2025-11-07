@@ -161,3 +161,23 @@ export type View =
     | 'customer'
     | 'reports'
     | 'settings';
+
+export type FeedbackTone = 'info' | 'success' | 'warning' | 'error';
+
+export interface FeedbackNotification {
+    id: string;
+    tone: FeedbackTone;
+    title: string;
+    description?: string;
+    duration?: number;
+}
+
+export type FeedbackDialogTone = 'primary' | 'danger';
+
+export interface FeedbackDialogState {
+    title: string;
+    description?: string;
+    confirmText: string;
+    cancelText: string;
+    tone: FeedbackDialogTone;
+}

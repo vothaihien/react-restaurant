@@ -5,11 +5,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { formatVND } from '../lib/utils';
+import { useFeedback } from '../context/FeedbackContext';
 
 const CustomerPortalView: React.FC = () => {
     const { menuItems, createReservation, tables } = useAppContext() as any;
     const [tab, setTab] = useState<'home' | 'booking' | 'menu' | 'order' | 'loyalty' | 'promotions' | 'feedback'>('home');
+    const { notify } = useFeedback();
 
     // Debug: Log menuItems changes
     useEffect(() => {
@@ -20,8 +23,7 @@ const CustomerPortalView: React.FC = () => {
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [party, setParty] = useState(2);
-    const [date, setDate] = useState('');
-    const [time, setTime] = useState('');
+    const [dateTime, setDateTime] = useState<Date | undefined>(undefined);
     const [notes, setNotes] = useState('');
     const [selectedTableId, setSelectedTableId] = useState<string>('');
 
@@ -30,17 +32,26 @@ const CustomerPortalView: React.FC = () => {
 
     const submitBooking = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!name || !date || !time) return;
-        const [yyyy, mm, dd] = date.split('-').map(x => parseInt(x));
-        const [hh, mi] = time.split(':').map(x => parseInt(x));
-        const ts = new Date(yyyy, (mm || 1) - 1, dd || 1, hh || 0, mi || 0).getTime();
+        if (!name || !dateTime) {
+            notify({
+                tone: 'warning',
+                title: 'Thiếu thông tin đặt bàn',
+                description: 'Vui lòng nhập họ tên và chọn ngày giờ mong muốn.',
+            });
+            return;
+        }
+        const ts = dateTime.getTime();
         // append preorder summary to notes if any
         const preorder = cart.length
             ? `\n[Đặt món trước] ${cart.map(c => `${c.qty}x ${c.name} (${c.size})`).join(', ')}`
             : '';
         createReservation({ customerName: name, phone, partySize: party, time: ts, tableId: selectedTableId || null, source: 'App', notes: (notes || '') + preorder });
-        setName(''); setPhone(''); setParty(2); setDate(''); setTime(''); setNotes(''); setSelectedTableId(''); setCart([]);
-        alert('Đã gửi yêu cầu đặt bàn!');
+        setName(''); setPhone(''); setParty(2); setDateTime(undefined); setNotes(''); setSelectedTableId(''); setCart([]);
+        notify({
+            tone: 'success',
+            title: 'Đã gửi yêu cầu',
+            description: 'Nhà hàng sẽ liên hệ lại để xác nhận đặt bàn trong thời gian sớm nhất.',
+        });
     };
 
     // Menu - only show items in stock (default to true if undefined)
@@ -231,8 +242,9 @@ const CustomerPortalView: React.FC = () => {
                                 <Input placeholder="Họ tên" value={name} onChange={e => setName(e.target.value)} />
                                 <Input placeholder="Điện thoại" value={phone} onChange={e => setPhone(e.target.value)} />
                                 <Input type="number" min={1} placeholder="Số khách" value={party} onChange={e => setParty(parseInt(e.target.value) || 1)} />
-                                <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
-                                <Input type="time" value={time} onChange={e => setTime(e.target.value)} />
+                                <div className="md:col-span-2">
+                                    <DateTimePicker value={dateTime} onChange={setDateTime} />
+                                </div>
                                 <Input className="md:col-span-3" placeholder="Ghi chú (dịp, yêu cầu đặc biệt)" value={notes} onChange={e => setNotes(e.target.value)} />
                                 <div className="md:col-span-3 flex items-center justify-between">
                                     <div className="text-sm text-muted-foreground">Bàn đã chọn: {selectedTableId || 'Chưa chọn (tuỳ chọn)'}</div>

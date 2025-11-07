@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Order } from '../types';
 import { PaymentMethod } from '../types';
 import { useAppContext } from '../context/AppContext';
+import { useFeedback } from '../context/FeedbackContext';
 import { XIcon } from './Icons';
 import { formatVND } from '../lib/utils';
 
@@ -22,13 +23,23 @@ const viPaymentLabel = (m: PaymentMethod) => {
 const PaymentModal: React.FC<PaymentModalProps> = ({ order, onClose }) => {
     const { closeOrder } = useAppContext();
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
+    const { notify } = useFeedback();
 
     const handlePayment = () => {
         if (selectedPaymentMethod) {
             closeOrder(order.id, selectedPaymentMethod);
+            notify({
+                tone: 'success',
+                title: 'Thanh toán thành công',
+                description: `Đơn hàng của bàn ${order.tableId} đã được thanh toán bằng ${viPaymentLabel(selectedPaymentMethod)}.`,
+            });
             onClose();
         } else {
-            alert('Vui lòng chọn phương thức thanh toán.');
+            notify({
+                tone: 'warning',
+                title: 'Chưa chọn phương thức',
+                description: 'Vui lòng chọn một phương thức thanh toán trước khi xác nhận.',
+            });
         }
     };
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { MenuItem, MenuItemSize, RecipeIngredient, Ingredient, Recipe } from '../types';
 import { useAppContext } from '../context/AppContext';
+import { useFeedback } from '../context/FeedbackContext';
 import { CATEGORIES, PREDEFINED_SIZES } from '../constants';
 import { XIcon, PlusIcon, TrashIcon, ChevronDownIcon } from './Icons';
 
@@ -12,6 +13,7 @@ interface MenuItemModalProps {
 
 const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEdit }) => {
     const { addMenuItem, updateMenuItem, ingredients, generateRecipeId } = useAppContext();
+    const { notify } = useFeedback();
     const [isSizeDropdownOpen, setIsSizeDropdownOpen] = useState(false);
     const sizeDropdownRef = useRef<HTMLDivElement>(null);
     const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -157,7 +159,11 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
     // Size Handlers
     const handleAddSize = (name: string = '') => {
         if (name && formState.sizes.some(s => s.name.toLowerCase() === name.toLowerCase())) {
-            alert(`Size "${name}" đã tồn tại cho món này.`);
+            notify({
+                tone: 'warning',
+                title: 'Size trùng lặp',
+                description: `Size "${name}" đã tồn tại cho món này.`,
+            });
             setIsSizeDropdownOpen(false);
             return;
         }
@@ -204,7 +210,11 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
         // Check if recipe is used by any size
         const isUsed = formState.sizes.some(s => s.recipe.id === recipeId);
         if (isUsed) {
-            alert('Không thể xóa công thức đang được sử dụng bởi một size.');
+            notify({
+                tone: 'warning',
+                title: 'Không thể xoá công thức',
+                description: 'Công thức đang được sử dụng bởi ít nhất một size.',
+            });
             return;
         }
         setRecipes(prev => prev.filter(r => r.id !== recipeId));
@@ -240,7 +250,11 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
                     !recipe.ingredients.some(ri => ri.ingredient.id === ing.id)
                 );
                 if (availableIngredients.length === 0) {
-                    alert('Tất cả nguyên liệu đã được thêm vào công thức này.');
+                    notify({
+                        tone: 'info',
+                        title: 'Đã đủ nguyên liệu',
+                        description: 'Tất cả nguyên liệu khả dụng đã có trong công thức này.',
+                    });
                     return;
                 }
                 const newIngredient: RecipeIngredient = { ingredient: availableIngredients[0], quantity: 0 };
@@ -317,15 +331,29 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
         const { name, description, category, imageUrls, inStock, sizes } = formState;
 
         if (!name || sizes.length === 0 || imageUrls.length === 0) {
-            alert('Vui lòng nhập tên món, và thêm ít nhất một hình ảnh và một size.');
+            notify({
+                tone: 'error',
+                title: 'Thiếu thông tin món ăn',
+                description: 'Vui lòng nhập tên món, thêm ít nhất một hình ảnh và một size.',
+            });
             return;
         }
 
         const menuItemData = { name, description, category, imageUrls, inStock, sizes };
         if (itemToEdit) {
             updateMenuItem({ ...menuItemData, id: itemToEdit.id });
+            notify({
+                tone: 'success',
+                title: 'Đã cập nhật món',
+                description: `${name} đã được lưu thành công.`,
+            });
         } else {
             addMenuItem(menuItemData);
+            notify({
+                tone: 'success',
+                title: 'Đã thêm món mới',
+                description: `${name} đã được thêm vào thực đơn.`,
+            });
         }
         onClose();
     };
