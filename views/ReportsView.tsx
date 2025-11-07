@@ -1,19 +1,81 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useAppContext } from '../context/AppContext';
+import { formatVND } from '../lib/utils';
+
+const currency = formatVND;
 
 const ReportsView: React.FC = () => {
+    const { orders } = useAppContext() as any;
+
+    const { todayRevenue, monthRevenue, paymentBreakdown, topItems } = useMemo(() => {
+        const now = new Date();
+        const startDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        const paid = (orders || []).filter((o: any) => o.closedAt && o.paymentMethod);
+
+        const todayRevenue = paid.filter((o: any) => (o.closedAt as number) >= startDay).reduce((a: number, o: any) => a + o.total, 0);
+        const monthRevenue = paid.filter((o: any) => (o.closedAt as number) >= startMonth).reduce((a: number, o: any) => a + o.total, 0);
+
+        const paymentBreakdown: Record<string, number> = {};
+        paid.forEach((o: any) => {
+            paymentBreakdown[o.paymentMethod] = (paymentBreakdown[o.paymentMethod] || 0) + o.total;
+        });
+
+        const itemCount: Record<string, { name: string; qty: number; revenue: number }> = {};
+        paid.forEach((o: any) => {
+            o.items.forEach((it: any) => {
+                const price = it.menuItem.sizes.find((s: any) => s.name === it.size)?.price || 0;
+                const key = `${it.menuItem.id}-${it.size}`;
+                const rec = itemCount[key] || { name: `${it.menuItem.name} (${it.size})`, qty: 0, revenue: 0 };
+                rec.qty += it.quantity;
+                rec.revenue += price * it.quantity;
+                itemCount[key] = rec;
+            });
+        });
+        const topItems = Object.values(itemCount).sort((a, b) => b.qty - a.qty).slice(0, 5);
+
+        return { todayRevenue, monthRevenue, paymentBreakdown, topItems };
+    }, [orders]);
+
     return (
         <div>
-            <h1 className="text-3xl font-bold mb-6 text-white">Reports & Analytics</h1>
-            <div className="bg-gray-900 rounded-lg shadow-xl p-6">
-                <p className="text-lg text-gray-300">
-                    This section will contain detailed reports on sales, revenue, popular items, and operational efficiency.
-                    Visualize your restaurant's performance with charts and data tables.
-                </p>
-                {/* Placeholder for charts and reports */}
-                <div className="mt-8 h-64 bg-gray-800 rounded-lg flex items-center justify-center">
-                    <p className="text-gray-500">Chart Area Placeholder</p>
+            <h1 className="text-3xl font-bold mb-6 text-gray-900">Báo cáo & Thống kê</h1>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-white border border-gray-200 p-4 rounded-lg">
+                    <div className="text-gray-500 text-sm">Doanh thu hôm nay</div>
+                    <div className="text-2xl font-bold text-gray-900">{currency(todayRevenue)}</div>
                 </div>
+                <div className="bg-white border border-gray-200 p-4 rounded-lg">
+                    <div className="text-gray-500 text-sm">Doanh thu tháng này</div>
+                    <div className="text-2xl font-bold text-gray-900">{currency(monthRevenue)}</div>
+                </div>
+                <div className="bg-white border border-gray-200 p-4 rounded-lg">
+                    <div className="text-gray-500 text-sm">Phương thức thanh toán</div>
+                    <div className="text-gray-900">
+                        {Object.keys(paymentBreakdown).length === 0 && <div className="text-gray-500">Chưa có thanh toán.</div>}
+                        {Object.entries(paymentBreakdown).map(([k, v]) => (
+                            <div key={k} className="flex justify-between"><span>{k}</span><span>{currency(v as number)}</span></div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-3">Món bán chạy</h2>
+                {topItems.length === 0 ? (
+                    <p className="text-gray-500">Chưa có dữ liệu.</p>
+                ) : (
+                    <div className="space-y-2">
+                        {topItems.map((t: any, idx: number) => (
+                            <div key={idx} className="flex justify-between text-gray-900">
+                                <span>{t.name} <span className="text-gray-500">x{t.qty}</span></span>
+                                <span>{currency(t.revenue)}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -32,6 +32,7 @@ export interface Ingredient {
     name: string;
     unit: Unit;
     stock: number;
+    minStock?: number; // threshold for low stock alert
 }
 
 export interface RecipeIngredient {
@@ -88,4 +89,75 @@ export interface Order {
     paymentMethod?: PaymentMethod;
 }
 
-export type View = 'dashboard' | 'menu' | 'reports' | 'settings';
+// Reservation Management
+export type ReservationStatus = 'Booked' | 'Seated' | 'Cancelled' | 'NoShow';
+
+export interface Reservation {
+    id: string; // Auto-generated: DDMMYYYYNNN
+    customerName: string;
+    phone?: string;
+    partySize: number;
+    time: number; // timestamp
+    status: ReservationStatus;
+    tableId?: string | null;
+    source?: 'App' | 'Phone' | 'InPerson';
+    notes?: string;
+}
+
+// Inventory & Procurement
+export interface Supplier {
+    id: string;
+    name: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+}
+
+export type InventoryTxnType = 'IN' | 'ADJUST' | 'CONSUME';
+
+export interface InventoryTransactionItem {
+    ingredientId: string;
+    quantity: number;
+    unitCost?: number; // for IN transactions
+}
+
+export interface InventoryTransaction {
+    id: string; // Auto-generated: DDMMYYYYNNN
+    type: InventoryTxnType;
+    items: InventoryTransactionItem[];
+    supplierId?: string; // for IN
+    createdAt: number;
+    note?: string;
+}
+
+// KDS (Kitchen Display System)
+export interface KDSItem {
+    id: string;
+    orderId: string;
+    tableName: string;
+    items: { name: string; size: string; qty: number; notes?: string }[];
+    createdAt: number;
+    status: 'Queued' | 'InProgress' | 'Done';
+}
+
+// Staff & Roles
+export type Role = 'Admin' | 'Manager' | 'Cashier' | 'Waiter' | 'Kitchen';
+
+export interface Staff {
+    id: string;
+    name: string;
+    username: string;
+    role: Role;
+    active: boolean;
+}
+
+export type View =
+    | 'dashboard' // POS tables
+    | 'menu'
+    | 'reservations'
+    | 'inventory'
+    | 'masterdata'
+    | 'kds'
+    | 'customer'
+    | 'reports'
+    | 'settings';

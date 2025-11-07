@@ -1,7 +1,10 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import AdminApp from '@admin/presentation/AdminApp.tsx';
+import CustomerApp from '@customer/presentation/CustomerApp.tsx';
+import { AppProvider } from './context/AppContext';
+import './index.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -9,8 +12,13 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
+const path = window.location.pathname;
+const isCustomer = path.startsWith('/customer');
+
 root.render(
   <React.StrictMode>
-    <App />
+    <AppProvider>
+      {isCustomer ? <CustomerApp /> : <AdminApp />}
+    </AppProvider>
   </React.StrictMode>
 );

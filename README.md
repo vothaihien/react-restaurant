@@ -1,1 +1,1 @@
-React-Restaurant
+React Restaurant
