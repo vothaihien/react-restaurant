@@ -21,6 +21,21 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@admin/*": [
+        "./modules/admin/*"
+      ],
+      "@customer/*": [
+        "./modules/customer/*"
+      ],
+      "@domain/*": [
+        "./domain/*"
+      ],
+      "@application/*": [
+        "./application/*"
+      ],
+      "@infrastructure/*": [
+        "./infrastructure/*"
       ]
     },
     "allowImportingTsExtensions": true,
