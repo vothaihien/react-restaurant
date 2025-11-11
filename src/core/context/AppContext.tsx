@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, ReactNode, useEffect } from
 import type { Table, Order, MenuItem, OrderItem, Ingredient, Reservation, Supplier, KDSItem, InventoryTransaction, InventoryTransactionItem, Staff } from '@/core/types';
 import { TableStatus, PaymentMethod } from '@/core/types';
 import { TABLES, ORDERS, MENU_ITEMS, INGREDIENTS, RESERVATIONS, SUPPLIERS, KDS_QUEUE, INVENTORY_TRANSACTIONS, STAFFS } from '@/core/constants';
+import { Api } from '@/shared/utils/api';
 
 const generateDailyId = (existingIds: string[]): string => {
     const today = new Date();
@@ -46,6 +47,7 @@ interface AppContextType {
     cancelReservation: (id: string, reason?: string) => void;
     confirmArrival: (id: string) => void;
     markNoShow: (id: string, reason?: string) => void;
+    getAvailableTables: (dateTime: number, partySize: number) => Promise<Array<{ id: string; name: string; capacity: number; status: string }>>;
 
     // Inventory & Procurement
     recordInventoryIn: (items: InventoryTransactionItem[], supplierId?: string, note?: string) => void;
@@ -103,6 +105,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [kdsQueue, setKdsQueue] = useState<KDSItem[]>(() => loadFromStorage('restaurant_kdsQueue', KDS_QUEUE));
     const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>(() => loadFromStorage('restaurant_inventoryTransactions', INVENTORY_TRANSACTIONS));
     const [staff, setStaff] = useState<Staff[]>(() => loadFromStorage('restaurant_staff', STAFFS));
+    const [reservationToOrderMap, setReservationToOrderMap] = useState<Record<string, string>>(() => loadFromStorage('restaurant_res_to_order', {} as Record<string, string>));
 
     // Save to localStorage whenever state changes
     React.useEffect(() => {
@@ -124,6 +127,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     React.useEffect(() => {
         saveToStorage('restaurant_reservations', reservations);
     }, [reservations]);
+    React.useEffect(() => {
+        saveToStorage('restaurant_res_to_order', reservationToOrderMap);
+    }, [reservationToOrderMap]);
+    // Load tables from API on mount (best-effort)
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await Api.getTables();
+                if (Array.isArray(data) && data.length > 0) {
+                    const mapped: Table[] = data.map((b: any) => ({
+                        id: b.maBan || b.MaBan,
+                        name: b.tenBan || b.TenBan,
+                        capacity: Number(b.sucChua || b.SucChua) || 0,
+                        status: TableStatus.Available,
+                        orderId: null
+                    }));
+                    setTables(mapped);
+                }
+            } catch { }
+        })();
+    }, []);
 
     React.useEffect(() => {
         saveToStorage('restaurant_suppliers', suppliers);
@@ -241,11 +265,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     // Reservations
-    const createReservation = (data: Omit<Reservation, 'id' | 'status'> & { status?: Reservation['status'] }) => {
+    const createReservation = async (data: Omit<Reservation, 'id' | 'status'> & { status?: Reservation['status'] }) => {
+        // Map dữ liệu sang DTO backend
+        if (!data.time || !data.partySize) return;
+        const thoiGian = new Date(data.time).toISOString();
+        const payload = {
+            MaBan: (data.tableId as string) || '',
+            HoTenKhach: data.customerName || '',
+            SoDienThoaiKhach: data.phone || '',
+            ThoiGianDatHang: thoiGian,
+            SoLuongNguoi: data.partySize,
+            GhiChu: data.notes || undefined,
+            MaNhanVien: undefined,
+            TienDatCoc: undefined
+        };
+        const res = await Api.createReservation(payload);
+        // Cập nhật UI tạm thời (optimistic)
         const newId = generateDailyId(reservations.map(r => r.id));
         const newRes: Reservation = { id: newId, status: data.status ?? 'Booked', ...data } as Reservation;
         setReservations(prev => [...prev, newRes]);
-        // 支持多张桌子
+        if (res?.donHang?.maDonHang || res?.donHang?.MaDonHang) {
+            const maDon = res.donHang.maDonHang || res.donHang.MaDonHang;
+            setReservationToOrderMap(prev => ({ ...prev, [newId]: maDon }));
+        }
         if (newRes.tableIds && newRes.tableIds.length > 0) {
             setTables(prev => prev.map(t => newRes.tableIds!.includes(t.id) ? { ...t, status: TableStatus.Reserved } : t));
         } else if (newRes.tableId) {
@@ -257,8 +299,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setReservations(prev => prev.map(r => r.id === res.id ? res : r));
     };
 
-    const cancelReservation = (id: string) => {
+    const cancelReservation = async (id: string) => {
         const res = reservations.find(r => r.id === id);
+        // cập nhật trạng thái backend nếu có mapping
+        const maDon = reservationToOrderMap[id];
+        if (maDon) {
+            try { await Api.updateOrderStatus(maDon, 'DA_HUY'); } catch { }
+        }
         setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'Cancelled' } : r));
         // 支持多张桌子：取消预订时将桌子状态改回 Available
         if (res) {
@@ -270,9 +317,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
 
-    const confirmArrival = (id: string) => {
+    const confirmArrival = async (id: string) => {
         const res = reservations.find(r => r.id === id);
         if (!res) return;
+        const maDon = reservationToOrderMap[id];
+        if (maDon) {
+            try { await Api.updateOrderStatus(maDon, 'DA_XAC_NHAN'); } catch { }
+        }
         setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'Seated' } : r));
         // 支持多张桌子
         if (res.tableIds && res.tableIds.length > 0) {
@@ -282,14 +333,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     };
 
-    const markNoShow = (id: string) => {
+    const markNoShow = async (id: string) => {
         const res = reservations.find(r => r.id === id);
         if (!res) return;
+        const maDon = reservationToOrderMap[id];
+        if (maDon) {
+            try { await Api.updateOrderStatus(maDon, 'NO_SHOW'); } catch { }
+        }
         setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'NoShow' } : r));
         if (res.tableIds && res.tableIds.length > 0) {
             setTables(prev => prev.map(t => res.tableIds!.includes(t.id) ? { ...t, status: TableStatus.Available } : t));
         } else if (res.tableId) {
             setTables(prev => prev.map(t => t.id === res.tableId ? { ...t, status: TableStatus.Available } : t));
+        }
+    };
+
+    const getAvailableTables = async (dateTime: number, partySize: number) => {
+        try {
+            const iso = new Date(dateTime).toISOString();
+            const data = await Api.getTablesByTime(iso, partySize);
+            return (data || []).map((x: any) => ({
+                id: x.maBan || x.MaBan,
+                name: x.tenBan || x.TenBan,
+                capacity: Number(x.sucChua || x.SucChua) || 0,
+                status: x.tenTrangThai || x.TenTrangThai
+            }));
+        } catch {
+            return [];
         }
     };
 
@@ -376,7 +446,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     return (
-        <AppContext.Provider value={{ tables, orders, menuItems, ingredients, reservations, suppliers, kdsQueue, inventoryTransactions, staff, createOrder, updateOrder, closeOrder, updateTableStatus, getOrderForTable, sendOrderToKDS, addMenuItem, updateMenuItem, deleteMenuItem, generateRecipeId, createReservation, updateReservation, cancelReservation, confirmArrival, markNoShow, recordInventoryIn, adjustInventory, consumeByOrderItems, lowStockIds, addSupplier, updateSupplier, deleteSupplier, addTable, updateTable, deleteTable, addStaff, updateStaff, deleteStaff }}>
+        <AppContext.Provider value={{ tables, orders, menuItems, ingredients, reservations, suppliers, kdsQueue, inventoryTransactions, staff, createOrder, updateOrder, closeOrder, updateTableStatus, getOrderForTable, sendOrderToKDS, addMenuItem, updateMenuItem, deleteMenuItem, generateRecipeId, createReservation, updateReservation, cancelReservation, confirmArrival, markNoShow, getAvailableTables, recordInventoryIn, adjustInventory, consumeByOrderItems, lowStockIds, addSupplier, updateSupplier, deleteSupplier, addTable, updateTable, deleteTable, addStaff, updateStaff, deleteStaff }}>
             {children}
         </AppContext.Provider>
     );

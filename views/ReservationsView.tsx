@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppContext } from '@/core/context/AppContext';
+import { useFeedback } from '@/core/context/FeedbackContext';
 
 const viResStatus = (s: string) => {
     switch (s) {
@@ -12,7 +13,7 @@ const viResStatus = (s: string) => {
 };
 
 const ReservationsView: React.FC = () => {
-    const { reservations, confirmArrival, cancelReservation, markNoShow, tables, createReservation } = useAppContext() as any;
+    const { reservations, confirmArrival, cancelReservation, markNoShow, tables, createReservation, getAvailableTables } = useAppContext() as any;
 
     const today = new Date();
     const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
@@ -36,14 +37,54 @@ const ReservationsView: React.FC = () => {
     const [party, setParty] = useState<number>(2);
     const [time, setTime] = useState<string>('');
     const [tableId, setTableId] = useState<string>('');
+    const [suggestedTables, setSuggestedTables] = useState<any[]>([]);
 
-    const submit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!name || !time) return;
-        const [hh, mm] = time.split(':').map(x => parseInt(x));
+    const refreshSuggestions = async (partySize: number, timeHHmm: string) => {
+        if (!timeHHmm) { setSuggestedTables([]); return; }
+        const [hh, mm] = timeHHmm.split(':').map(x => parseInt(x));
         const when = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hh || 0, mm || 0).getTime();
-        createReservation({ customerName: name, phone, partySize: party, time: when, tableId: tableId || null, source: 'InPerson' });
-        setName(''); setPhone(''); setParty(2); setTime(''); setTableId('');
+        const data = await getAvailableTables(when, partySize);
+        setSuggestedTables(data.filter((x: any) => x.status === 'Đang trống' || x.status === 'Trống'));
+    };
+
+    useEffect(() => {
+        refreshSuggestions(party, time);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [party, time]);
+
+    const { notify } = useFeedback();
+    const [submitting, setSubmitting] = useState(false);
+
+    const submit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!name || !time) {
+            notify({
+                tone: 'warning',
+                title: 'Thiếu thông tin',
+                description: 'Vui lòng nhập tên khách và thời gian đặt bàn'
+            });
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const [hh, mm] = time.split(':').map(x => parseInt(x));
+            const when = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hh || 0, mm || 0).getTime();
+            await createReservation({ customerName: name, phone, partySize: party, time: when, tableId: tableId || null, source: 'InPerson' });
+            setName(''); setPhone(''); setParty(2); setTime(''); setTableId('');
+            notify({
+                tone: 'success',
+                title: 'Đặt bàn thành công',
+                description: 'Đã tạo đặt bàn mới'
+            });
+        } catch (err: any) {
+            notify({
+                tone: 'error',
+                title: 'Lỗi đặt bàn',
+                description: err?.message || 'Không thể tạo đặt bàn'
+            });
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     return (
@@ -57,9 +98,11 @@ const ReservationsView: React.FC = () => {
                 <input className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
                 <select className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300" value={tableId} onChange={(e) => setTableId(e.target.value)}>
                     <option value="">Gán bàn (không bắt buộc)</option>
-                    {(tables || []).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {(suggestedTables.length > 0 ? suggestedTables : tables || []).map((t: any) => <option key={t.id} value={t.id}>{t.name} {t.capacity ? `(${t.capacity})` : ''}</option>)}
                 </select>
-                <button type="submit" className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white">Tạo</button>
+                <button type="submit" disabled={submitting} className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50">
+                    {submitting ? 'Đang tạo...' : 'Tạo'}
+                </button>
             </form>
 
             <div className="space-y-3">

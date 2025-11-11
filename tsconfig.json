@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "target": "ES2022",
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
@@ -19,9 +20,6 @@
     "allowJs": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./*"
-      ],
       "@admin/*": [
         "./modules/admin/*"
       ],
@@ -36,6 +34,12 @@
       ],
       "@infrastructure/*": [
         "./infrastructure/*"
+      ],
+      "@/components/*": [
+        "./components/*"
+      ],
+      "@/lib/*": [
+        "./lib/*"
       ],
       "@/features/*": [
         "./src/features/*"

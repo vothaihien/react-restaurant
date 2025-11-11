@@ -8,9 +8,12 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/shared/components/ui
 import { DateTimePicker } from '@/shared/components/ui/date-time-picker';
 import { formatVND } from '@/shared/utils';
 import { useFeedback } from '@/core/context/FeedbackContext';
+import { useAuth } from '@/core/context/AuthContext';
+import { Api } from '@/shared/utils/api';
 
 const CustomerPortalView: React.FC = () => {
     const { menuItems, createReservation, tables } = useAppContext() as any;
+    const { user, isAuthenticated, checkUser, login, register, logout } = useAuth();
     const [tab, setTab] = useState<'home' | 'booking' | 'menu' | 'order' | 'loyalty' | 'promotions' | 'feedback'>('home');
     const { notify } = useFeedback();
 
@@ -367,10 +370,19 @@ const CustomerPortalView: React.FC = () => {
                 <TabsContent value="loyalty">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Thành viên & Tích điểm</CardTitle>
+                            <CardTitle>Thành viên & Lịch sử đặt bàn</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p>Chức năng demo: đăng ký/đăng nhập, tích điểm và đổi ưu đãi sẽ tích hợp backend sau.</p>
+                            {!isAuthenticated ? <AuthBox /> : (
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <div className="text-gray-900">Xin chào, <span className="font-semibold">{user?.name}</span></div>
+                                        <div className="text-gray-700 text-sm">Mã KH: {user?.customerId}</div>
+                                        <Button variant="outline" onClick={logout}>Đăng xuất</Button>
+                                    </div>
+                                    <BookingHistorySection token={user?.token || ''} />
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -402,3 +414,162 @@ const CustomerPortalView: React.FC = () => {
 };
 
 export default CustomerPortalView;
+
+const BookingHistorySection: React.FC<{ token: string }> = ({ token }) => {
+    const [bookings, setBookings] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const { notify, confirm } = useFeedback();
+
+    useEffect(() => {
+        if (!token) return;
+        const load = async () => {
+            setLoading(true);
+            try {
+                const data = await Api.getMyBookings(token);
+                setBookings(data || []);
+            } catch (err: any) {
+                notify({
+                    tone: 'error',
+                    title: 'Lỗi tải lịch sử',
+                    description: err?.message || 'Không thể tải lịch sử đặt bàn'
+                });
+            } finally {
+                setLoading(false);
+            }
+        };
+        load();
+    }, [token, notify]);
+
+    const handleCancel = async (maDonHang: string) => {
+        if (!token) return;
+        const shouldCancel = await confirm({
+            title: 'Hủy đặt bàn',
+            description: 'Bạn có chắc chắn muốn hủy đặt bàn này?',
+            confirmText: 'Hủy đặt bàn',
+            cancelText: 'Giữ lại',
+            tone: 'danger'
+        });
+        if (!shouldCancel) return;
+        try {
+            await Api.cancelBooking(maDonHang, token);
+            notify({
+                tone: 'success',
+                title: 'Đã hủy đặt bàn',
+                description: 'Đặt bàn đã được hủy thành công.'
+            });
+            setBookings(prev => prev.map(b =>
+                b.maDonHang === maDonHang || b.MaDonHang === maDonHang
+                    ? { ...b, daHuy: true, coTheHuy: false }
+                    : b
+            ));
+        } catch (err: any) {
+            notify({
+                tone: 'error',
+                title: 'Lỗi hủy đặt bàn',
+                description: err?.message || 'Không thể hủy đặt bàn'
+            });
+        }
+    };
+
+    if (loading) return <div className="text-gray-500">Đang tải...</div>;
+    if (bookings.length === 0) return <div className="text-gray-500">Chưa có lịch sử đặt bàn.</div>;
+
+    return (
+        <div className="space-y-3">
+            <h4 className="text-lg font-semibold text-gray-900">Lịch sử đặt bàn</h4>
+            {bookings.map((b: any) => {
+                const maDon = b.maDonHang || b.MaDonHang;
+                const tenBan = b.tenBan || b.TenBan;
+                const thoiGian = b.thoiGianBatDau || b.ThoiGianBatDau;
+                const soNguoi = b.soLuongNguoi || b.SoLuongNguoi;
+                const trangThai = b.trangThai || b.TrangThai;
+                const daHuy = b.daHuy || b.DaHuy;
+                const coTheHuy = b.coTheHuy || b.CoTheHuy;
+
+                return (
+                    <div key={maDon} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <div className="font-semibold text-gray-900">Bàn {tenBan}</div>
+                                <div className="text-sm text-gray-600">
+                                    {new Date(thoiGian).toLocaleString('vi-VN')} · {soNguoi} khách
+                                </div>
+                                <div className="text-sm text-gray-700 mt-1">Trạng thái: {trangThai}</div>
+                            </div>
+                            {coTheHuy && !daHuy && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleCancel(maDon)}
+                                    className="text-red-600 border-red-300 hover:bg-red-50"
+                                >
+                                    Hủy đặt
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+const AuthBox: React.FC = () => {
+    const { notify } = useFeedback();
+    const { checkUser, login, register } = useAuth();
+    const [step, setStep] = useState<'identify' | 'otp'>('identify');
+    const [identifier, setIdentifier] = useState('');
+    const [exists, setExists] = useState<boolean | null>(null);
+    const [otp, setOtp] = useState('');
+    const [name, setName] = useState('');
+
+    const doCheck = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!identifier) return;
+        try {
+            const res = await checkUser(identifier);
+            setExists(res.userExists);
+            setStep('otp');
+            notify({ tone: 'success', title: 'Đã gửi OTP', description: identifier.includes('@') ? 'Vui lòng kiểm tra email' : 'OTP đã hiển thị ở server console (dev)' });
+        } catch (err: any) {
+            notify({ tone: 'error', title: 'Lỗi', description: err?.message || 'Không gửi được OTP' });
+        }
+    };
+
+    const doSubmitOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!otp) return;
+        try {
+            if (exists) {
+                await login(identifier, otp);
+                notify({ tone: 'success', title: 'Đăng nhập thành công' });
+            } else {
+                if (!name) {
+                    notify({ tone: 'warning', title: 'Thiếu họ tên đăng ký' });
+                    return;
+                }
+                await register(identifier, name, otp);
+                notify({ tone: 'success', title: 'Đăng ký thành công' });
+            }
+        } catch (err: any) {
+            notify({ tone: 'error', title: 'Lỗi', description: err?.message || 'Xác thực thất bại' });
+        }
+    };
+
+    return (
+        <div className="max-w-md space-y-3">
+            {step === 'identify' ? (
+                <form onSubmit={doCheck} className="space-y-2">
+                    <Input placeholder="Email hoặc SĐT" value={identifier} onChange={e => setIdentifier(e.target.value)} />
+                    <Button type="submit">Nhận OTP</Button>
+                </form>
+            ) : (
+                <form onSubmit={doSubmitOtp} className="space-y-2">
+                    {!exists && <Input placeholder="Họ tên" value={name} onChange={e => setName(e.target.value)} />}
+                    <Input placeholder="OTP" value={otp} onChange={e => setOtp(e.target.value)} />
+                    <Button type="submit">{exists ? 'Đăng nhập' : 'Đăng ký'}</Button>
+                </form>
+            )}
+        </div>
+    );
+}

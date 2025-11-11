@@ -15,18 +15,20 @@ export default defineConfig(({ mode }) => {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
     },
     resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
-        '@admin': path.resolve(__dirname, 'modules/admin'),
-        '@customer': path.resolve(__dirname, 'modules/customer'),
-        '@domain': path.resolve(__dirname, 'domain'),
-        '@application': path.resolve(__dirname, 'application'),
-        '@infrastructure': path.resolve(__dirname, 'infrastructure'),
-        '@/features': path.resolve(__dirname, 'src/features'),
-        '@/shared': path.resolve(__dirname, 'src/shared'),
-        '@/core': path.resolve(__dirname, 'src/core'),
-        '@/infrastructure': path.resolve(__dirname, 'src/infrastructure'),
-      }
+      alias: [
+        { find: '@/components', replacement: path.resolve(__dirname, 'components') },
+        { find: '@/lib', replacement: path.resolve(__dirname, 'lib') },
+        { find: '@/features', replacement: path.resolve(__dirname, 'src/features') },
+        { find: '@/shared', replacement: path.resolve(__dirname, 'src/shared') },
+        { find: '@/core', replacement: path.resolve(__dirname, 'src/core') },
+        { find: '@/infrastructure', replacement: path.resolve(__dirname, 'src/infrastructure') },
+
+        { find: '@admin', replacement: path.resolve(__dirname, 'modules/admin') },
+        { find: '@customer', replacement: path.resolve(__dirname, 'modules/customer') },
+        { find: '@domain', replacement: path.resolve(__dirname, 'domain') },
+        { find: '@application', replacement: path.resolve(__dirname, 'application') },
+        { find: '@infrastructure', replacement: path.resolve(__dirname, 'infrastructure') },
+      ]
     }
   };
 });

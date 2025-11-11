@@ -3,7 +3,7 @@ import type { Order } from '@/core/types';
 import { PaymentMethod } from '@/features/orders/domain/types';
 import { useAppContext } from '@/core/context/AppContext';
 import { useFeedback } from '@/core/context/FeedbackContext';
-import { XIcon } from '@/shared/components/Icons';
+import { XIcon } from '@/components/Icons';
 import { formatVND } from '@/shared/utils';
 
 interface PaymentModalProps {

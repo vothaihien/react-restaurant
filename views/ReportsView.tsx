@@ -1,12 +1,31 @@
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAppContext } from '@/core/context/AppContext';
 import { formatVND } from '@/shared/utils';
+import { Api } from '@/shared/utils/api';
 
 const currency = formatVND;
 
 const ReportsView: React.FC = () => {
     const { orders } = useAppContext() as any;
+    const [year, setYear] = useState<number>(new Date().getFullYear());
+    const [monthly, setMonthly] = useState<Array<{ thang: number; doanhThu: number }>>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const load = async () => {
+            setLoading(true);
+            try {
+                const data = await Api.getRevenueByMonth(year);
+                setMonthly(data || []);
+            } catch {
+                setMonthly([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+        load();
+    }, [year]);
 
     const { todayRevenue, monthRevenue, paymentBreakdown, topItems } = useMemo(() => {
         const now = new Date();
@@ -74,6 +93,31 @@ const ReportsView: React.FC = () => {
                                 <span>{currency(t.revenue)}</span>
                             </div>
                         ))}
+                    </div>
+                )}
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 mt-6">
+                <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-xl font-semibold text-gray-900">Doanh thu theo tháng (API)</h2>
+                    <div className="flex items-center gap-2">
+                        <label className="text-gray-700 text-sm">Năm</label>
+                        <input className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300 w-28" type="number" value={year} onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())} />
+                    </div>
+                </div>
+                {loading ? <div className="text-gray-500">Đang tải...</div> : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {Array.from({ length: 12 }).map((_, idx) => {
+                            const th = idx + 1;
+                            const row = monthly.find(x => (x.thang || x.Thang) === th);
+                            const val = row ? (row.doanhThu ?? (row as any).DoanhThu) : 0;
+                            return (
+                                <div key={th} className="flex items-center justify-between border border-gray-200 rounded px-3 py-2">
+                                    <span className="text-gray-700">Tháng {th}</span>
+                                    <span className="font-semibold text-gray-900">{formatVND(val || 0)}</span>
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>

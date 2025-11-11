@@ -3,7 +3,7 @@ import type { MenuItem, MenuItemSize, RecipeIngredient, Ingredient, Recipe } fro
 import { useAppContext } from '@/core/context/AppContext';
 import { useFeedback } from '@/core/context/FeedbackContext';
 import { CATEGORIES, PREDEFINED_SIZES } from '@/features/menu/domain/constants';
-import { XIcon, PlusIcon, TrashIcon, ChevronDownIcon } from '@/shared/components/Icons';
+import { XIcon, PlusIcon, TrashIcon, ChevronDownIcon } from '@/components/Icons';
 
 interface MenuItemModalProps {
     isOpen: boolean;

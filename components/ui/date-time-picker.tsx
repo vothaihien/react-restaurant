@@ -5,10 +5,10 @@ import { CalendarIcon, Clock } from "lucide-react"
 import { format, set } from "date-fns"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Button } from "./button"
+import { Calendar } from "./calendar"
+import { Input } from "./input"
+import { Popover, PopoverContent, PopoverTrigger } from "./popover"
 
 export interface DateTimePickerProps {
     value?: Date
