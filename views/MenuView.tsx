@@ -1,13 +1,63 @@
-import React, { useState } from 'react';
-import { useAppContext } from '../context/AppContext';
-import MenuItemModal from '../components/MenuItemModal';
-import type { MenuItem } from '../types';
-import { PlusCircleIcon, EditIcon, TrashIcon } from '../components/Icons';
+import React, { useEffect, useState, useMemo } from 'react';
+import { useAppContext } from '@/core/context/AppContext';
+import MenuItemModal from '@/components/MenuItemModal';
+import type { MenuItem } from '@/features/menu/domain/types';
+import { PlusCircleIcon, EditIcon, TrashIcon } from '@/components/Icons';
+import { formatVND } from '@/shared/utils';
+import { useFeedback } from '@/core/context/FeedbackContext';
+import { Api, BASE_URL } from '@/shared/utils/api';
+import { Pagination } from '@/components/ui/pagination';
 
 const MenuView: React.FC = () => {
     const { menuItems, deleteMenuItem } = useAppContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+    const { notify, confirm } = useFeedback();
+    const [remoteItems, setRemoteItems] = useState<MenuItem[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+
+    useEffect(() => {
+        const load = async () => {
+            setLoading(true);
+            try {
+                const data = await Api.getDishes();
+                const mapped: MenuItem[] = (data || []).map((m: any) => {
+                    const imgs: string[] = (m.hinhAnhMonAns || m.HinhAnhMonAns || []).map((h: any) => {
+                        const url = h.urlHinhAnh || h.URLHinhAnh;
+                        return url?.startsWith('http') ? url : `${BASE_URL}/${url}`;
+                    });
+                    const tenDanhMuc = m.maDanhMucNavigation?.tenDanhMuc || m.MaDanhMucNavigation?.TenDanhMuc || '';
+                    const sizes = (m.phienBanMonAns || m.PhienBanMonAns || []).map((p: any) => ({
+                        name: p.tenPhienBan || p.TenPhienBan,
+                        price: Number(p.gia || p.Gia) || 0,
+                        recipe: { id: '', name: '', ingredients: [] }
+                    }));
+                    return {
+                        id: m.maMonAn || m.MaMonAn,
+                        name: m.tenMonAn || m.TenMonAn,
+                        description: '',
+                        category: tenDanhMuc,
+                        imageUrls: imgs,
+                        inStock: true,
+                        sizes
+                    } as MenuItem;
+                });
+                setRemoteItems(mapped);
+            } catch (e: any) {
+                notify({
+                    tone: 'warning',
+                    title: 'Không thể tải món ăn từ server',
+                    description: e?.message || 'Đang sử dụng dữ liệu mẫu'
+                });
+                // fallback giữ nguyên mock
+            } finally {
+                setLoading(false);
+            }
+        };
+        load();
+    }, [notify]);
 
     const handleOpenAddModal = () => {
         setEditingItem(null);
@@ -24,89 +74,159 @@ const MenuView: React.FC = () => {
         setEditingItem(null);
     };
 
-    const handleDeleteItem = (itemId: string) => {
-        if (window.confirm('Are you sure you want to delete this item?')) {
-            deleteMenuItem(itemId);
+    const handleDeleteItem = async (item: MenuItem) => {
+        const shouldDelete = await confirm({
+            title: 'Xóa món khỏi thực đơn',
+            description: `Bạn có chắc chắn muốn xóa "${item.name}" khỏi thực đơn? Thao tác này không thể hoàn tác.`,
+            confirmText: 'Xóa món',
+            cancelText: 'Giữ lại',
+            tone: 'danger',
+        });
+        if (shouldDelete) {
+            deleteMenuItem(item.id);
+            notify({
+                tone: 'success',
+                title: 'Đã xóa món',
+                description: `${item.name} đã được xóa khỏi thực đơn.`,
+            });
         }
     };
-    
+
     const getPriceRange = (item: MenuItem): string => {
         if (!item.sizes || item.sizes.length === 0) return 'N/A';
-        if (item.sizes.length === 1) return `$${item.sizes[0].price.toFixed(2)}`;
+        if (item.sizes.length === 1) return formatVND(item.sizes[0].price);
         const prices = item.sizes.map(s => s.price);
         const minPrice = Math.min(...prices);
         const maxPrice = Math.max(...prices);
-        return `$${minPrice.toFixed(2)} - $${maxPrice.toFixed(2)}`;
+        return `${formatVND(minPrice)} - ${formatVND(maxPrice)}`;
     };
+
+    // Tính toán phân trang
+    const allItems = remoteItems.length > 0 ? remoteItems : menuItems;
+    const totalPages = Math.ceil(allItems.length / itemsPerPage);
+
+    const paginatedItems = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return allItems.slice(startIndex, endIndex);
+    }, [allItems, currentPage, itemsPerPage]);
+
+    // Reset về trang 1 khi dữ liệu thay đổi
+    useEffect(() => {
+        if (currentPage > totalPages && totalPages > 0) {
+            setCurrentPage(1);
+        }
+    }, [totalPages, currentPage]);
 
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-white">Menu Management</h1>
+                <h1 className="text-3xl font-bold text-gray-900">Quản lý Thực đơn</h1>
                 <button
                     onClick={handleOpenAddModal}
                     className="flex items-center gap-2 bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-500 transition"
                 >
-                    <PlusCircleIcon className="w-5 h-5"/>
-                    <span>Add New Item</span>
+                    <PlusCircleIcon className="w-5 h-5" />
+                    <span>Thêm món mới</span>
                 </button>
             </div>
 
-            <div className="bg-gray-900 rounded-lg shadow-xl overflow-hidden">
+            {loading && (
+                <div className="mb-4 text-gray-600">Đang tải dữ liệu từ server...</div>
+            )}
+
+            <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <label className="text-sm text-gray-700">Hiển thị:</label>
+                        <select
+                            value={itemsPerPage}
+                            onChange={(e) => {
+                                setItemsPerPage(Number(e.target.value));
+                                setCurrentPage(1);
+                            }}
+                            className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            <option value={5}>5 món</option>
+                            <option value={10}>10 món</option>
+                            <option value={20}>20 món</option>
+                            <option value={50}>50 món</option>
+                        </select>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                        Tổng: <span className="font-semibold">{allItems.length}</span> món
+                    </div>
+                </div>
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-700">
-                        <thead className="bg-gray-800">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
                             <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Category</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Price</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Món</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Danh mục</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Giá</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Trạng thái</th>
                                 <th scope="col" className="relative px-6 py-3">
-                                    <span className="sr-only">Actions</span>
+                                    <span className="sr-only">Thao tác</span>
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="bg-gray-900 divide-y divide-gray-700">
-                            {menuItems.map((item) => (
-                                <tr key={item.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center">
-                                            <div className="flex-shrink-0 h-12 w-12">
-                                                <img className="h-12 w-12 rounded-md object-cover" src={item.imageUrls[0]} alt={item.name} />
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {paginatedItems.length > 0 ? (
+                                paginatedItems.map((item) => (
+                                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center">
+                                                <div className="flex-shrink-0 h-12 w-12">
+                                                    <img className="h-12 w-12 rounded-md object-cover border border-gray-200" src={item.imageUrls[0]} alt={item.name} />
+                                                </div>
+                                                <div className="ml-4">
+                                                    <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                                                </div>
                                             </div>
-                                            <div className="ml-4">
-                                                <div className="text-sm font-medium text-white">{item.name}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm text-gray-700">{item.category}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm text-gray-900 font-semibold">{getPriceRange(item)}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${item.inStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                                }`}>
+                                                {item.inStock ? 'Còn hàng' : 'Hết hàng'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <div className="flex items-center justify-end gap-3">
+                                                <button onClick={() => handleOpenEditModal(item)} className="text-indigo-600 hover:text-indigo-700 transition">
+                                                    <EditIcon className="w-5 h-5" />
+                                                </button>
+                                                <button onClick={() => handleDeleteItem(item)} className="text-red-600 hover:text-red-700 transition">
+                                                    <TrashIcon className="w-5 h-5" />
+                                                </button>
                                             </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm text-gray-300">{item.category}</div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm text-white font-semibold">{getPriceRange(item)}</div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                            item.inStock ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'
-                                        }`}>
-                                            {item.inStock ? 'In Stock' : 'Out of Stock'}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <div className="flex items-center justify-end gap-3">
-                                            <button onClick={() => handleOpenEditModal(item)} className="text-indigo-400 hover:text-indigo-300 transition">
-                                                <EditIcon className="w-5 h-5"/>
-                                            </button>
-                                            <button onClick={() => handleDeleteItem(item.id)} className="text-red-400 hover:text-red-300 transition">
-                                                <TrashIcon className="w-5 h-5"/>
-                                            </button>
-                                        </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500">
+                                        Không có món nào trong thực đơn
                                     </td>
                                 </tr>
-                            ))}
+                            )}
                         </tbody>
                     </table>
                 </div>
+                {totalPages > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                        itemsPerPage={itemsPerPage}
+                        totalItems={allItems.length}
+                    />
+                )}
             </div>
 
             <MenuItemModal

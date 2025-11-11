@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "target": "ES2022",
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
@@ -19,8 +20,38 @@
     "allowJs": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./*"
+      "@admin/*": [
+        "./modules/admin/*"
+      ],
+      "@customer/*": [
+        "./modules/customer/*"
+      ],
+      "@domain/*": [
+        "./domain/*"
+      ],
+      "@application/*": [
+        "./application/*"
+      ],
+      "@infrastructure/*": [
+        "./infrastructure/*"
+      ],
+      "@/components/*": [
+        "./components/*"
+      ],
+      "@/lib/*": [
+        "./lib/*"
+      ],
+      "@/features/*": [
+        "./src/features/*"
+      ],
+      "@/shared/*": [
+        "./src/shared/*"
+      ],
+      "@/core/*": [
+        "./src/core/*"
+      ],
+      "@/infrastructure/*": [
+        "./src/infrastructure/*"
       ]
     },
     "allowImportingTsExtensions": true,
