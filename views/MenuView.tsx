@@ -9,20 +9,22 @@ import { Api, BASE_URL } from '@/shared/utils/api';
 import { Pagination } from '@/components/ui/pagination';
 
 const MenuView: React.FC = () => {
-    const { menuItems, deleteMenuItem } = useAppContext();
+    const { menuItems, categories, deleteMenuItem } = useAppContext();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
     const { notify, confirm } = useFeedback();
-    const [remoteItems, setRemoteItems] = useState<MenuItem[]>([]);
+    const [remoteItems, setRemoteItems] = useState<MenuItem[] | null>(null);
     const [loading, setLoading] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
+    const [selectedCategory, setSelectedCategory] = useState<string>('');
 
     useEffect(() => {
         const load = async () => {
             setLoading(true);
             try {
-                const data = await Api.getDishes();
+                const params = selectedCategory ? { maDanhMuc: selectedCategory } : undefined;
+                const data = await Api.getDishes(params);
                 const mapped: MenuItem[] = (data || []).map((m: any) => {
                     const imgs: string[] = (m.hinhAnhMonAns || m.HinhAnhMonAns || []).map((h: any) => {
                         const url = h.urlHinhAnh || h.URLHinhAnh;
@@ -38,6 +40,7 @@ const MenuView: React.FC = () => {
                         id: m.maMonAn || m.MaMonAn,
                         name: m.tenMonAn || m.TenMonAn,
                         description: '',
+                        categoryId: m.maDanhMuc || m.MaDanhMuc,
                         category: tenDanhMuc,
                         imageUrls: imgs,
                         inStock: true,
@@ -46,18 +49,18 @@ const MenuView: React.FC = () => {
                 });
                 setRemoteItems(mapped);
             } catch (e: any) {
+                setRemoteItems(null);
                 notify({
                     tone: 'warning',
                     title: 'Không thể tải món ăn từ server',
                     description: e?.message || 'Đang sử dụng dữ liệu mẫu'
                 });
-                // fallback giữ nguyên mock
             } finally {
                 setLoading(false);
             }
         };
         load();
-    }, [notify]);
+    }, [notify, selectedCategory]);
 
     const handleOpenAddModal = () => {
         setEditingItem(null);
@@ -101,15 +104,28 @@ const MenuView: React.FC = () => {
         return `${formatVND(minPrice)} - ${formatVND(maxPrice)}`;
     };
 
-    // Tính toán phân trang
-    const allItems = remoteItems.length > 0 ? remoteItems : menuItems;
-    const totalPages = Math.ceil(allItems.length / itemsPerPage);
+    const filteredItems = useMemo(() => {
+        const items = (remoteItems ?? menuItems);
+        if (!selectedCategory) return items;
+        const selectedCategoryName = categories.find(c => c.id === selectedCategory)?.name?.toLowerCase()?.trim();
+        return items.filter(item => {
+            if (item.categoryId) {
+                return item.categoryId === selectedCategory;
+            }
+            if (selectedCategoryName) {
+                return item.category?.toLowerCase()?.trim() === selectedCategoryName;
+            }
+            return false;
+        });
+    }, [remoteItems, menuItems, selectedCategory, categories]);
+
+    const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
 
     const paginatedItems = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
         const endIndex = startIndex + itemsPerPage;
-        return allItems.slice(startIndex, endIndex);
-    }, [allItems, currentPage, itemsPerPage]);
+        return filteredItems.slice(startIndex, endIndex);
+    }, [filteredItems, currentPage, itemsPerPage]);
 
     // Reset về trang 1 khi dữ liệu thay đổi
     useEffect(() => {
@@ -154,7 +170,46 @@ const MenuView: React.FC = () => {
                         </select>
                     </div>
                     <div className="text-sm text-gray-600">
-                        Tổng: <span className="font-semibold">{allItems.length}</span> món
+                        Tổng: <span className="font-semibold">{filteredItems.length}</span> món
+                    </div>
+                </div>
+                <div className="px-4 py-3 border-b border-gray-200">
+                    <div className="flex flex-wrap gap-3 items-center">
+                        <span className="text-sm text-gray-700 font-medium">Danh mục:</span>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setSelectedCategory('');
+                                setCurrentPage(1);
+                            }}
+                            className={`px-3 py-1 rounded-full text-sm font-medium border transition ${selectedCategory === ''
+                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
+                                }`}
+                        >
+                            Tất cả
+                        </button>
+                        {(categories.length > 0 ? categories : []).map(cat => (
+                            <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => {
+                                    setSelectedCategory(prev => {
+                                        const next = prev === cat.id ? '' : cat.id;
+                                        if (next !== prev) {
+                                            setCurrentPage(1);
+                                        }
+                                        return next;
+                                    });
+                                }}
+                                className={`px-3 py-1 rounded-full text-sm font-medium border transition ${selectedCategory === cat.id
+                                    ? 'bg-indigo-600 text-white border-indigo-600'
+                                    : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
+                                    }`}
+                            >
+                                {cat.name}
+                            </button>
+                        ))}
                     </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -224,7 +279,7 @@ const MenuView: React.FC = () => {
                         totalPages={totalPages}
                         onPageChange={setCurrentPage}
                         itemsPerPage={itemsPerPage}
-                        totalItems={allItems.length}
+                        totalItems={filteredItems.length}
                     />
                 )}
             </div>

@@ -5,7 +5,6 @@ import type { MenuItem, MenuItemSize } from '@/features/menu/domain/types';
 import { useAppContext } from '@/core/context/AppContext';
 import { XIcon, TrashIcon } from '@/components/Icons';
 import MenuItemCard from './MenuItemCard';
-import { CATEGORIES } from '@/features/menu/domain/constants';
 import { formatVND } from '@/shared/utils';
 
 interface OrderModalProps {
@@ -16,9 +15,9 @@ interface OrderModalProps {
 }
 
 const OrderModal: React.FC<OrderModalProps> = ({ table, order, onClose, onOpenPayment }) => {
-    const { menuItems, createOrder, updateOrder, sendOrderToKDS, getOrderForTable } = useAppContext() as any;
+    const { menuItems, categories, createOrder, updateOrder, sendOrderToKDS, getOrderForTable } = useAppContext() as any;
     const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]);
-    const [selectedCategory, setSelectedCategory] = useState<string>(CATEGORIES[0]?.name || 'All');
+    const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
     useEffect(() => {
         if (order) {
@@ -106,7 +105,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ table, order, onClose, onOpenPa
                         <div className="mb-4">
                             <div className="flex space-x-2 overflow-x-auto pb-2">
                                 <button onClick={() => setSelectedCategory('All')} className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${selectedCategory === 'All' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Tất cả</button>
-                                {CATEGORIES.map(cat => (
+                                {categories.map(cat => (
                                     <button key={cat.id} onClick={() => setSelectedCategory(cat.name)} className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${selectedCategory === cat.name ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}>{cat.name}</button>
                                 ))}
                             </div>

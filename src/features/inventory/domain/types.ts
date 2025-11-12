@@ -10,7 +10,7 @@ export enum Unit {
 export interface Ingredient {
     id: string;
     name: string;
-    unit: Unit;
+    unit: string; // Lấy trực tiếp từ API, không map với enum
     stock: number;
     minStock?: number; // threshold for low stock alert
 }

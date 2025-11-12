@@ -1,7 +1,6 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import type { Table, Order, MenuItem, OrderItem, Ingredient, Reservation, Supplier, KDSItem, InventoryTransaction, InventoryTransactionItem, Staff } from '@/core/types';
+import type { Table, Order, MenuItem, OrderItem, Ingredient, Reservation, Supplier, KDSItem, InventoryTransaction, InventoryTransactionItem, Staff, Category } from '@/core/types';
 import { TableStatus, PaymentMethod } from '@/core/types';
-import { TABLES, ORDERS, MENU_ITEMS, INGREDIENTS, RESERVATIONS, SUPPLIERS, KDS_QUEUE, INVENTORY_TRANSACTIONS, STAFFS } from '@/core/constants';
 import { Api } from '@/shared/utils/api';
 
 const generateDailyId = (existingIds: string[]): string => {
@@ -22,6 +21,7 @@ interface AppContextType {
     tables: Table[];
     orders: Order[];
     menuItems: MenuItem[];
+    categories: Category[];
     ingredients: Ingredient[];
     reservations: Reservation[];
     suppliers: Supplier[];
@@ -95,16 +95,18 @@ const saveToStorage = <T,>(key: string, value: T): void => {
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    // Load from localStorage or use defaults
-    const [tables, setTables] = useState<Table[]>(() => loadFromStorage('restaurant_tables', TABLES));
-    const [orders, setOrders] = useState<Order[]>(() => loadFromStorage('restaurant_orders', ORDERS));
-    const [menuItems, setMenuItems] = useState<MenuItem[]>(() => loadFromStorage('restaurant_menuItems', MENU_ITEMS));
-    const [ingredients, setIngredients] = useState<Ingredient[]>(() => loadFromStorage('restaurant_ingredients', INGREDIENTS));
-    const [reservations, setReservations] = useState<Reservation[]>(() => loadFromStorage('restaurant_reservations', RESERVATIONS));
-    const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadFromStorage('restaurant_suppliers', SUPPLIERS));
-    const [kdsQueue, setKdsQueue] = useState<KDSItem[]>(() => loadFromStorage('restaurant_kdsQueue', KDS_QUEUE));
-    const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>(() => loadFromStorage('restaurant_inventoryTransactions', INVENTORY_TRANSACTIONS));
-    const [staff, setStaff] = useState<Staff[]>(() => loadFromStorage('restaurant_staff', STAFFS));
+    // Load from localStorage or use empty arrays (no mock data)
+    const [tables, setTables] = useState<Table[]>(() => loadFromStorage('restaurant_tables', []));
+    const [orders, setOrders] = useState<Order[]>(() => loadFromStorage('restaurant_orders', []));
+    const [menuItems, setMenuItems] = useState<MenuItem[]>(() => loadFromStorage('restaurant_menuItems', []));
+    const [categories, setCategories] = useState<Category[]>(() => loadFromStorage('restaurant_categories', []));
+    // Ingredients are loaded from API only, no hardcoded data
+    const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+    const [reservations, setReservations] = useState<Reservation[]>(() => loadFromStorage('restaurant_reservations', []));
+    const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadFromStorage('restaurant_suppliers', []));
+    const [kdsQueue, setKdsQueue] = useState<KDSItem[]>(() => loadFromStorage('restaurant_kdsQueue', []));
+    const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>(() => loadFromStorage('restaurant_inventoryTransactions', []));
+    const [staff, setStaff] = useState<Staff[]>(() => loadFromStorage('restaurant_staff', []));
     const [reservationToOrderMap, setReservationToOrderMap] = useState<Record<string, string>>(() => loadFromStorage('restaurant_res_to_order', {} as Record<string, string>));
 
     // Save to localStorage whenever state changes
@@ -119,10 +121,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     React.useEffect(() => {
         saveToStorage('restaurant_menuItems', menuItems);
     }, [menuItems]);
-
     React.useEffect(() => {
-        saveToStorage('restaurant_ingredients', ingredients);
-    }, [ingredients]);
+        saveToStorage('restaurant_categories', categories);
+    }, [categories]);
+
+    // Don't save ingredients to localStorage - always load from API
+    // React.useEffect(() => {
+    //     saveToStorage('restaurant_ingredients', ingredients);
+    // }, [ingredients]);
 
     React.useEffect(() => {
         saveToStorage('restaurant_reservations', reservations);
@@ -146,6 +152,71 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     setTables(mapped);
                 }
             } catch { }
+        })();
+    }, []);
+    // Load categories from API on mount (best-effort)
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await Api.getCategories();
+                if (Array.isArray(data)) {
+                    const mapped: Category[] = data
+                        .map((cat: any) => ({
+                            id: cat.maDanhMuc || cat.MaDanhMuc || '',
+                            name: cat.tenDanhMuc || cat.TenDanhMuc || ''
+                        }))
+                        .filter(cat => cat.id && cat.name);
+                    if (mapped.length > 0) {
+                        setCategories(mapped);
+                    }
+                }
+            } catch (error) {
+                console.warn('Không thể tải danh mục từ API', error);
+            }
+        })();
+    }, []);
+
+    // Load ingredients from API on mount (best-effort)
+    // Clear any old localStorage data first
+    useEffect(() => {
+        // Clear old hardcoded data from localStorage
+        localStorage.removeItem('restaurant_ingredients');
+
+        (async () => {
+            try {
+                const data = await Api.getIngredients();
+                if (Array.isArray(data)) {
+                    const mapped: Ingredient[] = data
+                        .map((ing: any) => {
+                            // Lấy đơn vị tính trực tiếp từ API, không map với enum
+                            const unitStr = (ing.donViTinh || ing.DonViTinh);
+                            if (!unitStr) {
+                                // Nếu không có đơn vị tính từ API, bỏ qua nguyên liệu này
+                                return null;
+                            }
+
+                            const ingredient: Ingredient = {
+                                id: ing.maNguyenLieu || ing.MaNguyenLieu || '',
+                                name: ing.tenNguyenLieu || ing.TenNguyenLieu || '',
+                                unit: unitStr.toString().trim(), // Lấy trực tiếp từ API
+                                stock: Number(ing.stock || ing.Stock || ing.soLuongTonKho || ing.SoLuongTonKho || 0),
+                            };
+                            const minStockVal = Number(ing.minStock || ing.MinStock || 0);
+                            if (minStockVal > 0) {
+                                ingredient.minStock = minStockVal;
+                            }
+                            return ingredient;
+                        })
+                        .filter((ing): ing is Ingredient => {
+                            return ing !== null && !!ing.id && !!ing.name && !!ing.unit;
+                        });
+                    setIngredients(mapped);
+                }
+            } catch (error) {
+                console.warn('Không thể tải nguyên liệu từ API', error);
+                // Keep empty array if API fails, no fallback hardcoded data
+                setIngredients([]);
+            }
         })();
     }, []);
 
@@ -446,7 +517,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     return (
-        <AppContext.Provider value={{ tables, orders, menuItems, ingredients, reservations, suppliers, kdsQueue, inventoryTransactions, staff, createOrder, updateOrder, closeOrder, updateTableStatus, getOrderForTable, sendOrderToKDS, addMenuItem, updateMenuItem, deleteMenuItem, generateRecipeId, createReservation, updateReservation, cancelReservation, confirmArrival, markNoShow, getAvailableTables, recordInventoryIn, adjustInventory, consumeByOrderItems, lowStockIds, addSupplier, updateSupplier, deleteSupplier, addTable, updateTable, deleteTable, addStaff, updateStaff, deleteStaff }}>
+        <AppContext.Provider value={{ tables, orders, menuItems, categories, ingredients, reservations, suppliers, kdsQueue, inventoryTransactions, staff, createOrder, updateOrder, closeOrder, updateTableStatus, getOrderForTable, sendOrderToKDS, addMenuItem, updateMenuItem, deleteMenuItem, generateRecipeId, createReservation, updateReservation, cancelReservation, confirmArrival, markNoShow, getAvailableTables, recordInventoryIn, adjustInventory, consumeByOrderItems, lowStockIds, addSupplier, updateSupplier, deleteSupplier, addTable, updateTable, deleteTable, addStaff, updateStaff, deleteStaff }}>
             {children}
         </AppContext.Provider>
     );

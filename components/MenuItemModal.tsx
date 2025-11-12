@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { MenuItem, MenuItemSize, RecipeIngredient, Ingredient, Recipe } from '@/features/menu/domain/types';
+import type { MenuItem, MenuItemSize, RecipeIngredient, Recipe, Category } from '@/features/menu/domain/types';
 import { useAppContext } from '@/core/context/AppContext';
 import { useFeedback } from '@/core/context/FeedbackContext';
-import { CATEGORIES, PREDEFINED_SIZES } from '@/features/menu/domain/constants';
+import { PREDEFINED_SIZES } from '@/features/menu/domain/constants';
 import { XIcon, PlusIcon, TrashIcon, ChevronDownIcon } from '@/components/Icons';
 
 interface MenuItemModalProps {
@@ -12,23 +12,24 @@ interface MenuItemModalProps {
 }
 
 const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEdit }) => {
-    const { addMenuItem, updateMenuItem, ingredients, generateRecipeId } = useAppContext();
+    const { addMenuItem, updateMenuItem, ingredients, generateRecipeId, categories } = useAppContext();
     const { notify } = useFeedback();
     const [isSizeDropdownOpen, setIsSizeDropdownOpen] = useState(false);
     const sizeDropdownRef = useRef<HTMLDivElement>(null);
     const [recipes, setRecipes] = useState<Recipe[]>([]);
     const [selectedRecipeForIngredients, setSelectedRecipeForIngredients] = useState<string | null>(null);
 
-    const getInitialState = (): Omit<MenuItem, 'id'> => ({
+    const getInitialState = (cats: Category[]): Omit<MenuItem, 'id'> => ({
         name: '',
         description: '',
-        category: CATEGORIES[0]?.name || '',
+        categoryId: cats[0]?.id || '',
+        category: cats[0]?.name || '',
         imageUrls: [],
         inStock: true,
         sizes: [],
     });
 
-    const [formState, setFormState] = useState(getInitialState());
+    const [formState, setFormState] = useState(() => getInitialState(categories));
 
     // Helper function to generate unique recipe ID
     const generateUniqueRecipeId = (): string => {
@@ -70,6 +71,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
             setFormState({
                 name: itemToEdit.name,
                 description: itemToEdit.description,
+                categoryId: itemToEdit.categoryId,
                 category: itemToEdit.category,
                 imageUrls: [...itemToEdit.imageUrls],
                 inStock: itemToEdit.inStock,
@@ -85,11 +87,25 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
             const uniqueRecipes = Array.from(recipeMap.values());
             setRecipes(uniqueRecipes);
         } else {
-            setFormState(getInitialState());
+            setFormState(getInitialState(categories));
             setRecipes([]);
         }
         setSelectedRecipeForIngredients(null);
-    }, [itemToEdit, isOpen]);
+    }, [itemToEdit, isOpen, categories]);
+
+    useEffect(() => {
+        if (!itemToEdit && categories.length > 0) {
+            setFormState(prev => {
+                if (prev.categoryId && prev.category) return prev;
+                const first = categories[0];
+                return {
+                    ...prev,
+                    categoryId: first.id,
+                    category: first.name
+                };
+            });
+        }
+    }, [categories, itemToEdit]);
 
     // Remove duplicate recipes by ID
     useEffect(() => {
@@ -127,6 +143,13 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
         if (e.target instanceof HTMLInputElement && e.target.type === 'checkbox') {
             const isChecked = e.target.checked;
             setFormState(prev => ({ ...prev, [name]: isChecked }));
+        } else if (name === 'categoryId') {
+            const selectedCategory = categories.find(cat => cat.id === value);
+            setFormState(prev => ({
+                ...prev,
+                categoryId: selectedCategory?.id || value || '',
+                category: selectedCategory?.name || prev.category
+            }));
         } else {
             setFormState(prev => ({ ...prev, [name]: value }));
         }
@@ -328,7 +351,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const { name, description, category, imageUrls, inStock, sizes } = formState;
+        const { name, description, category, categoryId, imageUrls, inStock, sizes } = formState;
 
         if (!name || sizes.length === 0 || imageUrls.length === 0) {
             notify({
@@ -339,7 +362,16 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
             return;
         }
 
-        const menuItemData = { name, description, category, imageUrls, inStock, sizes };
+        const matchedCategory = categories.find(cat => cat.id === categoryId || cat.name === category);
+        const menuItemData = {
+            name,
+            description,
+            category: matchedCategory?.name || category,
+            categoryId: matchedCategory?.id ?? categoryId ?? itemToEdit?.categoryId,
+            imageUrls,
+            inStock,
+            sizes
+        };
         if (itemToEdit) {
             updateMenuItem({ ...menuItemData, id: itemToEdit.id });
             notify({
@@ -388,8 +420,16 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
                                     </div>
                                     <div>
                                         <label htmlFor="category" className="block text-sm font-medium text-gray-700">Danh mục</label>
-                                        <select id="category" name="category" value={formState.category} onChange={handleInputChange} className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                                            {CATEGORIES.map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
+                                        <select
+                                            id="category"
+                                            name="categoryId"
+                                            value={formState.categoryId || ''}
+                                            onChange={handleInputChange}
+                                            disabled={categories.length === 0}
+                                            className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-500"
+                                        >
+                                            <option value="" disabled>Chọn danh mục</option>
+                                            {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                                         </select>
                                     </div>
                                 </div>
