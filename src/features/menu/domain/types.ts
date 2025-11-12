@@ -26,6 +26,7 @@ export interface MenuItem {
     id: string; // Auto-generated: DDMMYYYYNNN
     name: string;
     description: string;
+    categoryId?: string;
     category: string;
     imageUrls: string[];
     inStock: boolean;

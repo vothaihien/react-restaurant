@@ -1,6 +1,24 @@
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
-const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://192.168.100.47:5134';
+const resolveDefaultBaseUrl = (): string => {
+    const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
+    if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
+        return envUrl.trim().replace(/\/+$/, '');
+    }
+
+    if (typeof window !== 'undefined') {
+        const { protocol, hostname } = window.location;
+        // Nếu frontend đang chạy trên localhost thì ưu tiên domain nội bộ đã cấu hình sẵn
+        const isLocalHost = !hostname || ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
+        const targetHost = isLocalHost ? '192.168.100.47' : hostname;
+        const defaultPort = protocol === 'https:' ? '7190' : '5134';
+        return `${protocol}//${targetHost}:${defaultPort}`;
+    }
+
+    return 'http://localhost:5134';
+};
+
+const BASE_URL = resolveDefaultBaseUrl();
 
 async function request<T>(path: string, options?: { method?: HttpMethod; body?: any; token?: string }): Promise<T> {
     const url = `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
