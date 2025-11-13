@@ -12,7 +12,7 @@ import { useAuth } from '@/core/context/AuthContext';
 import { Api } from '@/shared/utils/api';
 
 const CustomerPortalView: React.FC = () => {
-    const { menuItems, createReservation, tables } = useAppContext() as any;
+    const { menuItems, createReservation, tables, getAvailableTables } = useAppContext() as any;
     const { user, isAuthenticated, checkUser, login, register, logout } = useAuth();
     const [tab, setTab] = useState<'home' | 'booking' | 'menu' | 'order' | 'loyalty' | 'promotions' | 'feedback'>('home');
     const { notify } = useFeedback();
@@ -30,10 +30,45 @@ const CustomerPortalView: React.FC = () => {
     const [notes, setNotes] = useState('');
     const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
 
+    // Available tables for selected date/time
+    const [availableTables, setAvailableTables] = useState<Array<{ id: string; name: string; capacity: number; status: string }>>([]);
+    const [loadingTables, setLoadingTables] = useState(false);
+
     // Cart (shared for booking pre-order & order tab)
     const [cart, setCart] = useState<any[]>([]);
 
-    const submitBooking = (e: React.FormEvent) => {
+    // Fetch available tables when dateTime and party change
+    useEffect(() => {
+        if (!dateTime || !party || party < 1) {
+            setAvailableTables([]);
+            setSelectedTableIds([]);
+            return;
+        }
+
+        const fetchTables = async () => {
+            setLoadingTables(true);
+            try {
+                const tables = await getAvailableTables(dateTime.getTime(), party);
+                setAvailableTables(tables || []);
+                // Reset selected tables when new tables are loaded
+                setSelectedTableIds([]);
+            } catch (error: any) {
+                console.error('Error fetching available tables:', error);
+                notify({
+                    tone: 'error',
+                    title: 'Lỗi tải danh sách bàn',
+                    description: error?.message || 'Không thể tải danh sách bàn có sẵn. Vui lòng thử lại.',
+                });
+                setAvailableTables([]);
+            } finally {
+                setLoadingTables(false);
+            }
+        };
+
+        fetchTables();
+    }, [dateTime, party, getAvailableTables, notify]);
+
+    const submitBooking = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name || !dateTime) {
             notify({
@@ -43,31 +78,53 @@ const CustomerPortalView: React.FC = () => {
             });
             return;
         }
+
         const ts = dateTime.getTime();
         // append preorder summary to notes if any
         const preorder = cart.length
             ? `\n[Đặt món trước] ${cart.map(c => `${c.qty}x ${c.name} (${c.size})`).join(', ')}`
             : '';
-        const reservationData: any = {
-            customerName: name,
-            phone,
-            partySize: party,
-            time: ts,
-            source: 'App',
-            notes: (notes || '') + preorder
-        };
-        if (selectedTableIds.length > 0) {
-            reservationData.tableIds = selectedTableIds;
-        } else {
-            reservationData.tableId = null;
+
+        try {
+            // Get selected table (only one table is allowed)
+            const tableId = selectedTableIds.length > 0 ? selectedTableIds[0] : null;
+
+            const reservationData: any = {
+                customerName: name,
+                phone,
+                partySize: party,
+                time: ts,
+                source: 'App',
+                notes: (notes || '') + preorder,
+                tableId: tableId
+            };
+
+            await createReservation(reservationData);
+
+            // Reset form
+            setName('');
+            setPhone('');
+            setParty(2);
+            setDateTime(undefined);
+            setNotes('');
+            setSelectedTableIds([]);
+            setCart([]);
+            setAvailableTables([]);
+
+            notify({
+                tone: 'success',
+                title: 'Đã gửi yêu cầu',
+                description: tableId
+                    ? `Đã gửi yêu cầu đặt bàn ${availableTables.find(t => t.id === tableId)?.name || tableId}. Nhà hàng sẽ liên hệ lại để xác nhận.`
+                    : 'Đã gửi yêu cầu đặt bàn. Nhà hàng sẽ liên hệ lại để xác nhận.',
+            });
+        } catch (error: any) {
+            notify({
+                tone: 'error',
+                title: 'Lỗi đặt bàn',
+                description: error?.message || 'Không thể gửi yêu cầu đặt bàn. Vui lòng thử lại.',
+            });
         }
-        createReservation(reservationData);
-        setName(''); setPhone(''); setParty(2); setDateTime(undefined); setNotes(''); setSelectedTableIds([]); setCart([]);
-        notify({
-            tone: 'success',
-            title: 'Đã gửi yêu cầu',
-            description: 'Nhà hàng sẽ liên hệ lại để xác nhận đặt bàn trong thời gian sớm nhất.',
-        });
     };
 
     // Menu - only show items in stock (default to true if undefined)
@@ -107,21 +164,47 @@ const CustomerPortalView: React.FC = () => {
     const dec = (key: string) => setCart(cart.flatMap(c => c.key === key ? (c.qty > 1 ? [{ ...c, qty: c.qty - 1 }] : []) : [c]));
     const total = cart.reduce((a, c) => a + c.price * c.qty, 0);
 
-    const statusClass = (s: string, selected: boolean) => {
+    const statusClass = (s: string | TableStatus, selected: boolean) => {
         const base = 'p-4 rounded-lg border-2 transition cursor-pointer';
         if (selected) return `${base} border-indigo-600 bg-indigo-50`;
-        switch (s) {
-            case TableStatus.Available:
-                return `${base} border-green-500 bg-green-50 hover:bg-green-100`;
-            case TableStatus.Occupied:
-                return `${base} border-blue-300 bg-blue-50 opacity-60 cursor-not-allowed`;
-            case TableStatus.Reserved:
-                return `${base} border-yellow-300 bg-yellow-50 opacity-60 cursor-not-allowed`;
-            case TableStatus.CleaningNeeded:
-                return `${base} border-red-300 bg-red-50 opacity-60 cursor-not-allowed`;
-            default:
-                return `${base} border-gray-300 bg-white`;
+
+        // Normalize status to check
+        const statusValue = typeof s === 'string' ? s : s;
+        const statusStr = typeof statusValue === 'string' ? statusValue.toLowerCase().trim() : '';
+
+        // Check if it's the enum value
+        if (statusValue === TableStatus.Available) {
+            return `${base} border-green-500 bg-green-50 hover:bg-green-100`;
         }
+        if (statusValue === TableStatus.Occupied || statusValue === TableStatus.Reserved || statusValue === TableStatus.CleaningNeeded) {
+            return `${base} border-gray-300 bg-gray-50 opacity-60 cursor-not-allowed`;
+        }
+
+        // Check string values
+        const isAvailable = statusStr === 'available' ||
+            statusStr === 'đang trống' ||
+            statusStr === 'trống';
+        const isOccupied = statusStr === 'occupied' ||
+            statusStr === 'đang sử dụng' ||
+            statusStr === 'đang dùng';
+        const isReserved = statusStr === 'reserved' ||
+            statusStr === 'đã đặt' ||
+            statusStr === 'đặt trước';
+        const isCleaning = statusStr === 'cleaning needed' ||
+            statusStr === 'chờ dọn' ||
+            statusStr === 'dọn' ||
+            statusStr === 'bảo trì' ||
+            statusStr === 'đang bảo trì';
+        const isNotEnoughCapacity = statusStr === 'không đủ sức chứa' ||
+            statusStr === 'không đủ chỗ';
+
+        if (isAvailable) {
+            return `${base} border-green-500 bg-green-50 hover:bg-green-100`;
+        }
+        if (isOccupied || isReserved || isCleaning || isNotEnoughCapacity) {
+            return `${base} border-gray-300 bg-gray-50 opacity-60 cursor-not-allowed`;
+        }
+        return `${base} border-gray-300 bg-white`;
     };
 
     return (
@@ -179,39 +262,108 @@ const CustomerPortalView: React.FC = () => {
                 <TabsContent value="booking" className="space-y-4">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Sơ đồ bàn (trạng thái hiện tại)</CardTitle>
+                            <CardTitle>Bước 1: Chọn thời gian và số lượng khách</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                                {(tables || []).map((t: any) => {
-                                    const disabled = t.status !== TableStatus.Available;
-                                    const selected = selectedTableIds.includes(t.id);
-                                    return (
-                                        <button
-                                            key={t.id}
-                                            disabled={disabled}
-                                            onClick={() => {
-                                                if (selected) {
-                                                    setSelectedTableIds(selectedTableIds.filter(id => id !== t.id));
-                                                } else {
-                                                    setSelectedTableIds([...selectedTableIds, t.id]);
-                                                }
-                                            }}
-                                            className={statusClass(t.status, selected)}
-                                            title={disabled ? 'Bàn không khả dụng' : selected ? 'Bỏ chọn bàn này' : 'Chọn bàn này'}
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <span className="font-semibold text-gray-900">{t.name}</span>
-                                                <span className="text-xs text-gray-600">{t.capacity} khách</span>
-                                            </div>
-                                            <div className="mt-1 text-sm text-gray-700">{t.status === TableStatus.Available ? 'Trống' : t.status === TableStatus.Occupied ? 'Đang sử dụng' : t.status === TableStatus.Reserved ? 'Đã đặt' : 'Chờ dọn'}</div>
-                                        </button>
-                                    );
-                                })}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Ngày và giờ muốn đặt</label>
+                                    <DateTimePicker value={dateTime} onChange={setDateTime} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Số lượng khách</label>
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        placeholder="Số khách"
+                                        value={party}
+                                        onChange={e => setParty(parseInt(e.target.value) || 1)}
+                                    />
+                                </div>
                             </div>
-                            <div className="mt-2 text-xs text-muted-foreground">Lưu ý: Sơ đồ thể hiện trạng thái hiện tại (demo). Tình trạng theo giờ sẽ cập nhật ở bước xác nhận.</div>
+                            {dateTime && party >= 1 && (
+                                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <p className="text-sm text-blue-800">
+                                        Đã chọn: <strong>{new Date(dateTime).toLocaleString('vi-VN')}</strong> cho <strong>{party}</strong> khách
+                                    </p>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
+
+                    {dateTime && party >= 1 && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Bước 2: Chọn bàn có sẵn</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {loadingTables ? (
+                                    <div className="text-center py-8 text-gray-500">
+                                        <p>Đang tải danh sách bàn có sẵn...</p>
+                                    </div>
+                                ) : availableTables.length === 0 ? (
+                                    <div className="text-center py-8 text-gray-500">
+                                        <p>Không có bàn nào trống trong khung giờ này.</p>
+                                        <p className="text-sm mt-2">Vui lòng chọn thời gian khác hoặc liên hệ nhà hàng.</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="mb-4 text-sm text-gray-600">
+                                            Tìm thấy <strong>{availableTables.length}</strong> bàn có sẵn cho {party} khách vào {new Date(dateTime).toLocaleString('vi-VN')}
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                                            {availableTables.map((t: any) => {
+                                                const isAvailable = t.status === 'Đang trống' || t.status === 'Available' || t.status === TableStatus.Available;
+                                                const disabled = !isAvailable;
+                                                const selected = selectedTableIds.includes(t.id);
+                                                return (
+                                                    <button
+                                                        key={t.id}
+                                                        disabled={disabled}
+                                                        onClick={() => {
+                                                            if (selected) {
+                                                                setSelectedTableIds([]);
+                                                            } else {
+                                                                // Only allow selecting one table
+                                                                setSelectedTableIds([t.id]);
+                                                            }
+                                                        }}
+                                                        className={statusClass(t.status, selected)}
+                                                        title={disabled ? 'Bàn không khả dụng' : selected ? 'Bỏ chọn bàn này' : 'Chọn bàn này'}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="font-semibold text-gray-900">{t.name}</span>
+                                                            <span className="text-xs text-gray-600">{t.capacity} khách</span>
+                                                        </div>
+                                                        <div className="mt-1 text-sm text-gray-700">
+                                                            {t.status === 'Đang trống' || t.status === 'Available' || t.status === TableStatus.Available
+                                                                ? 'Trống'
+                                                                : t.status === 'Đã đặt' || t.status === 'Reserved' || t.status === TableStatus.Reserved
+                                                                    ? 'Đã đặt'
+                                                                    : t.status === 'Đang sử dụng' || t.status === 'Occupied' || t.status === TableStatus.Occupied
+                                                                        ? 'Đang sử dụng'
+                                                                        : t.status === 'Không đủ sức chứa'
+                                                                            ? 'Không đủ chỗ'
+                                                                            : t.status === 'Đang bảo trì'
+                                                                                ? 'Bảo trì'
+                                                                                : t.status}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        {selectedTableIds.length > 0 && (
+                                            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                                                <p className="text-sm text-green-800">
+                                                    Đã chọn bàn: <strong>{availableTables.find((t: any) => t.id === selectedTableIds[0])?.name || selectedTableIds[0]}</strong>
+                                                </p>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                         <div className="lg:col-span-2 bg-white border border-gray-200 p-4 rounded">
@@ -255,30 +407,39 @@ const CustomerPortalView: React.FC = () => {
                         </div>
                     </div>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Thông tin đặt bàn</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <form onSubmit={submitBooking} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <Input placeholder="Họ tên" value={name} onChange={e => setName(e.target.value)} />
-                                <Input placeholder="Điện thoại" value={phone} onChange={e => setPhone(e.target.value)} />
-                                <Input type="number" min={1} placeholder="Số khách" value={party} onChange={e => setParty(parseInt(e.target.value) || 1)} />
-                                <div className="md:col-span-2">
-                                    <DateTimePicker value={dateTime} onChange={setDateTime} />
-                                </div>
-                                <Input className="md:col-span-3" placeholder="Ghi chú (dịp, yêu cầu đặc biệt)" value={notes} onChange={e => setNotes(e.target.value)} />
-                                <div className="md:col-span-3 flex items-center justify-between">
-                                    <div className="text-sm text-muted-foreground">
-                                        {selectedTableIds.length > 0
-                                            ? `Đã chọn ${selectedTableIds.length} bàn: ${selectedTableIds.map(id => (tables || []).find((t: any) => t.id === id)?.name || id).join(', ')}`
-                                            : 'Chưa chọn bàn (tuỳ chọn)'}
+                    {dateTime && party >= 1 && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Bước 3: Thông tin đặt bàn</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <form onSubmit={submitBooking} className="space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Họ tên *</label>
+                                            <Input placeholder="Nhập họ tên" value={name} onChange={e => setName(e.target.value)} required />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Điện thoại</label>
+                                            <Input placeholder="Nhập số điện thoại" value={phone} onChange={e => setPhone(e.target.value)} />
+                                        </div>
                                     </div>
-                                    <Button type="submit">Gửi yêu cầu</Button>
-                                </div>
-                            </form>
-                        </CardContent>
-                    </Card>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Ghi chú (dịp, yêu cầu đặc biệt)</label>
+                                        <Input placeholder="Ví dụ: Sinh nhật, yêu cầu bàn gần cửa sổ..." value={notes} onChange={e => setNotes(e.target.value)} />
+                                    </div>
+                                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                                        <div className="text-sm text-muted-foreground">
+                                            {selectedTableIds.length > 0
+                                                ? `Đã chọn bàn: ${availableTables.find((t: any) => t.id === selectedTableIds[0])?.name || selectedTableIds[0]}`
+                                                : 'Chưa chọn bàn (tuỳ chọn)'}
+                                        </div>
+                                        <Button type="submit" disabled={!name || !dateTime}>Gửi yêu cầu đặt bàn</Button>
+                                    </div>
+                                </form>
+                            </CardContent>
+                        </Card>
+                    )}
                 </TabsContent>
 
                 <TabsContent value="menu">
