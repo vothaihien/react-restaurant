@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import type { Table, Order, MenuItem, OrderItem, Ingredient, Reservation, Supplier, KDSItem, InventoryTransaction, InventoryTransactionItem, Staff, Category } from '@/core/types';
 import { TableStatus, PaymentMethod } from '@/core/types';
-import { Api } from '@/shared/utils/api';
+import { Api, BASE_URL } from '@/shared/utils/api';
 
 const generateDailyId = (existingIds: string[]): string => {
     const today = new Date();
@@ -136,6 +136,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     React.useEffect(() => {
         saveToStorage('restaurant_res_to_order', reservationToOrderMap);
     }, [reservationToOrderMap]);
+    // Helper function to map Vietnamese status strings to TableStatus enum
+    const mapTableStatus = (tenTrangThai: string | undefined): TableStatus => {
+        if (!tenTrangThai) return TableStatus.Available;
+        const statusLower = tenTrangThai.toLowerCase().trim();
+        if (statusLower.includes('trống') || statusLower.includes('available') || statusLower.includes('sẵn sàng')) {
+            return TableStatus.Available;
+        }
+        if (statusLower.includes('đang sử dụng') || statusLower.includes('occupied') || statusLower.includes('đang dùng')) {
+            return TableStatus.Occupied;
+        }
+        if (statusLower.includes('đã đặt') || statusLower.includes('reserved') || statusLower.includes('đặt trước')) {
+            return TableStatus.Reserved;
+        }
+        if (statusLower.includes('dọn') || statusLower.includes('cleaning') || statusLower.includes('bảo trì')) {
+            return TableStatus.CleaningNeeded;
+        }
+        return TableStatus.Available; // Default
+    };
+
     // Load tables from API on mount (best-effort)
     useEffect(() => {
         (async () => {
@@ -146,7 +165,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         id: b.maBan || b.MaBan,
                         name: b.tenBan || b.TenBan,
                         capacity: Number(b.sucChua || b.SucChua) || 0,
-                        status: TableStatus.Available,
+                        status: mapTableStatus(b.tenTrangThai || b.TenTrangThai),
                         orderId: null
                     }));
                     setTables(mapped);
@@ -172,6 +191,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
             } catch (error) {
                 console.warn('Không thể tải danh mục từ API', error);
+            }
+        })();
+    }, []);
+
+    // Load menu items from API on mount (best-effort)
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await Api.getDishes();
+                if (Array.isArray(data) && data.length > 0) {
+                    const mapped: MenuItem[] = data.map((m: any) => {
+                        const imgs: string[] = (m.hinhAnhMonAns || m.HinhAnhMonAns || []).map((h: any) => {
+                            const url = h.urlHinhAnh || h.URLHinhAnh;
+                            return url?.startsWith('http') ? url : `${BASE_URL}/${url}`;
+                        });
+                        const tenDanhMuc = m.maDanhMucNavigation?.tenDanhMuc || m.MaDanhMucNavigation?.TenDanhMuc || '';
+                        const sizes = (m.phienBanMonAns || m.PhienBanMonAns || []).map((p: any) => ({
+                            name: p.tenPhienBan || p.TenPhienBan,
+                            price: Number(p.gia || p.Gia) || 0,
+                            recipe: { id: '', name: '', ingredients: [] }
+                        }));
+                        return {
+                            id: m.maMonAn || m.MaMonAn,
+                            name: m.tenMonAn || m.TenMonAn,
+                            description: m.moTa || m.MoTa || '',
+                            categoryId: m.maDanhMuc || m.MaDanhMuc,
+                            category: tenDanhMuc,
+                            imageUrls: imgs,
+                            inStock: true,
+                            sizes
+                        } as MenuItem;
+                    });
+                    setMenuItems(mapped);
+                }
+            } catch (error) {
+                console.warn('Không thể tải món ăn từ API', error);
             }
         })();
     }, []);
