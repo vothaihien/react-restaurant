@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { MenuItem, MenuItemSize, RecipeIngredient, Recipe, Category } from '@/features/menu/domain/types';
 import { useAppContext } from '@/core/context/AppContext';
 import { useFeedback } from '@/core/context/FeedbackContext';
-import { PREDEFINED_SIZES } from '@/features/menu/domain/constants';
-import { XIcon, PlusIcon, TrashIcon, ChevronDownIcon } from '@/components/Icons';
+import { XIcon, PlusIcon, TrashIcon } from '@/components/Icons';
+import { Api, BASE_URL } from '@/shared/utils/api';
 
 interface MenuItemModalProps {
     isOpen: boolean;
@@ -14,10 +14,9 @@ interface MenuItemModalProps {
 const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEdit }) => {
     const { addMenuItem, updateMenuItem, ingredients, generateRecipeId, categories } = useAppContext();
     const { notify } = useFeedback();
-    const [isSizeDropdownOpen, setIsSizeDropdownOpen] = useState(false);
-    const sizeDropdownRef = useRef<HTMLDivElement>(null);
     const [recipes, setRecipes] = useState<Recipe[]>([]);
     const [selectedRecipeForIngredients, setSelectedRecipeForIngredients] = useState<string | null>(null);
+    const [uploadingImages, setUploadingImages] = useState<string[]>([]);
 
     const getInitialState = (cats: Category[]): Omit<MenuItem, 'id'> => ({
         name: '',
@@ -124,17 +123,6 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
         }
     }, [recipes.length, recipes.map(r => r.id).join(',')]);
 
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (sizeDropdownRef.current && !sizeDropdownRef.current.contains(event.target as Node)) {
-                setIsSizeDropdownOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, []);
 
     if (!isOpen) return null;
 
@@ -156,41 +144,69 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
     };
 
     // Image Handlers
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files) {
-            const files = Array.from(e.target.files) as File[];
-            files.forEach(file => {
-                if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        if (typeof reader.result === 'string') {
-                            setFormState(prev => ({
-                                ...prev,
-                                imageUrls: [...prev.imageUrls, reader.result as string]
-                            }));
-                        }
-                    };
-                    reader.readAsDataURL(file);
-                }
-            });
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+
+        const files = Array.from(e.target.files) as File[];
+
+        for (const file of files) {
+            if (!file.type.startsWith('image/')) {
+                notify({
+                    tone: 'warning',
+                    title: 'File không hợp lệ',
+                    description: `${file.name} không phải là file ảnh.`,
+                });
+                continue;
+            }
+
+            // Kiểm tra kích thước file (10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                notify({
+                    tone: 'warning',
+                    title: 'File quá lớn',
+                    description: `${file.name} vượt quá 10MB.`,
+                });
+                continue;
+            }
+
+            const fileId = `${file.name}_${Date.now()}`;
+            setUploadingImages(prev => [...prev, fileId]);
+
+            try {
+                // Nếu đang edit món ăn, truyền maMonAn để upload vào thư mục của món ăn
+                const maMonAn = itemToEdit?.id || undefined;
+                const result = await Api.uploadImage(file, maMonAn);
+
+                setFormState(prev => ({
+                    ...prev,
+                    imageUrls: [...prev.imageUrls, result.url]
+                }));
+
+                notify({
+                    tone: 'success',
+                    title: 'Upload thành công',
+                    description: `Đã upload ảnh ${file.name}`,
+                });
+            } catch (error: any) {
+                notify({
+                    tone: 'error',
+                    title: 'Upload thất bại',
+                    description: error.message || `Không thể upload ảnh ${file.name}`,
+                });
+            } finally {
+                setUploadingImages(prev => prev.filter(id => id !== fileId));
+            }
         }
+
+        // Reset input để có thể chọn lại file cùng tên
+        e.target.value = '';
     };
     const handleRemoveImage = (index: number) => {
         setFormState(prev => ({ ...prev, imageUrls: prev.imageUrls.filter((_, i) => i !== index) }));
     };
 
     // Size Handlers
-    const handleAddSize = (name: string = '') => {
-        if (name && formState.sizes.some(s => s.name.toLowerCase() === name.toLowerCase())) {
-            notify({
-                tone: 'warning',
-                title: 'Size trùng lặp',
-                description: `Size "${name}" đã tồn tại cho món này.`,
-            });
-            setIsSizeDropdownOpen(false);
-            return;
-        }
-
+    const handleAddSize = () => {
         // Use first recipe if available, otherwise create new recipe and add to recipes list
         let defaultRecipe: Recipe;
         if (recipes.length > 0) {
@@ -205,15 +221,30 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
             // Add new recipe to recipes list
             setRecipes(prev => [...prev, JSON.parse(JSON.stringify(defaultRecipe))]);
         }
-        const newSize: MenuItemSize = { name, price: 0, recipe: defaultRecipe };
+        const newSize: MenuItemSize = { name: '', price: 0, recipe: defaultRecipe };
         setFormState(prev => ({ ...prev, sizes: [...prev.sizes, newSize] }));
-        setIsSizeDropdownOpen(false);
     };
     const handleRemoveSize = (index: number) => {
         setFormState(prev => ({ ...prev, sizes: prev.sizes.filter((_, i) => i !== index) }));
     };
     const handleSizeChange = (index: number, field: 'name' | 'price', value: string | number) => {
         const newSizes = [...formState.sizes];
+
+        // Kiểm tra trùng tên phiên bản khi đổi tên
+        if (field === 'name' && typeof value === 'string' && value.trim()) {
+            const duplicateIndex = newSizes.findIndex((s, i) =>
+                i !== index && s.name.toLowerCase() === value.toLowerCase().trim()
+            );
+            if (duplicateIndex !== -1) {
+                notify({
+                    tone: 'warning',
+                    title: 'Phiên bản trùng lặp',
+                    description: `Phiên bản "${value}" đã tồn tại cho món này.`,
+                });
+                return;
+            }
+        }
+
         newSizes[index] = { ...newSizes[index], [field]: value };
         setFormState(prev => ({ ...prev, sizes: newSizes }));
     };
@@ -236,7 +267,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
             notify({
                 tone: 'warning',
                 title: 'Không thể xoá công thức',
-                description: 'Công thức đang được sử dụng bởi ít nhất một size.',
+                description: 'Công thức đang được sử dụng bởi ít nhất một phiên bản món ăn.',
             });
             return;
         }
@@ -349,7 +380,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
         }));
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const { name, description, category, categoryId, imageUrls, inStock, sizes } = formState;
 
@@ -357,37 +388,93 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
             notify({
                 tone: 'error',
                 title: 'Thiếu thông tin món ăn',
-                description: 'Vui lòng nhập tên món, thêm ít nhất một hình ảnh và một size.',
+                description: 'Vui lòng nhập tên món, thêm ít nhất một hình ảnh và một phiên bản món ăn.',
             });
             return;
         }
 
+        // Kiểm tra mỗi size phải có công thức với nguyên liệu
+        for (const size of sizes) {
+            if (!size.recipe || size.recipe.ingredients.length === 0) {
+                notify({
+                    tone: 'error',
+                    title: 'Thiếu công thức',
+                    description: `Phiên bản "${size.name}" chưa có công thức hoặc chưa có nguyên liệu.`,
+                });
+                return;
+            }
+        }
+
         const matchedCategory = categories.find(cat => cat.id === categoryId || cat.name === category);
-        const menuItemData = {
-            name,
-            description,
-            category: matchedCategory?.name || category,
-            categoryId: matchedCategory?.id ?? categoryId ?? itemToEdit?.categoryId,
-            imageUrls,
-            inStock,
-            sizes
-        };
+
         if (itemToEdit) {
-            updateMenuItem({ ...menuItemData, id: itemToEdit.id });
+            // TODO: Implement update API
+            updateMenuItem({
+                name,
+                description,
+                category: matchedCategory?.name || category,
+                categoryId: matchedCategory?.id ?? categoryId ?? itemToEdit?.categoryId,
+                imageUrls,
+                inStock,
+                sizes
+            });
             notify({
                 tone: 'success',
                 title: 'Đã cập nhật món',
                 description: `${name} đã được lưu thành công.`,
             });
+            onClose();
         } else {
-            addMenuItem(menuItemData);
-            notify({
-                tone: 'success',
-                title: 'Đã thêm món mới',
-                description: `${name} đã được thêm vào thực đơn.`,
-            });
+            // Tạo món ăn mới qua API
+            try {
+                // Chuyển đổi dữ liệu sang format API
+                const phienBanMonAns = sizes.map((size, index) => ({
+                    TenPhienBan: size.name,
+                    Gia: size.price,
+                    MaTrangThai: inStock ? 'CON_HANG' : 'HET_HANG',
+                    IsShow: true,
+                    ThuTu: index + 1,
+                    CongThucNauAns: size.recipe.ingredients.map(ing => ({
+                        MaNguyenLieu: ing.ingredient.id,
+                        SoLuongCanDung: ing.quantity || 0
+                    }))
+                }));
+
+                const apiData = {
+                    TenMonAn: name,
+                    MaDanhMuc: matchedCategory?.id || categoryId || null,
+                    IsShow: true,
+                    HinhAnhUrls: imageUrls,
+                    PhienBanMonAns: phienBanMonAns
+                };
+
+                await Api.createDish(apiData);
+
+                // Cũng thêm vào local state để hiển thị ngay
+                addMenuItem({
+                    name,
+                    description,
+                    category: matchedCategory?.name || category,
+                    categoryId: matchedCategory?.id ?? categoryId,
+                    imageUrls,
+                    inStock,
+                    sizes
+                });
+
+                notify({
+                    tone: 'success',
+                    title: 'Đã thêm món mới',
+                    description: `${name} đã được thêm vào thực đơn thành công.`,
+                });
+                onClose();
+            } catch (error: any) {
+                notify({
+                    tone: 'error',
+                    title: 'Lỗi khi thêm món',
+                    description: error?.message || 'Không thể thêm món ăn mới. Vui lòng thử lại.',
+                });
+            }
         }
-        onClose();
     };
 
     return (
@@ -448,14 +535,20 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
                                 <div className="border-t border-gray-200 pt-3 flex-shrink-0">
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Hình ảnh</label>
                                     <div className="flex flex-wrap gap-2">
-                                        {formState.imageUrls.map((url, index) => (
-                                            <div key={index} className="relative">
-                                                <img src={url} alt={`Preview ${index}`} className="w-20 h-20 rounded-md object-cover border border-gray-200" />
-                                                <button type="button" onClick={() => handleRemoveImage(index)} className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 shadow-lg transition-transform hover:scale-110">
-                                                    <XIcon className="w-3 h-3" />
-                                                </button>
-                                            </div>
-                                        ))}
+                                        {formState.imageUrls.map((url, index) => {
+                                            // Nếu URL là relative path (bắt đầu bằng "images/"), thêm BASE_URL
+                                            const imageUrl = url.startsWith('http://') || url.startsWith('https://')
+                                                ? url
+                                                : `${BASE_URL}/${url.replace(/^\//, '')}`;
+                                            return (
+                                                <div key={index} className="relative">
+                                                    <img src={imageUrl} alt={`Preview ${index}`} className="w-20 h-20 rounded-md object-cover border border-gray-200" />
+                                                    <button type="button" onClick={() => handleRemoveImage(index)} className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 shadow-lg transition-transform hover:scale-110">
+                                                        <XIcon className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
                                         <label htmlFor="image-upload" className="cursor-pointer w-20 h-20 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-md hover:border-indigo-500 hover:bg-gray-50 transition">
                                             <div className="text-center">
                                                 <PlusIcon className="mx-auto h-6 w-6 text-gray-400" />
@@ -476,7 +569,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
                             </div>
                         </div>
 
-                        {/* Cột phải: Sizes & Công thức */}
+                        {/* Cột phải: Phiên bản món ăn & Công thức */}
                         <div className="space-y-4 overflow-y-auto pl-4 border-l border-gray-200 scrollbar-hide min-h-0">
                             {/* Phần quản lý công thức */}
                             <div className="mb-4 pb-4 border-b border-gray-200">
@@ -570,44 +663,17 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
                                 </div>
                             </div>
 
-                            {/* Phần quản lý Sizes */}
+                            {/* Phần quản lý Phiên bản món ăn */}
                             <div>
                                 <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-lg font-semibold text-gray-900">Sizes</h3>
-                                    <div className="relative" ref={sizeDropdownRef}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsSizeDropdownOpen(prev => !prev)}
-                                            className="flex items-center gap-1 text-sm py-1 px-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500 transition"
-                                        >
-                                            <PlusIcon className="w-4 h-4" /> Thêm Size
-                                            <ChevronDownIcon className={`w-4 h-4 transition-transform ${isSizeDropdownOpen ? 'rotate-180' : ''}`} />
-                                        </button>
-                                        {isSizeDropdownOpen && (
-                                            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-300 rounded-md shadow-lg z-10">
-                                                <div className="py-1">
-                                                    {PREDEFINED_SIZES.map(sizeName => (
-                                                        <button
-                                                            key={sizeName}
-                                                            type="button"
-                                                            onClick={() => handleAddSize(sizeName)}
-                                                            className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-indigo-600 hover:text-white"
-                                                        >
-                                                            {sizeName}
-                                                        </button>
-                                                    ))}
-                                                    <div className="border-t border-gray-300 my-1"></div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleAddSize()}
-                                                        className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-indigo-600 hover:text-white"
-                                                    >
-                                                        Size tùy chỉnh
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
+                                    <h3 className="text-lg font-semibold text-gray-900">Phiên bản món ăn</h3>
+                                    <button
+                                        type="button"
+                                        onClick={handleAddSize}
+                                        className="flex items-center gap-1 text-sm py-1 px-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500 transition"
+                                    >
+                                        <PlusIcon className="w-4 h-4" /> Thêm phiên bản
+                                    </button>
                                 </div>
                             </div>
                             {formState.sizes.map((size, sIndex) => (
@@ -616,8 +682,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
                                         <div className="flex-1 space-y-3">
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <label className="block text-xs font-medium text-gray-700">Tên Size</label>
-                                                    <input type="text" placeholder="VD: Large" value={size.name} onChange={e => handleSizeChange(sIndex, 'name', e.target.value)} required className="mt-1 block w-full bg-white border-gray-300 rounded-md py-1 px-2 text-sm text-gray-900" />
+                                                    <label className="block text-xs font-medium text-gray-700">Tên phiên bản</label>
+                                                    <input type="text" placeholder="VD: Phần, Dĩa, Lẩu nhỏ" value={size.name} onChange={e => handleSizeChange(sIndex, 'name', e.target.value)} required className="mt-1 block w-full bg-white border-gray-300 rounded-md py-1 px-2 text-sm text-gray-900" />
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-medium text-gray-700">Giá</label>
@@ -647,7 +713,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({ isOpen, onClose, itemToEd
                                         </div>
                                         {size.recipe.ingredients.length > 0 && (
                                             <div className="mt-3 pt-3 border-t border-gray-200">
-                                                <h4 className="text-xs font-medium text-gray-700 mb-2">Số lượng nguyên liệu cho size này</h4>
+                                                <h4 className="text-xs font-medium text-gray-700 mb-2">Số lượng nguyên liệu cho phiên bản này</h4>
                                                 <div className="space-y-2">
                                                     {size.recipe.ingredients.map((recipeItem, rIndex) => (
                                                         <div key={`${sIndex}-${rIndex}`} className="flex items-center gap-2 p-2 bg-gray-50 rounded border border-gray-200">
