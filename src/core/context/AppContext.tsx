@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import type { Table, Order, MenuItem, OrderItem, Ingredient, Reservation, Supplier, KDSItem, InventoryTransaction, InventoryTransactionItem, Staff, Category } from '@/core/types';
+import type { Table, Order, MenuItem, OrderItem, Ingredient, Reservation, Supplier, KDSItem, InventoryTransaction, InventoryTransactionItem, Staff, Category, Role } from '@/core/types';
 import { TableStatus, PaymentMethod } from '@/core/types';
 import { Api, BASE_URL } from '@/shared/utils/api';
 
@@ -103,10 +103,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Ingredients are loaded from API only, no hardcoded data
     const [ingredients, setIngredients] = useState<Ingredient[]>([]);
     const [reservations, setReservations] = useState<Reservation[]>(() => loadFromStorage('restaurant_reservations', []));
-    const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadFromStorage('restaurant_suppliers', []));
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [kdsQueue, setKdsQueue] = useState<KDSItem[]>(() => loadFromStorage('restaurant_kdsQueue', []));
     const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>(() => loadFromStorage('restaurant_inventoryTransactions', []));
-    const [staff, setStaff] = useState<Staff[]>(() => loadFromStorage('restaurant_staff', []));
+    const [staff, setStaff] = useState<Staff[]>([]);
     const [reservationToOrderMap, setReservationToOrderMap] = useState<Record<string, string>>(() => loadFromStorage('restaurant_res_to_order', {} as Record<string, string>));
 
     // Save to localStorage whenever state changes
@@ -276,10 +276,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, []);
 
     React.useEffect(() => {
-        saveToStorage('restaurant_suppliers', suppliers);
-    }, [suppliers]);
-
-    React.useEffect(() => {
         saveToStorage('restaurant_kdsQueue', kdsQueue);
     }, [kdsQueue]);
 
@@ -287,9 +283,77 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         saveToStorage('restaurant_inventoryTransactions', inventoryTransactions);
     }, [inventoryTransactions]);
 
-    React.useEffect(() => {
-        saveToStorage('restaurant_staff', staff);
-    }, [staff]);
+    const normalizeRoleFromApi = (roleName?: string): Role => {
+        if (!roleName) return 'Waiter';
+        const value = roleName.toLowerCase();
+        if (value.includes('admin')) return 'Admin';
+        if (value.includes('quản') || value.includes('manager')) return 'Manager';
+        if (value.includes('thu')) return 'Cashier';
+        if (value.includes('bếp') || value.includes('kitchen')) return 'Kitchen';
+        return 'Waiter';
+    };
+
+    const isActiveFromStatus = (status?: string) => {
+        if (!status) return true;
+        return !status.toLowerCase().includes('nghỉ');
+    };
+
+    // Load suppliers from API
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await Api.getSuppliers();
+                if (Array.isArray(data)) {
+                    const mapped: Supplier[] = data
+                        .map((s: any) => {
+                            const id = s.maNhaCungCap || s.MaNhaCungCap || '';
+                            const name = s.tenNhaCungCap || s.TenNhaCungCap || '';
+                            if (!id || !name) return null;
+                            return {
+                                id,
+                                name,
+                                phone: s.soDienThoai || s.SoDienThoai || undefined,
+                                email: s.email || s.Email || undefined,
+                                address: s.diaChi || s.DiaChi || undefined,
+                            } as Supplier;
+                        })
+                        .filter((s): s is Supplier => Boolean(s));
+                    setSuppliers(mapped);
+                }
+            } catch (error) {
+                console.warn('Không thể tải nhà cung cấp từ API', error);
+            }
+        })();
+    }, []);
+
+    // Load staff from API
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await Api.getEmployees();
+                if (Array.isArray(data)) {
+                    const mapped: Staff[] = data
+                        .map((emp: any) => {
+                            const id = emp.maNhanVien || emp.MaNhanVien || '';
+                            const name = emp.hoTen || emp.HoTen || '';
+                            const username = emp.tenDangNhap || emp.TenDangNhap || '';
+                            if (!id || !name || !username) return null;
+                            return {
+                                id,
+                                name,
+                                username,
+                                role: normalizeRoleFromApi(emp.vaiTro || emp.VaiTro),
+                                active: isActiveFromStatus(emp.trangThai || emp.TrangThai),
+                            } as Staff;
+                        })
+                        .filter((emp): emp is Staff => Boolean(emp));
+                    setStaff(mapped);
+                }
+            } catch (error) {
+                console.warn('Không thể tải nhân viên từ API', error);
+            }
+        })();
+    }, []);
 
     const calculateTotals = (items: OrderItem[], discount: number = 0) => {
         const subtotal = items.reduce((acc, item) => {

@@ -72,6 +72,20 @@ const InventoryView: React.FC = () => {
                 </button>
             </div>
 
+            <div className="bg-white border border-gray-200 p-4 rounded-lg">
+                <h3 className="text-xl font-semibold mb-3 text-gray-900">Nhập kho nhanh</h3>
+                <form onSubmit={onSubmit} className="flex flex-col sm:flex-row gap-3">
+                    <select value={selectedIng} onChange={(e) => setSelectedIng(e.target.value)} className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300">
+                        <option value="">Chọn nguyên liệu</option>
+                        {(ingredients || []).map((ing: any) => (
+                            <option key={ing.maNguyenLieu || ing.id} value={ing.maNguyenLieu || ing.id}>{ing.tenNguyenLieu || ing.name}</option>
+                        ))}
+                    </select>
+                    <input type="number" value={qty} onChange={(e) => setQty(parseFloat(e.target.value))} placeholder="Số lượng" className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300" />
+                    <button type="submit" className="px-4 py-2 rounded bg-green-600 hover:bg-green-500 text-white">Nhập</button>
+                </form>
+            </div>
+
             {showAddForm && (
                 <div className="bg-white border border-gray-200 p-4 rounded-lg">
                     <h3 className="text-xl font-semibold mb-3 text-gray-900">Thêm nguyên liệu mới</h3>
@@ -156,20 +170,6 @@ const InventoryView: React.FC = () => {
                         </div>
                     ))}
                 </div>
-            </div>
-
-            <div className="bg-white border border-gray-200 p-4 rounded-lg">
-                <h3 className="text-xl font-semibold mb-3 text-gray-900">Nhập kho nhanh</h3>
-                <form onSubmit={onSubmit} className="flex flex-col sm:flex-row gap-3">
-                    <select value={selectedIng} onChange={(e) => setSelectedIng(e.target.value)} className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300">
-                        <option value="">Chọn nguyên liệu</option>
-                        {(ingredients || []).map((ing: any) => (
-                            <option key={ing.maNguyenLieu || ing.id} value={ing.maNguyenLieu || ing.id}>{ing.tenNguyenLieu || ing.name}</option>
-                        ))}
-                    </select>
-                    <input type="number" value={qty} onChange={(e) => setQty(parseFloat(e.target.value))} placeholder="Số lượng" className="bg-white text-gray-900 rounded px-3 py-2 border border-gray-300" />
-                    <button type="submit" className="px-4 py-2 rounded bg-green-600 hover:bg-green-500 text-white">Nhập</button>
-                </form>
             </div>
         </div>
     );
