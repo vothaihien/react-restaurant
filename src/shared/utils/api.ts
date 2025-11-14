@@ -206,6 +206,9 @@ export const Api = {
         return request<any[]>(`/api/InventoryAPI/transactions${suffix}`);
     },
 
+    // Suppliers
+    getSuppliers: () => request<any[]>('/api/SuppliersAPI'),
+
     // Employees
     getEmployees: () => request<any[]>('/api/EmployeesAPI'),
 
