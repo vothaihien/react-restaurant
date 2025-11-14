@@ -6,16 +6,22 @@ const resolveDefaultBaseUrl = (): string => {
         return envUrl.trim().replace(/\/+$/, '');
     }
 
-    if (typeof window !== 'undefined') {
-        const { protocol, hostname } = window.location;
-        // Nếu frontend đang chạy trên localhost thì ưu tiên domain nội bộ đã cấu hình sẵn
-        const isLocalHost = !hostname || ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
-        const targetHost = isLocalHost ? '192.168.100.47' : hostname;
-        const defaultPort = protocol === 'https:' ? '7190' : '5134';
-        return `${protocol}//${targetHost}:${defaultPort}`;
-    }
+    // if (typeof window !== 'undefined') {
+    //     const { protocol, hostname, port } = window.location;
+    //     // Nếu frontend đang chạy trên localhost thì ưu tiên domain nội bộ đã cấu hình sẵn
+    //     const isLocalHost = !hostname || ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
 
-    return 'http://localhost:5134';
+    //     // Nếu frontend đang chạy trên port 5555, dùng localhost:5555 cho backend
+    //     if (isLocalHost && port === '5555') {
+    //         return 'http://localhost:5555';
+    //     }
+
+    //     const targetHost = isLocalHost ? '192.168.100.47' : hostname;
+    //     const defaultPort = protocol === 'https:' ? '7190' : '5134';
+    //     return `${protocol}//${targetHost}:${defaultPort}`;
+    // }
+
+    return 'http://localhost:5555';
 };
 
 const BASE_URL = resolveDefaultBaseUrl();
@@ -59,6 +65,8 @@ export const Api = {
     getTablesByTime: (dateTime: string, soNguoi: number) =>
         request<any[]>(`/api/BanAnsAPI/GetStatusByTime?dateTime=${encodeURIComponent(dateTime)}&soNguoi=${soNguoi}`),
 
+    getTangs: () => request<any[]>('/api/TangAPI'),
+
     getRevenueByMonth: (nam: number) => request<Array<{ thang: number; doanhThu: number }>>(`/api/Statistics/doanh-thu-theo-thang?nam=${nam}`),
     getMyBookings: (token: string) => request<any[]>('/api/BookingHistory/me', { token }),
 
@@ -87,6 +95,45 @@ export const Api = {
         return request<any[]>(`/api/MonAnsAPI${suffix}`);
     },
     getDish: (id: string) => request<any>(`/api/MonAnsAPI/${encodeURIComponent(id)}`),
+
+    createDish: (data: {
+        TenMonAn: string;
+        MaDanhMuc?: string;
+        IsShow?: boolean;
+        HinhAnhUrls?: string[];
+        PhienBanMonAns: Array<{
+            TenPhienBan: string;
+            Gia: number;
+            MaTrangThai?: string;
+            IsShow?: boolean;
+            ThuTu?: number;
+            CongThucNauAns: Array<{
+                MaNguyenLieu: string;
+                SoLuongCanDung: number;
+            }>;
+        }>;
+    }) => request<any>('/api/MonAnsAPI', { method: 'POST', body: data }),
+
+    uploadImage: async (file: File, maMonAn?: string): Promise<{ url: string; message: string }> => {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const url = maMonAn
+            ? `${BASE_URL}/api/MonAnsAPI/upload-image?maMonAn=${encodeURIComponent(maMonAn)}`
+            : `${BASE_URL}/api/MonAnsAPI/upload-image`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ message: 'Upload ảnh thất bại' }));
+            throw new Error(error.message || 'Upload ảnh thất bại');
+        }
+
+        return await response.json();
+    },
 
     // Categories
     getCategories: () => request<any[]>('/api/DanhMucAPI'),
@@ -134,6 +181,12 @@ export const Api = {
     getIngredients: () => request<any[]>('/api/InventoryAPI/ingredients'),
 
     getIngredient: (maNguyenLieu: string) => request<any>(`/api/InventoryAPI/ingredients/${encodeURIComponent(maNguyenLieu)}`),
+
+    createIngredient: (data: {
+        TenNguyenLieu: string;
+        DonViTinh?: string;
+        SoLuongTonKho?: number;
+    }) => request<any>('/api/InventoryAPI/ingredients', { method: 'POST', body: data }),
 
     importInventory: (data: {
         MaNhanVien: string;

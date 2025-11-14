@@ -478,13 +478,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             const iso = new Date(dateTime).toISOString();
             const data = await Api.getTablesByTime(iso, partySize);
-            return (data || []).map((x: any) => ({
-                id: x.maBan || x.MaBan,
-                name: x.tenBan || x.TenBan,
-                capacity: Number(x.sucChua || x.SucChua) || 0,
-                status: x.tenTrangThai || x.TenTrangThai
-            }));
-        } catch {
+            console.log('API getTablesByTime response:', data);
+            const mapped = (data || []).map((x: any) => {
+                const result = {
+                    id: x.maBan || x.MaBan,
+                    name: x.tenBan || x.TenBan,
+                    capacity: Number(x.sucChua || x.SucChua) || 0,
+                    status: x.tenTrangThai || x.TenTrangThai,
+                    maTang: x.maTang || x.MaTang || null,
+                    tenTang: x.tenTang || x.TenTang || null
+                };
+                if (!result.maTang) {
+                    console.warn(`Table ${result.name} (${result.id}) has no maTang. Raw data:`, x);
+                }
+                return result;
+            });
+            console.log('Mapped tables with tầng:', mapped.slice(0, 5));
+            return mapped;
+        } catch (error) {
+            console.error('Error in getAvailableTables:', error);
             return [];
         }
     };

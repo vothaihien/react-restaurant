@@ -31,11 +31,48 @@ const CustomerPortalView: React.FC = () => {
     const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
 
     // Available tables for selected date/time
-    const [availableTables, setAvailableTables] = useState<Array<{ id: string; name: string; capacity: number; status: string }>>([]);
+    const [availableTables, setAvailableTables] = useState<Array<{ id: string; name: string; capacity: number; status: string; maTang?: string; tenTang?: string }>>([]);
     const [loadingTables, setLoadingTables] = useState(false);
+    const [selectedTang, setSelectedTang] = useState<string>('');
+    const [tangs, setTangs] = useState<Array<{ maTang: string; tenTang: string }>>([]);
 
     // Cart (shared for booking pre-order & order tab)
     const [cart, setCart] = useState<any[]>([]);
+
+    // Load tầng
+    useEffect(() => {
+        const loadTangs = async () => {
+            try {
+                console.log('Loading tầng from API...');
+                const data = await Api.getTangs();
+                console.log('Fetched tầng (raw):', data);
+                console.log('Type of data:', typeof data, 'Is array:', Array.isArray(data));
+
+                if (data && Array.isArray(data) && data.length > 0) {
+                    const mappedTangs = data.map((t: any) => {
+                        const mapped = {
+                            maTang: t.maTang || t.MaTang,
+                            tenTang: t.tenTang || t.TenTang
+                        };
+                        console.log('Mapping tầng:', t, '->', mapped);
+                        return mapped;
+                    });
+                    console.log('Mapped tầng (final):', mappedTangs);
+                    setTangs(mappedTangs);
+                } else {
+                    console.warn('No tầng data or empty array:', data);
+                }
+            } catch (error: any) {
+                console.error('Error loading tầng:', error);
+                console.error('Error details:', {
+                    message: error?.message,
+                    stack: error?.stack,
+                    response: error?.response
+                });
+            }
+        };
+        loadTangs();
+    }, []);
 
     // Fetch available tables when dateTime and party change
     useEffect(() => {
@@ -49,6 +86,13 @@ const CustomerPortalView: React.FC = () => {
             setLoadingTables(true);
             try {
                 const tables = await getAvailableTables(dateTime.getTime(), party);
+                console.log('Fetched tables (raw):', tables);
+                console.log('Tables with tầng info:', tables?.map((t: any) => ({
+                    id: t.id,
+                    name: t.name,
+                    maTang: t.maTang,
+                    tenTang: t.tenTang
+                })));
                 setAvailableTables(tables || []);
                 // Reset selected tables when new tables are loaded
                 setSelectedTableIds([]);
@@ -68,6 +112,42 @@ const CustomerPortalView: React.FC = () => {
         fetchTables();
     }, [dateTime, party, getAvailableTables, notify]);
 
+    // Filter tables by selected tầng
+    const filteredTables = useMemo(() => {
+        console.log('Filtering tables - selectedTang:', selectedTang, 'availableTables count:', availableTables.length);
+
+        if (!selectedTang || selectedTang.trim() === '') {
+            console.log('No tầng selected, returning all tables');
+            return availableTables;
+        }
+
+        const selectedMaTang = selectedTang.toString().trim();
+        console.log('Filtering by maTang:', selectedMaTang);
+
+        const filtered = availableTables.filter(t => {
+            const tableMaTang = (t.maTang || t.MaTang || '').toString().trim();
+            const match = tableMaTang === selectedMaTang;
+
+            console.log(`Table ${t.name}: maTang="${tableMaTang}", selected="${selectedMaTang}", match=${match}`);
+
+            return match;
+        });
+
+        console.log('Filter result:', {
+            selectedTang: selectedMaTang,
+            totalTables: availableTables.length,
+            filteredCount: filtered.length,
+            filteredTables: filtered.map(t => ({ name: t.name, maTang: t.maTang || t.MaTang })),
+            allTablesSample: availableTables.slice(0, 5).map(t => ({
+                name: t.name,
+                maTang: t.maTang || t.MaTang,
+                tenTang: t.tenTang || t.TenTang
+            }))
+        });
+
+        return filtered;
+    }, [availableTables, selectedTang]);
+
     const submitBooking = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name || !dateTime) {
@@ -80,10 +160,10 @@ const CustomerPortalView: React.FC = () => {
         }
 
         const ts = dateTime.getTime();
-        // append preorder summary to notes if any
-        const preorder = cart.length
-            ? `\n[Đặt món trước] ${cart.map(c => `${c.qty}x ${c.name} (${c.size})`).join(', ')}`
-            : '';
+        // Phần đặt món trước đã được ẩn tạm thời
+        // const preorder = cart.length
+        //     ? `\n[Đặt món trước] ${cart.map(c => `${c.qty}x ${c.name} (${c.size})`).join(', ')}`
+        //     : '';
 
         try {
             // Get selected table (only one table is allowed)
@@ -95,7 +175,7 @@ const CustomerPortalView: React.FC = () => {
                 partySize: party,
                 time: ts,
                 source: 'App',
-                notes: (notes || '') + preorder,
+                notes: notes || '', // Đã bỏ preorder
                 tableId: tableId
             };
 
@@ -262,7 +342,7 @@ const CustomerPortalView: React.FC = () => {
                 <TabsContent value="booking" className="space-y-4">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Bước 1: Chọn thời gian và số lượng khách</CardTitle>
+                            <CardTitle>Chọn thời gian và số lượng khách</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -294,7 +374,7 @@ const CustomerPortalView: React.FC = () => {
                     {dateTime && party >= 1 && (
                         <Card>
                             <CardHeader>
-                                <CardTitle>Bước 2: Chọn bàn có sẵn</CardTitle>
+                                <CardTitle>Chọn bàn có sẵn</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 {loadingTables ? (
@@ -308,11 +388,30 @@ const CustomerPortalView: React.FC = () => {
                                     </div>
                                 ) : (
                                     <>
-                                        <div className="mb-4 text-sm text-gray-600">
-                                            Tìm thấy <strong>{availableTables.length}</strong> bàn có sẵn cho {party} khách vào {new Date(dateTime).toLocaleString('vi-VN')}
+                                        <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
+                                            <div className="text-sm text-gray-600">
+                                                Tìm thấy <strong>{filteredTables.length}</strong> bàn có sẵn cho {party} khách vào {new Date(dateTime).toLocaleString('vi-VN')}
+                                            </div>
+                                            {tangs.length > 0 && (
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-sm font-medium text-gray-700">Lọc theo tầng:</label>
+                                                    <select
+                                                        value={selectedTang}
+                                                        onChange={(e) => setSelectedTang(e.target.value)}
+                                                        className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                                                    >
+                                                        <option value="">Tất cả tầng</option>
+                                                        {tangs.map((tang) => (
+                                                            <option key={tang.maTang} value={tang.maTang}>
+                                                                {tang.tenTang}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                                            {availableTables.map((t: any) => {
+                                            {filteredTables.map((t: any) => {
                                                 const isAvailable = t.status === 'Đang trống' || t.status === 'Available' || t.status === TableStatus.Available;
                                                 const disabled = !isAvailable;
                                                 const selected = selectedTableIds.includes(t.id);
@@ -335,6 +434,11 @@ const CustomerPortalView: React.FC = () => {
                                                             <span className="font-semibold text-gray-900">{t.name}</span>
                                                             <span className="text-xs text-gray-600">{t.capacity} khách</span>
                                                         </div>
+                                                        {t.tenTang && (
+                                                            <div className="mt-1 text-xs text-gray-500">
+                                                                {t.tenTang}
+                                                            </div>
+                                                        )}
                                                         <div className="mt-1 text-sm text-gray-700">
                                                             {t.status === 'Đang trống' || t.status === 'Available' || t.status === TableStatus.Available
                                                                 ? 'Trống'
@@ -356,6 +460,9 @@ const CustomerPortalView: React.FC = () => {
                                             <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                                                 <p className="text-sm text-green-800">
                                                     Đã chọn bàn: <strong>{availableTables.find((t: any) => t.id === selectedTableIds[0])?.name || selectedTableIds[0]}</strong>
+                                                    {availableTables.find((t: any) => t.id === selectedTableIds[0])?.tenTang && (
+                                                        <span> - {availableTables.find((t: any) => t.id === selectedTableIds[0])?.tenTang}</span>
+                                                    )}
                                                 </p>
                                             </div>
                                         )}
@@ -365,7 +472,8 @@ const CustomerPortalView: React.FC = () => {
                         </Card>
                     )}
 
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {/* Phần đặt món trước đã được ẩn tạm thời */}
+                    {/* <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                         <div className="lg:col-span-2 bg-white border border-gray-200 p-4 rounded">
                             <h4 className="text-lg font-semibold text-gray-900 mb-3">Đặt món trước (tuỳ chọn)</h4>
                             <div className="flex gap-2 mb-3 flex-wrap">
@@ -405,12 +513,12 @@ const CustomerPortalView: React.FC = () => {
                                 <span>Tạm tính</span><span>{formatVND(total)}</span>
                             </div>
                         </div>
-                    </div>
+                    </div> */}
 
                     {dateTime && party >= 1 && (
                         <Card>
                             <CardHeader>
-                                <CardTitle>Bước 3: Thông tin đặt bàn</CardTitle>
+                                <CardTitle>Thông tin đặt bàn</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <form onSubmit={submitBooking} className="space-y-4">
@@ -431,7 +539,7 @@ const CustomerPortalView: React.FC = () => {
                                     <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                                         <div className="text-sm text-muted-foreground">
                                             {selectedTableIds.length > 0
-                                                ? `Đã chọn bàn: ${availableTables.find((t: any) => t.id === selectedTableIds[0])?.name || selectedTableIds[0]}`
+                                                ? `Đã chọn bàn: ${availableTables.find((t: any) => t.id === selectedTableIds[0])?.name || selectedTableIds[0]}${availableTables.find((t: any) => t.id === selectedTableIds[0])?.tenTang ? ` - ${availableTables.find((t: any) => t.id === selectedTableIds[0])?.tenTang}` : ''}`
                                                 : 'Chưa chọn bàn (tuỳ chọn)'}
                                         </div>
                                         <Button type="submit" disabled={!name || !dateTime}>Gửi yêu cầu đặt bàn</Button>
