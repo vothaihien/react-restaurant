@@ -14,8 +14,7 @@ export type View =
     | 'masterdata'
     | 'kds'
     | 'customer'
-    | 'reports'
-    | 'settings';
+    | 'reports';
 
 export type Role = 'Admin' | 'Manager' | 'Cashier' | 'Waiter' | 'Kitchen';
 

@@ -33,8 +33,7 @@ const App: React.FC = () => {
                 return <CustomerPortalView />;
             case 'reports':
                 return <ReportsView />;
-            case 'settings':
-                return <SettingsView />;
+    
             default:
                 return <DashboardView />;
         }
