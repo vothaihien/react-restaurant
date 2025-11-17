@@ -1,5 +1,5 @@
 import React from 'react';
-import CustomerPortalView from '../../../views/CustomerPortalView';
+import CustomerPortalView from '../../../src/views/CustomerPortalView';
 
 const SiteHeader: React.FC<{ onBook?: () => void }> = ({ onBook }) => (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-200">

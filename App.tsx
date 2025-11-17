@@ -1,17 +1,16 @@
-
 import React, { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import DashboardView from './views/DashboardView';
-import MenuView from './views/MenuView';
-import ReportsView from './views/ReportsView';
-import SettingsView from './views/SettingsView';
+import DashboardView from './src/views/DashboardView.tsx';
+import MenuView from './src/views/MenuView.tsx';
+import ReportsView from './src/views/ReportsView.tsx';
+import SettingsView from './src/views/SettingsView.tsx';
 import type { View } from '@/core/types';
-import ReservationsView from './views/ReservationsView.tsx';
-import InventoryView from './views/InventoryView.tsx';
-import MasterDataView from './views/MasterDataView.tsx';
-import KDSView from './views/KDSView.tsx';
-import CustomerPortalView from './views/CustomerPortalView.tsx';
+import ReservationsView from './src/views/ReservationsView.tsx';
+import InventoryView from './src/views/InventoryView.tsx';
+import MasterDataView from './src/views/MasterDataView.tsx';
+import KDSView from './src/views/KDSView.tsx';
+import CustomerPortalView from './src/views/CustomerPortalView.tsx';
 
 const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<View>('dashboard');
