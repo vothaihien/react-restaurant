@@ -1,4 +1,4 @@
-import { request } from "../utils/api";
+import { request, BASE_URL } from "../utils/api";
 
 export const menuApi = {
   // Dishes
@@ -37,8 +37,6 @@ export const menuApi = {
   ): Promise<{ url: string; message: string }> => {
     const formData = new FormData();
     formData.append("file", file);
-
-    const BASE_URL = (await import("../utils/api")).BASE_URL;
 
     const url = maMonAn
       ? `${BASE_URL}/api/MonAnsAPI/upload-image?maMonAn=${encodeURIComponent(

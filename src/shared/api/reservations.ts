@@ -2,7 +2,7 @@ import { request } from "../utils/api";
 
 export const reservationsApi = {
   createReservation: (data: {
-    MaBan: string;
+    DanhSachMaBan: string[];
     HoTenKhach: string;
     SoDienThoaiKhach: string;
     ThoiGianDatHang: string;
@@ -10,17 +10,22 @@ export const reservationsApi = {
     GhiChu?: string;
     MaNhanVien?: string;
     TienDatCoc?: number;
+    MaKhachHang?: string;
+    Email?: string;
   }) =>
-    request<{ message: string; donHang: any }>(
-      "api/DatBanAPI/TaoDatBan",
-      { method: "POST", body: data }
-    ),
+    request<{ message: string; donHang: any }>("/api/DatBanAPI/TaoDatBan", {
+      method: "POST",
+      body: data,
+    }),
 
   updateOrderStatus: (maDonHang: string, maTrangThai: string) =>
-    request<{ message: string }>(`/api/DatBanAPI/CapNhatTrangThai/${maDonHang}`, {
-      method: "PUT",
-      body: maTrangThai,
-    }),
+    request<{ message: string }>(
+      `/api/DatBanAPI/CapNhatTrangThai/${maDonHang}`,
+      {
+        method: "PUT",
+        body: maTrangThai, // Backend nhận string trực tiếp, không phải object
+      }
+    ),
 
   getMyBookings: (token: string) =>
     request<any[]>("/api/BookingHistory/me", { token }),
@@ -34,5 +39,3 @@ export const reservationsApi = {
       }
     ),
 };
-
-
