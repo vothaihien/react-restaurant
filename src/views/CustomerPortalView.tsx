@@ -125,7 +125,7 @@ const CustomerPortalView: React.FC = () => {
         console.log('Filtering by maTang:', selectedMaTang);
 
         const filtered = availableTables.filter(t => {
-            const tableMaTang = (t.maTang || t.MaTang || '').toString().trim();
+            const tableMaTang = (t.maTang || '').toString().trim();
             const match = tableMaTang === selectedMaTang;
 
             console.log(`Table ${t.name}: maTang="${tableMaTang}", selected="${selectedMaTang}", match=${match}`);
@@ -137,11 +137,11 @@ const CustomerPortalView: React.FC = () => {
             selectedTang: selectedMaTang,
             totalTables: availableTables.length,
             filteredCount: filtered.length,
-            filteredTables: filtered.map(t => ({ name: t.name, maTang: t.maTang || t.MaTang })),
+            filteredTables: filtered.map(t => ({ name: t.name, maTang: t.maTang })),
             allTablesSample: availableTables.slice(0, 5).map(t => ({
                 name: t.name,
-                maTang: t.maTang || t.MaTang,
-                tenTang: t.tenTang || t.TenTang
+                maTang: t.maTang ,
+                tenTang: t.tenTang
             }))
         });
 
