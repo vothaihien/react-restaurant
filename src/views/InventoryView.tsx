@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppContext } from '@/core/context/AppContext';
-import { Api } from '@/shared/utils/api';
+import { inventoryApi } from '@/shared/api/inventory';
 
 const InventoryView: React.FC = () => {
     const { ingredients, lowStockIds, recordInventoryIn } = useAppContext() as any;
@@ -37,7 +37,7 @@ const InventoryView: React.FC = () => {
 
         setIsSubmitting(true);
         try {
-            await Api.createIngredient({
+            await inventoryApi.createIngredient({
                 TenNguyenLieu: newIngredient.TenNguyenLieu.trim(),
                 DonViTinh: newIngredient.DonViTinh.trim() || undefined,
                 SoLuongTonKho: newIngredient.SoLuongTonKho || 0

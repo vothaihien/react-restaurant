@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo, useState, ReactNode, useEffect } from 'react';
-import { Api } from '@/shared/utils/api';
+import { authApi } from '@/shared/api/auth';
 
 type AuthUser = { token: string; name: string; customerId: string } | null;
 
@@ -34,14 +34,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         user,
         isAuthenticated: !!user?.token,
         checkUser: async (identifier: string) => {
-            return await Api.checkUser(identifier);
+            return await authApi.checkUser(identifier);
         },
         login: async (identifier: string, otp: string) => {
-            const res = await Api.login({ identifier, otp });
+            const res = await authApi.login({ identifier, otp });
             setUser({ token: res.token, name: res.hoTen, customerId: res.maKhachHang });
         },
         register: async (identifier: string, name: string, otp: string) => {
-            const res = await Api.register({ identifier, hoTen: name, otp });
+            const res = await authApi.register({ identifier, hoTen: name, otp });
             setUser({ token: res.token, name: res.hoTen, customerId: res.maKhachHang });
         },
         logout: () => setUser(null)
