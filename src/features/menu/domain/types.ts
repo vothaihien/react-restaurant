@@ -17,6 +17,7 @@ export interface Recipe {
 }
 
 export interface MenuItemSize {
+    id?: string; // Auto-generated: DDMMYYYYNNN
     name: string; // e.g., 'S', 'M', 'L'
     price: number;
     recipe: Recipe;

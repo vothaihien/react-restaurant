@@ -3,12 +3,13 @@ import { useAppContext } from '@/core/context/AppContext';
 import TableCard from '@/components/TableCard';
 import OrderModal from '@/components/OrderModal';
 import PaymentModal from '@/components/PaymentModal';
-import type { Table, Order } from '@/core/types';
-import { TableStatus } from '@/features/tables/domain/types';
+import type { Table } from '@/core/types';
+import { TableStatus } from '@/core/types'; 
+import OrderDetailModal from '@/components/OrderDetailModal';
 
-// *** BẮT ĐẦU PHẦN NÂNG CẤP ***
-import { tableService, Tang } from '@/services/tableService'; // Import service
-import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers"; // Import component
+// *** CÁC IMPORT NÂNG CẤP (MUI, Service...) ***
+import { tableService, Tang } from '@/services/tableService'; 
+import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { Dayjs } from "dayjs";
 import { 
@@ -19,20 +20,18 @@ import {
     InputLabel, 
     Box, 
     CircularProgress,
-    Chip // Thêm Chip
+    Chip
 } from '@mui/material';
-// Thêm Icons cho Chú Thích
 import {
-  CheckCircle,
-  AccessTime,
-  CalendarMonth,
-  HelpOutline,
+  CheckCircle,
+  AccessTime,
+  CalendarMonth,
+  HelpOutline,
 } from "@mui/icons-material";
-// *** KẾT THÚC PHẦN NÂNG CẤP ***
-
+import { orderService } from '@/services/orderService';
 
 // ==========================================================
-// === COMPONENT CHÚ THÍCH (THÊM LẠI THEO Ý BẠN) ===
+// === COMPONENT CHÚ THÍCH (STATUS LEGEND) ===
 // ==========================================================
 const StatusLegend: React.FC = () => (
     <Box
@@ -46,59 +45,44 @@ const StatusLegend: React.FC = () => (
             borderRadius: 1,
         }}
     >
-        <Chip
-            icon={<CheckCircle />}
-            label="Trống"
-            color="success"
-            variant="outlined"
-        />
-        <Chip
-            icon={<AccessTime />}
-            label="Đang phục vụ"
-            color="error"
-            variant="outlined"
-        />
-        <Chip
-            icon={<CalendarMonth />}
-            label="Đã đặt"
-            color="warning"
-            variant="outlined"
-        />
-        <Chip
-            icon={<HelpOutline />}
-            label="Bảo trì"
-            color="default"
-            variant="outlined"
-        />
+        <Chip icon={<CheckCircle />} label="Trống" color="success" variant="outlined" />
+        <Chip icon={<AccessTime />} label="Đang phục vụ" color="error" variant="outlined" />
+        <Chip icon={<CalendarMonth />} label="Đã đặt" color="warning" variant="outlined" />
+        <Chip icon={<HelpOutline />} label="Bảo trì" color="default" variant="outlined" />
     </Box>
 );
 
-
 // ==========================================================
-// === COMPONENT CHÍNH (ĐÃ SỬA LỖI) ===
+// === COMPONENT CHÍNH: DASHBOARD VIEW ===
 // ==========================================================
 const DashboardView: React.FC = () => {
-    // Bỏ `tables` từ context, vì ta sẽ tự fetch
-    const { getOrderForTable } = useAppContext(); 
     
-    // State cho Modal (giữ nguyên)
-    const [selectedTable, setSelectedTable] = useState<Table | null>(null);
-    const [isOrderModalOpen, setOrderModalOpen] = useState(false);
-    const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
+    // 1. Lấy dữ liệu từ Context (ĐÃ SỬA LỖI 1: Thêm setOrders vào đây)
+    const { menuItems, categories, getOrderForTable, orders, setOrders } = useAppContext();
 
-    // *** BẮT ĐẦU STATE MỚI CHO NÂNG CẤP ***
+    // 2. Các State quản lý UI
+    const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
+    const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+    
+    // State Modal
+    const [isOrderModalOpen, setOrderModalOpen] = useState(false);
+    const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
+
+    // State Dữ liệu Bàn & Tầng
     const [loading, setLoading] = useState(true);
-    const [tables, setTables] = useState<Table[]>([]); // State này giờ do component tự quản lý
+    const [tables, setTables] = useState<Table[]>([]); 
     const [tangs, setTangs] = useState<Tang[]>([]);
     const [selectedTang, setSelectedTang] = useState<string>("ALL");
-    const [selectedDateTime, setSelectedDateTime] = useState<Dayjs | null>(dayjs()); // Mặc định là 'bây giờ'
-    // *** KẾT THÚC STATE MỚI ***
+    const [selectedDateTime, setSelectedDateTime] = useState<Dayjs | null>(dayjs());
 
-    // === HÀM MỚI: Fetch tầng (để lọc) ===
+    // -----------------------------------------------------------
+    // 3. CÁC EFFECT (Tải dữ liệu)
+    // -----------------------------------------------------------
+
+    // Fetch danh sách Tầng
     useEffect(() => {
         const fetchTangs = async () => {
             try {
-                // Giả sử service của bạn có hàm này (lấy từ file ReservationsView cũ)
                 const tangsData = await tableService.getTangs(); 
                 setTangs(tangsData);
             } catch (error) {
@@ -108,7 +92,7 @@ const DashboardView: React.FC = () => {
         fetchTangs();
     }, []);
 
-    // === HÀM MỚI: Fetch Bàn theo thời gian (ĐÂY LÀ CHỖ GỌI API) ===
+    // Fetch danh sách Bàn theo thời gian
     useEffect(() => {
         if (!selectedDateTime) {
             setTables([]);
@@ -118,25 +102,22 @@ const DashboardView: React.FC = () => {
         const fetchTables = async () => {
             setLoading(true);
             try {
-                // 1. GỌI API: Dữ liệu trả về là kiểu BanAn (maBan, tenBan, sucChua...)
+                // Gọi API lấy trạng thái bàn
                 const banAnData = await tableService.getDashboardTableStatus(
-                selectedDateTime.toISOString()
-            );
+                    selectedDateTime.toISOString()
+                );
                 
-                // 2. SỬA LỖI "UNDEFINED": Ánh xạ (map) dữ liệu
-                // Chuyển từ kiểu BanAn (API) sang kiểu Table (mà TableCard cần)
+                // Map dữ liệu từ API sang định dạng Table của Frontend
                 const mappedTables: Table[] = banAnData.map((banAn: any) => ({
-                    id: banAn.maBan,        // Map maBan -> id
-                    name: banAn.tenBan,      // Map tenBan -> name
-                    capacity: banAn.sucChua, // Map sucChua -> capacity
-                    status: banAn.tenTrangThai, // Map tenTrangThai -> status
-                    maTang: banAn.maTang,    // Giữ maTang để lọc
-                    // ... (Thêm các trường khác nếu TableCard của bạn cần)
+                    id: banAn.maBan,
+                    name: banAn.tenBan,
+                    capacity: banAn.sucChua,
+                    status: banAn.tenTrangThai, 
+                    maTang: banAn.maTang,
+                    orderId: null 
                 }));
 
-                // 3. Set State với dữ liệu đã được map
                 setTables(mappedTables);
-
             } catch (error) {
                 console.error("Lỗi tải sơ đồ bàn:", error);
                 setTables([]);
@@ -148,138 +129,259 @@ const DashboardView: React.FC = () => {
         fetchTables();
     }, [selectedDateTime]); 
 
-    // === LOGIC LỌC BÀN (THEO TẦNG) ===
+    // [ĐÃ SỬA LỖI 2] Đồng bộ Order ID từ Context vào Dashboard
+    useEffect(() => {
+        if (tables.length > 0 && orders.length > 0) {
+            setTables(prevTables => prevTables.map(table => {
+                const matchedOrder = orders.find(o => o.tableId === table.id);
+                if (matchedOrder) {
+                    return { 
+                        ...table, 
+                        orderId: matchedOrder.id,
+                        // SỬA LỖI TYPE Ở ĐÂY: Dùng Enum TableStatus.Occupied thay vì string cứng
+                        status: TableStatus.Occupied 
+                    };
+                }
+                return table;
+            }));
+        }
+    }, [orders, tables.length]);
+
+
+    // Logic lọc Bàn theo Tầng
     const filteredTables = useMemo(() => {
         if (selectedTang === "ALL") {
             return tables;
         }
-        // Giả sử object 'table' đã được map (ở trên) và có 'maTang'
         return tables.filter((table: any) => table.maTang === selectedTang);
     }, [tables, selectedTang]);
 
+    // Logic lọc Món ăn theo Danh mục
+    const displayedDishes = useMemo(() => {
+        if (selectedCategory === "ALL") {
+            return menuItems;
+        }
+        return menuItems.filter(item => item.categoryId === selectedCategory);
+    }, [selectedCategory, menuItems]);
 
+
+    useEffect(() => {
+        if (tables.length > 0 && orders.length > 0) {
+            setTables(prevTables => prevTables.map(table => {
+                // Tìm đơn hàng mà bàn này CÓ THAM GIA
+                const matchedOrder = orders.find(o => {
+                     // Kiểm tra xem bàn này có phải bàn chính (tableId) của đơn hàng không
+                     if (o.tableId === table.id) return true;
+                     return false;
+                });
+
+                if (matchedOrder) {
+                    return { 
+                        ...table, 
+                        orderId: matchedOrder.id,
+                        status: TableStatus.Occupied 
+                    };
+                }
+                
+               return String(table.status).toLowerCase().includes('trống') 
+                    ? { ...table, orderId: null } 
+                    : table;
+            }));
+        }
+    }, [orders, tables.length]);
+
+    // Lấy đơn hàng hiện tại của bàn đang chọn
+    const currentOrder = selectedTable ? getOrderForTable(selectedTable.id) : undefined;
+
+    // -----------------------------------------------------------
+    // CÁC HÀM XỬ LÝ SỰ KIỆN
+    // -----------------------------------------------------------
     const handleTableClick = (table: Table) => {
         setSelectedTable(table);
 
-        // 1. Chuyển trạng thái về chuỗi thường để so sánh cho an toàn
-        // (Vì data thật có thể là 'Đang phục vụ' hoặc 'Occupied')
+        // Chuẩn hóa chuỗi trạng thái để so sánh
         const statusStr = String(table.status || '').trim().toLowerCase();
-
-        console.log(`Click bàn: ${table.name} | Trạng thái thực tế: ${statusStr}`);
-
-        // 2. Kiểm tra điều kiện mở gọi món
-        // Cho phép mở nếu trạng thái khớp với Enum 'Occupied' HOẶC khớp chữ 'đang phục vụ'
         const isOccupied = 
-            statusStr === TableStatus.Occupied.toLowerCase() || // Khớp 'occupied'
-            statusStr === 'đang phục vụ' ||                     // Khớp tiếng Việt có dấu
-            statusStr === 'dang phuc vu';                       // Khớp tiếng Việt không dấu
+            statusStr === 'occupied' || 
+            statusStr === 'đang phục vụ' || 
+            statusStr === 'dang phuc vu';                    
 
         if (isOccupied) {
-            setOrderModalOpen(true);
+            setOrderModalOpen(true); 
         } else {
-            // (Tuỳ chọn) Bạn có thể mở comment dòng dưới để debug nếu click không ăn
-            alert(`Bàn này đang ở trạng thái: "${table.status}". Chỉ bàn "Đang phục vụ" mới được gọi món.`);
+            setOrderModalOpen(true);
         }
     };
 
-    const handleOpenPayment = () => {
-        setOrderModalOpen(false);
-        setPaymentModalOpen(true);
-    }
+    const handleOpenPayment = () => {
+        setOrderModalOpen(false);
+        setPaymentModalOpen(true);
+    }
 
-    const closeAllModals = () => {
-        setSelectedTable(null);
-        setOrderModalOpen(false);
-        setPaymentModalOpen(false);
-    };
+    const closeAllModals = () => {
+        setSelectedTable(null);
+        setOrderModalOpen(false);
+        setPaymentModalOpen(false);
+    };
 
-    const currentOrder = selectedTable ? getOrderForTable(selectedTable.id) : undefined;
+    // -----------------------------------------------------------
+    // 4. THÊM FETCH ACTIVE ORDERS RIÊNG CHO DASHBOARD (ĐỂ CHẮC CHẮN)
+    // -----------------------------------------------------------
+    // useEffect(() => {
+    //     const fetchActiveOrders = async () => {
+    //         try {
+    //             const activeOrders = await orderService.getActiveOrders(); 
+                
+    //             // Bây giờ đã có setOrders, dòng này sẽ hết lỗi đỏ
+    //             if (setOrders) {
+    //                 setOrders(activeOrders);
+    //                 // console.log("Đã đồng bộ đơn hàng vào Context:", activeOrders);
+    //             }
+    //         } catch (error) {
+    //             console.error("Lỗi tải danh sách đơn hàng:", error);
+    //         }
+    //     };
+    //     fetchActiveOrders();
+    // }, [setOrders]); // Thêm dependency cho chuẩn React
 
-    // === JSX (Phần Giao Diện) ===
-    return (
-        <div>
-            {/* === BỘ LỌC MỚI (TẦNG & THỜI GIAN) === */}
-            <Box 
-                sx={{ 
-                    p: 2, 
-                    mb: 3, 
-                    display: 'flex', 
-                    gap: 2, 
-                    flexWrap: 'wrap', 
-                    backgroundColor: 'white', 
-                    borderRadius: 1, 
-                    boxShadow: 1 
-                }}
-            >
-                {/* Lọc Tầng */}
-                <FormControl sx={{ minWidth: 200 }} size="small">
-                    <InputLabel>Lọc theo tầng</InputLabel>
-                    <Select
-                        value={selectedTang}
-                        label="Lọc theo tầng"
-                        onChange={(e) => setSelectedTang(e.target.value)}
-                    >
-                        <MenuItem value="ALL">Tất cả các tầng</MenuItem>
-                        {tangs.map((tang) => (
-                            <MenuItem key={tang.maTang} value={tang.maTang}>
-                                {tang.tenTang}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
+    // -----------------------------------------------------------
+    // 5. GIAO DIỆN (RENDER)
+    // -----------------------------------------------------------
+    return (
+        <div className="p-4 bg-gray-50 min-h-screen flex flex-col gap-6">
+            
+            {/* === KHỐI 1: BỘ LỌC BÀN & CHÚ THÍCH === */}
+            <div>
+                <Box sx={{ p: 2, mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap', backgroundColor: 'white', borderRadius: 1, boxShadow: 1 }}>
+                    <FormControl sx={{ minWidth: 200 }} size="small">
+                        <InputLabel>Lọc theo tầng</InputLabel>
+                        <Select
+                            value={selectedTang}
+                            label="Lọc theo tầng"
+                            onChange={(e) => setSelectedTang(e.target.value)}
+                        >
+                            <MenuItem value="ALL">Tất cả các tầng</MenuItem>
+                            {tangs.map((tang) => (
+                                <MenuItem key={tang.maTang} value={tang.maTang}>{tang.tenTang}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
 
-                {/* Lọc Thời Gian */}
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
-                  <DateTimePicker
-                    label="Xem trạng thái lúc"
-                    value={selectedDateTime}
-                    onChange={(newValue) => setSelectedDateTime(newValue)}
-                    slots={{ textField: TextField }}
-                    slotProps={{
-                      textField: {
-                        size: 'small',
-                        sx: { minWidth: 250 }
-                      },
-                    }}
-                    enableAccessibleFieldDOMStructure={false}
-                  />
-                </LocalizationProvider>
-            </Box>
-
-            {/* === CHÚ THÍCH (THÊM LẠI) === */}
-            <StatusLegend />
-
-            {/* === SƠ ĐỒ BÀN (ĐÃ LỌC) === */}
-            {loading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}>
-                    <CircularProgress />
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                        <DateTimePicker
+                            label="Xem trạng thái lúc"
+                            value={selectedDateTime}
+                            onChange={(newValue) => setSelectedDateTime(newValue)}
+                            slots={{ textField: TextField }}
+                            slotProps={{ textField: { size: 'small', sx: { minWidth: 250 } } }}
+                            enableAccessibleFieldDOMStructure={false}
+                        />
+                    </LocalizationProvider>
                 </Box>
-            ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                    {filteredTables.map((table) => (
-                        <TableCard key={table.id} table={table} onClick={() => handleTableClick(table)} />
-                    ))}
-                </div>
+
+                <StatusLegend />
+            </div>
+
+            {/* === KHỐI 2: SƠ ĐỒ BÀN === */}
+            <div>
+                <h2 className="text-xl font-bold mb-3 text-gray-800">Sơ đồ bàn</h2>
+                
+                {/* DEBUG LOG - XÓA ĐI KHI ĐÃ CHẠY ỔN */}
+                {/* <div className="text-xs text-gray-400 mb-2">
+                   DEBUG: {JSON.stringify(tables.map(t => ({ id: t.id, oid: t.orderId, status: t.status })).slice(0,3))}
+                </div> 
+                */}
+
+                {loading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>
+                ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                        {filteredTables.map((table) => (
+                            <TableCard key={table.id} table={table} onClick={() => handleTableClick(table)} />
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <hr className="border-gray-300" />
+
+            {/* === KHỐI 3: THỰC ĐƠN MÓN ĂN (MENU) === */}
+            <div className="bg-white p-4 rounded-lg shadow-sm">
+                <h2 className="text-xl font-bold mb-4 text-gray-800">Thực đơn món ăn</h2>
+                
+                {/* A. Danh sách nút Danh mục */}
+                <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+                    <button
+                        onClick={() => setSelectedCategory("ALL")}
+                        className={`px-5 py-2 rounded-full font-medium transition-colors whitespace-nowrap ${
+                            selectedCategory === "ALL" ? "bg-green-600 text-white shadow-lg" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
+                    >
+                        Tất cả
+                    </button>
+                    {categories.map(cat => (
+                        <button
+                            key={cat.id}
+                            onClick={() => setSelectedCategory(cat.id)}
+                            className={`px-5 py-2 rounded-full font-medium transition-colors whitespace-nowrap ${
+                                selectedCategory === cat.id ? "bg-green-600 text-white shadow-lg" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            }`}
+                        >
+                            {cat.name}
+                        </button>
+                    ))}
+                </div>
+
+                {/* B. Lưới hiển thị Món ăn */}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    {displayedDishes.map(dish => (
+                        <div key={dish.id} className="bg-white border rounded-xl p-3 shadow-sm hover:shadow-md cursor-pointer transition-all flex flex-col h-full">
+                            <div className="relative w-full h-32 mb-3 overflow-hidden rounded-lg bg-gray-100">
+                                <img 
+                                    src={dish.imageUrls[0] || 'https://via.placeholder.com/150'} 
+                                    alt={dish.name} 
+                                    className="w-full h-full object-cover transition-transform hover:scale-105"
+                                    onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=No+Image'; }}
+                                />
+                            </div>
+                            <h3 className="font-bold text-gray-800 text-sm line-clamp-2 mb-1 flex-grow">{dish.name}</h3>
+                            <div className="flex justify-between items-center mt-auto">
+                                <p className="text-green-600 font-bold text-sm">
+                                    {dish.sizes[0]?.price.toLocaleString('vi-VN')} đ
+                                </p>
+                                <button className="bg-green-50 text-green-700 p-1 rounded-md hover:bg-green-100">
+                                    +
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                    
+                    {displayedDishes.length === 0 && (
+                        <div className="col-span-full text-center py-12 text-gray-500 border border-dashed rounded-lg">
+                            Không tìm thấy món ăn nào trong danh mục này.
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* === KHỐI 4: CÁC MODAL === */}
+            {selectedTable && isOrderModalOpen && (
+                <OrderModal
+                    table={selectedTable}
+                    order={currentOrder}
+                    onClose={closeAllModals}
+                    onOpenPayment={handleOpenPayment}
+                />
             )}
 
-            {/* === CÁC MODAL (giữ nguyên) === */}
-            {selectedTable && isOrderModalOpen && (
-                <OrderModal
-                    table={selectedTable}
-                    order={currentOrder}
-                    onClose={closeAllModals}
-                    onOpenPayment={handleOpenPayment}
-                />
-            )}
-
-            {selectedTable && isPaymentModalOpen && currentOrder && (
-                <PaymentModal
-                    order={currentOrder}
-                    onClose={closeAllModals}
-                />
-            )}
-        </div>
-    );
+            {selectedTable && isPaymentModalOpen && currentOrder && (
+                <PaymentModal
+                    order={currentOrder}
+                    onClose={closeAllModals}
+                />
+            )}
+        </div>
+    );
 };
 
 export default DashboardView;

@@ -2,6 +2,8 @@ import React, { createContext, useState, useContext, ReactNode, useEffect } from
 import type { Table, Order, MenuItem, OrderItem, Ingredient, Reservation, Supplier, KDSItem, InventoryTransaction, InventoryTransactionItem, Staff, Category, Role } from '@/core/types';
 import { TableStatus, PaymentMethod } from '@/core/types';
 import { Api, BASE_URL } from '@/shared/utils/api';
+import { orderService } from '@/services/orderService';
+
 
 const generateDailyId = (existingIds: string[]): string => {
     const today = new Date();
@@ -29,6 +31,8 @@ interface AppContextType {
     inventoryTransactions: InventoryTransaction[];
     staff: Staff[];
 
+
+    addItemsToTableOrder: (tableId: string, items: OrderItem[]) => Promise<void>;
     createOrder: (tableId: string, items: OrderItem[]) => void;
     updateOrder: (orderId: string, items: OrderItem[]) => void;
     closeOrder: (orderId: string, paymentMethod: PaymentMethod) => void;
@@ -69,6 +73,7 @@ interface AppContextType {
     addStaff: (s: Omit<Staff, 'id' | 'active'> & { active?: boolean }) => void;
     updateStaff: (s: Staff) => void;
     deleteStaff: (id: string) => void;
+    setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -155,6 +160,201 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return TableStatus.Available; // Default
     };
 
+
+    // useEffect(() => {
+    //     (async () => {
+    //         try {
+    //             // 1. Gọi API lấy dữ liệu thô
+    //             const data = await orderService.getActiveOrders();
+                
+    //             if (Array.isArray(data) && data.length > 0) {
+                    
+    //                 // 2. Map sang Order Frontend
+    //                 const mappedOrders: Order[] = data.map((d: any) => ({
+    //                     id: d.maDonHang,
+    //                     // Vẫn giữ bàn chính để hiển thị đại diện
+    //                     tableId: (d.listMaBan && d.listMaBan.length > 0) ? d.listMaBan[0] : '', 
+    //                     items: [], 
+    //                     subtotal: 0,
+    //                     total: 0,
+    //                     discount: 0,
+    //                     createdAt: new Date(d.thoiGianNhanBan).getTime(),
+    //                     status: 'active'
+    //                 }));
+
+    //                 setOrders(mappedOrders);
+
+    //                 // 3. QUAN TRỌNG: CẬP NHẬT TRẠNG THÁI CHO TẤT CẢ CÁC BÀN LIÊN QUAN
+    //                 setTables(prevTables => prevTables.map(t => {
+    //                     // Tìm trong dữ liệu thô (data) xem bàn này (t.id) có nằm trong listMaBan của đơn nào không?
+    //                     // Logic cũ chỉ tìm theo mappedOrders nên bị sót bàn phụ
+    //                     const rawOrderData = data.find((d: any) => 
+    //                         d.listMaBan && d.listMaBan.includes(t.id)
+    //                     );
+                        
+    //                     if (rawOrderData) {
+    //                         // Nếu tìm thấy bàn này trong 1 đơn hàng nào đó
+    //                         return { 
+    //                             ...t, 
+    //                             status: TableStatus.Occupied, // Đánh dấu có khách
+    //                             orderId: rawOrderData.maDonHang // <--- GẮN ĐÚNG ORDER ID CHO CẢ BÀN CHÍNH LẪN BÀN PHỤ
+    //                         };
+    //                     }
+    //                     return t;
+    //                 }));
+    //             }
+    //         } catch (error) {
+    //             console.warn('Lỗi tải đơn hàng:', error);
+    //         }
+    //     })();
+    // }, []);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const data = await orderService.getActiveOrders();
+                
+                if (Array.isArray(data) && data.length > 0) {
+                    
+                    // --- MAP ĐƠN HÀNG ---
+                    const mappedOrders: Order[] = data.map((d: any) => {
+                        // 1. Xử lý món ăn (quan trọng: khai báo const bên trong để tạo mảng mới mỗi lần lặp)
+                        let localItems: any[] = [];
+                        
+                        if (Array.isArray(d.chiTietDonHang)) {
+                             localItems = d.chiTietDonHang.map((ct: any) => ({
+                                id: ct.maMonAn, // Nên dùng ID duy nhất của dòng chi tiết nếu có (ví dụ: ct.id)
+                                menuItemId: ct.maMonAn,
+                                quantity: ct.soLuong,
+                                notes: ct.ghiChu || '',
+                                price: ct.donGia || 0 // Map thêm giá nếu cần
+                            }));
+                        }
+
+                        // 2. Trả về object Order
+                        return {
+                            id: d.maDonHang,
+                            tableId: (d.listMaBan && d.listMaBan.length > 0) ? d.listMaBan[0] : '',
+                            // Dùng [...localItems] để copy ra một mảng hoàn toàn mới -> TRÁNH LỖI DÙNG CHUNG
+                            items: [...localItems], 
+                            subtotal: d.tongTien || 0,
+                            total: d.tongTien || 0,
+                            discount: 0,
+                            createdAt: new Date(d.thoiGianNhanBan).getTime(),
+                            status: 'active'
+                        };
+                    });
+
+                    setOrders(mappedOrders);
+
+                    // --- CẬP NHẬT TRẠNG THÁI BÀN ---
+                    setTables(prevTables => prevTables.map(t => {
+                        // Logic cũ: Tìm xem bàn này có nằm trong đơn hàng nào không
+                        const rawOrderData = data.find((d: any) => 
+                            d.listMaBan && d.listMaBan.includes(t.id)
+                        );
+                        
+                        if (rawOrderData) {
+                            // Kiểm tra kỹ: Nếu bàn này thuộc đơn hàng này -> Gán Order ID
+                            return { 
+                                ...t, 
+                                status: TableStatus.Occupied,
+                                orderId: rawOrderData.maDonHang 
+                            };
+                        }
+                        
+                        // Nếu không tìm thấy đơn cho bàn này -> Reset về trạng thái cũ hoặc Trống
+                        // Quan trọng: Phải clear orderId đi nếu nó không còn active
+                        // return { ...t, orderId: undefined }; // (Bỏ comment dòng này nếu muốn strict mode)
+                        return t;
+                    }));
+                }
+            } catch (error) {
+                console.warn('Lỗi tải đơn hàng:', error);
+            }
+        })();
+    }, []);
+
+
+    const addItemsToTableOrder = async (tableId: string, items: OrderItem[]) => {
+        // 1. Tìm đơn hàng hiện tại của bàn này
+        const currentOrder = getOrderForTable(tableId);
+
+        // NẾU KHÔNG TÌM THẤY ĐƠN -> DỪNG LUÔN (Bàn trống không cho thêm món)
+        if (!currentOrder) {
+            console.error(`Bàn ${tableId} chưa có đơn hàng (Trạng thái trống). Vui lòng tạo đơn/Check-in trước.`);
+            // Bạn có thể thêm thông báo UI ở đây: notify("Bàn này chưa có khách!", "error");
+            return;
+        }
+
+        // 2. Chuẩn bị dữ liệu gửi về Server
+        // Map từ OrderItem (Frontend) sang cấu trúc Backend yêu cầu
+        const payload = {
+            maDonHang: currentOrder.id,
+            maBan: tableId,
+            items: items.map(i => ({
+                maMonAn: i.menuItem.id,
+                // Lấy ID của phiên bản (Size). Nếu không có thì để chuỗi rỗng (cần đảm bảo data đầu vào chuẩn)
+                maPhienBan: i.menuItem.sizes.find(s => s.name === i.size)?.id || '', 
+                soLuong: i.quantity,
+                ghiChu: i.notes || ''
+            }))
+        };
+
+        try {
+            // 3. Gọi API thêm món
+            await orderService.addItemsToTable(payload);
+            console.log("Đã thêm món thành công vào đơn:", currentOrder.id);
+
+            // 4. CẬP NHẬT LẠI DỮ LIỆU (Reload từ Server để đồng bộ)
+            // Gọi lại API lấy danh sách Active Orders để đảm bảo dữ liệu mới nhất
+            const latestData = await orderService.getActiveOrders();
+
+            if (Array.isArray(latestData)) {
+                // Map dữ liệu từ Backend -> Frontend Order
+                const mappedOrders: Order[] = latestData.map((d: any) => ({
+                    id: d.maDonHang,
+                    // Lấy mã bàn đầu tiên trong danh sách bàn của đơn
+                    tableId: (d.listMaBan && d.listMaBan.length > 0) ? d.listMaBan[0] : '', 
+                    
+                    // Lưu ý: API GetActiveBookings thường chỉ trả về tóm tắt.
+                    // Nếu muốn hiển thị chi tiết món ngay lập tức, bạn cần logic gọi API chi tiết (GetMyBookingDetail)
+                    // hoặc chấp nhận items rỗng cho đến khi bấm vào xem chi tiết.
+                    items: [], 
+                    
+                    subtotal: 0, // Có thể tính toán nếu Backend trả về tổng tiền
+                    total: 0,
+                    discount: 0,
+                    createdAt: new Date(d.thoiGianNhanBan).getTime(),
+                    status: 'active'
+                }));
+
+                // Cập nhật State Orders
+                setOrders(mappedOrders);
+
+                // Cập nhật State Tables (Đánh dấu bàn có khách)
+                setTables(prevTables => prevTables.map(t => {
+                    // Tìm xem bàn này có nằm trong danh sách đơn hàng mới tải về không
+                    const orderOfTable = mappedOrders.find(o => o.tableId === t.id);
+                    
+                    if (orderOfTable) {
+                        return { 
+                            ...t, 
+                            status: TableStatus.Occupied, // Đánh dấu đang phục vụ
+                            orderId: orderOfTable.id      // Gắn ID đơn hàng vào bàn
+                        };
+                    }
+                    // Nếu không tìm thấy đơn cho bàn này -> Giữ nguyên hoặc set về Available (tùy logic)
+                    return t;
+                }));
+            }
+
+        } catch (error) {
+            console.error("Lỗi khi gọi API thêm món:", error);
+            // notify("Thêm món thất bại!", "error");
+        }
+    };
+
     // Load tables from API on mount (best-effort)
     useEffect(() => {
         (async () => {
@@ -207,11 +407,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             return url?.startsWith('http') ? url : `${BASE_URL}/${url}`;
                         });
                         const tenDanhMuc = m.maDanhMucNavigation?.tenDanhMuc || m.MaDanhMucNavigation?.TenDanhMuc || '';
+                        
+                        // --- ĐOẠN ĐÃ SỬA Ở ĐÂY ---
                         const sizes = (m.phienBanMonAns || m.PhienBanMonAns || []).map((p: any) => ({
+                            id: p.maPhienBan || p.MaPhienBan, // <--- ĐÃ THÊM DÒNG NÀY
                             name: p.tenPhienBan || p.TenPhienBan,
                             price: Number(p.gia || p.Gia) || 0,
                             recipe: { id: '', name: '', ingredients: [] }
                         }));
+                        // -------------------------
+
                         return {
                             id: m.maMonAn || m.MaMonAn,
                             name: m.tenMonAn || m.TenMonAn,
@@ -648,7 +853,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     return (
-        <AppContext.Provider value={{ tables, orders, menuItems, categories, ingredients, reservations, suppliers, kdsQueue, inventoryTransactions, staff, createOrder, updateOrder, closeOrder, updateTableStatus, getOrderForTable, sendOrderToKDS, addMenuItem, updateMenuItem, deleteMenuItem, generateRecipeId, createReservation, updateReservation, cancelReservation, confirmArrival, markNoShow, getAvailableTables, recordInventoryIn, adjustInventory, consumeByOrderItems, lowStockIds, addSupplier, updateSupplier, deleteSupplier, addTable, updateTable, deleteTable, addStaff, updateStaff, deleteStaff }}>
+        <AppContext.Provider value={{ 
+            tables, orders, menuItems, categories, 
+            ingredients, reservations, suppliers, 
+            kdsQueue, inventoryTransactions, staff, 
+            setOrders,
+            createOrder, updateOrder, closeOrder, 
+            updateTableStatus, getOrderForTable, sendOrderToKDS, 
+            addMenuItem, updateMenuItem, deleteMenuItem, 
+            generateRecipeId, createReservation, updateReservation, 
+            cancelReservation, confirmArrival, markNoShow, getAvailableTables, 
+            recordInventoryIn, adjustInventory, consumeByOrderItems, 
+            lowStockIds, addSupplier, updateSupplier, deleteSupplier,
+             addTable, updateTable, deleteTable, 
+             addStaff, updateStaff, deleteStaff,
+             addItemsToTableOrder,
+              }}>
             {children}
         </AppContext.Provider>
     );

@@ -16,6 +16,8 @@ import {
   Autocomplete,
   MenuItem, // Phải import MenuItem để dùng
 } from "@mui/material";
+import OrderDetailModal from '@/components/OrderDetailModal';
+
 import {
   LocalizationProvider,
   DateTimePicker,
@@ -247,6 +249,7 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
 const ReservationsView: React.FC = () => {
   const [orders, setOrders] = useState<DonHangActive[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewDetailOrderId, setViewDetailOrderId] = useState<string | null>(null); // <--- Thêm dòng này
 
   // State cho Popover (menu hành động)
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -311,21 +314,29 @@ const ReservationsView: React.FC = () => {
     }
   };
 
-  const handlePayment = async (maDonHang: string) => {
-    handleCloseMenu();
-    if (
-      !window.confirm(
-        "Xác nhận thanh toán cho đơn này? Bàn sẽ chuyển về 'Trống'."
-      )
-    )
-      return;
-    try {
-      await orderService.updateOrderStatus(maDonHang, "DA_HOAN_THANH");
-      alert("Thanh toán thành công!");
-      fetchData();
-    } catch (error: any) {
-      alert(`Lỗi thanh toán: ${error.message}`);
-    }
+  // const handlePayment = async (maDonHang: string) => {
+  //   handleCloseMenu();
+  //   if (
+  //     !window.confirm(
+  //       "Xác nhận thanh toán cho đơn này? Bàn sẽ chuyển về 'Trống'."
+  //     )
+  //   )
+  //     return;
+  //   try {
+  //     await orderService.updateOrderStatus(maDonHang, "DA_HOAN_THANH");
+  //     alert("Thanh toán thành công!");
+  //     fetchData();
+  //   } catch (error: any) {
+  //     alert(`Lỗi thanh toán: ${error.message}`);
+  //   }
+  // };
+
+  const handlePayment = (maDonHang: string) => {
+    handleCloseMenu(); // Đóng cái menu 3 chấm lại
+    
+    // Thay vì gọi API ngay, ta lưu ID đơn hàng vào state này
+    // Việc này sẽ kích hoạt Modal hiển thị lên
+    setViewDetailOrderId(maDonHang);
   };
 
   const handleCancel = async (maDonHang: string) => {
@@ -437,93 +448,74 @@ const ReservationsView: React.FC = () => {
         anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
       >
         {selectedOrder && ( // Thêm check này cho an toàn
-          <MenuList>
-            {(() => {
-              if (!selectedOrder) return null;
+          <Popover
+        open={Boolean(anchorEl)}
+        anchorEl={anchorEl}
+        onClose={handleCloseMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      >
+        <MenuList>
+          {selectedOrder?.maTrangThai === "CHO_XAC_NHAN" && [
+            <MenuItem key="confirm" onClick={() => handleCheckIn(selectedOrder.maDonHang)}>
+              <CheckCircle sx={{ mr: 1 }} color="primary" /> XÁC NHẬN ĐƠN
+            </MenuItem>,
+            <MenuItem key="cancel" onClick={() => handleCancel(selectedOrder.maDonHang)}>
+              <Cancel sx={{ mr: 1 }} color="error" /> Hủy đơn
+            </MenuItem>
+          ]}
 
-              const isToday = dayjs(selectedOrder.thoiGianNhanBan).isSame(
-                dayjs(),
-                "day"
-              );
-              const maTrangThai = selectedOrder.maTrangThai;
+          {selectedOrder?.maTrangThai === "DA_XAC_NHAN" && [
+            // Logic kiểm tra ngày hôm nay
+            dayjs(selectedOrder.thoiGianNhanBan).isSame(dayjs(), "day") ? (
+              [
+                <MenuItem key="checkin" onClick={() => handleCheckIn(selectedOrder.maDonHang)}>
+                  <CheckCircle sx={{ mr: 1 }} color="success" /> Check-in (Vào bàn)
+                </MenuItem>,
+                <MenuItem key="cancel" onClick={() => handleCancel(selectedOrder.maDonHang)}>
+                  <Cancel sx={{ mr: 1 }} color="error" /> Hủy đơn
+                </MenuItem>,
+                <MenuItem key="noshow" onClick={() => handleNoShow(selectedOrder.maDonHang)}>
+                  <HelpOutline sx={{ mr: 1 }} color="warning" /> Báo No-Show
+                </MenuItem>
+              ]
+            ) : (
+              <MenuItem key="cancel_future" onClick={() => handleCancel(selectedOrder.maDonHang)}>
+                <Cancel sx={{ mr: 1 }} color="error" /> Hủy đơn
+              </MenuItem>
+            )
+          ]}
 
-              // 1. Đơn chờ nhân viên xác nhận (đơn từ app mobile)
-              if (maTrangThai === "CHO_XAC_NHAN") {
-                return (
-                  <>
-                    <MenuItem
-                      onClick={() => handleCheckIn(selectedOrder.maDonHang)}
-                    >
-                      <CheckCircle sx={{ mr: 1 }} color="primary" /> XÁC NHẬN ĐƠN
-                    </MenuItem>
-                    <MenuItem
-                      onClick={() => handleCancel(selectedOrder.maDonHang)}
-                    >
-                      <Cancel sx={{ mr: 1 }} color="error" /> Hủy đơn
-                    </MenuItem>
-                  </>
-                );
-              }
+          {selectedOrder?.maTrangThai === "CHO_THANH_TOAN" && [
+            <MenuItem key="pay" onClick={() => handlePayment(selectedOrder.maDonHang)}>
+              <CheckCircle sx={{ mr: 1 }} color="primary" /> Thanh Toán & Trả bàn
+            </MenuItem>,
+            <MenuItem key="edit" onClick={handleCloseMenu}>
+              Thêm/Sửa món ăn (Vào Sơ Đồ Bàn)
+            </MenuItem>
+          ]}
 
-              // 2. Đơn đã đặt (DA_XAC_NHAN)
-              if (maTrangThai === "DA_XAC_NHAN") {
-                if (isToday) {
-                  // Đơn của hôm nay
-                  return (
-                    <>
-                      <MenuItem
-                        onClick={() => handleCheckIn(selectedOrder.maDonHang)}
-                      >
-                        <CheckCircle sx={{ mr: 1 }} color="success" /> Check-in (Vào bàn)
-                      </MenuItem>
-                      <MenuItem
-                        onClick={() => handleCancel(selectedOrder.maDonHang)}
-                      >
-                        <Cancel sx={{ mr: 1 }} color="error" /> Hủy đơn
-                      </MenuItem>
-                      <MenuItem
-                        onClick={() => handleNoShow(selectedOrder.maDonHang)}
-                      >
-                        <HelpOutline sx={{ mr: 1 }} color="warning" /> Báo No-Show
-                      </MenuItem>
-                    </>
-                  );
-                } else {
-                  // Đơn của ngày tương lai
-                  return (
-                    <MenuItem
-                      onClick={() => handleCancel(selectedOrder.maDonHang)}
-                    >
-                      <Cancel sx={{ mr: 1 }} color="error" /> Hủy đơn
-                    </MenuItem>
-                  );
-                }
-              }
-
-              // 3. Đơn đang ăn (CHO_THANH_TOAN)
-              if (maTrangThai === "CHO_THANH_TOAN") {
-                return (
-                  <>
-                    <MenuItem
-                      onClick={() => handlePayment(selectedOrder.maDonHang)}
-                    >
-                      <CheckCircle sx={{ mr: 1 }} color="primary" /> Thanh Toán & Trả bàn
-                    </MenuItem>
-                    <MenuItem onClick={handleCloseMenu}>
-                      {/* TODO: Mở Modal gọi món */}
-                      Thêm/Sửa món ăn (Tab Sơ Đồ Bàn)
-                    </MenuItem>
-                  </>
-                );
-              }
-
-              return <MenuItem disabled>Không có hành động</MenuItem>;
-            })()}
-
-            <MenuItem onClick={handleCloseMenu}>Xem chi tiết đơn</MenuItem>
-          </MenuList>
+          <MenuItem 
+            key="detail"
+            onClick={() => {
+                handleCloseMenu();
+                if (selectedOrder) setViewDetailOrderId(selectedOrder.maDonHang);
+            }}>
+            Xem chi tiết đơn
+          </MenuItem>
+        </MenuList>
+      </Popover>
         )}
       </Popover>
+      {viewDetailOrderId && (
+        <OrderDetailModal
+          maDonHang={viewDetailOrderId}
+          onClose={() => setViewDetailOrderId(null)}
+          onPaymentSuccess={() => {
+             fetchData(); // Tải lại danh sách sau khi thanh toán xong
+             setViewDetailOrderId(null);
+          }}
+        />
+      )}
     </Box>
   );
 };
