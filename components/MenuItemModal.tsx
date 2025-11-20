@@ -12,6 +12,7 @@ import { useFeedback } from "@/core/context/FeedbackContext";
 import { XIcon, PlusIcon, TrashIcon } from "@/components/Icons";
 import { BASE_URL } from "@/shared/utils/api";
 import { menuApi } from "@/shared/api/menu";
+import { formatVND } from "@/shared/utils";
 
 type RecipeDraftIngredient = {
   ingredientId: string;
@@ -28,6 +29,47 @@ type VersionOption = {
   name: string;
   status?: string;
   order?: number | null;
+};
+
+type MenuImageDraft = {
+  id: string;
+  name: string;
+  dataUrl: string;
+  type: string;
+  size: number;
+  createdAt: number;
+  lastModified?: number;
+};
+
+const fileToDataUrl = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () =>
+      reject(new Error(`Không thể đọc file ${file.name}. Vui lòng thử lại.`));
+    reader.readAsDataURL(file);
+  });
+};
+
+const dataUrlToFile = (
+  dataUrl: string,
+  fileName: string,
+  mimeType?: string
+): File => {
+  const parts = dataUrl.split(",");
+  if (parts.length !== 2) {
+    throw new Error("Dữ liệu ảnh không hợp lệ.");
+  }
+  const meta = parts[0];
+  const base64Data = parts[1];
+  const mimeMatch = meta.match(/data:(.*?);base64/);
+  const mime = mimeType || mimeMatch?.[1] || "image/png";
+  const binary = atob(base64Data);
+  const array = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    array[i] = binary.charCodeAt(i);
+  }
+  return new File([array], fileName, { type: mime });
 };
 
 interface MenuItemModalProps {
@@ -57,6 +99,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   >(null);
   const [uploadingImages, setUploadingImages] = useState<string[]>([]);
   const [isRecipeModalOpen, setIsRecipeModalOpen] = useState(false);
+  const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
   const [recipeDraftName, setRecipeDraftName] = useState("");
   const [recipeDraftVersionId, setRecipeDraftVersionId] = useState("");
   const [recipeDraftIngredients, setRecipeDraftIngredients] = useState<
@@ -67,6 +110,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [dishIngredients, setDishIngredients] = useState<DishIngredientDraft[]>(
     []
   );
+  const [imageDrafts, setImageDrafts] = useState<MenuImageDraft[]>([]);
 
   const ingredientMap = useMemo(() => {
     const map = new Map<string, Ingredient>();
@@ -173,6 +217,43 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
 
   const [formState, setFormState] = useState(() => getInitialState(categories));
 
+  const displayImages = useMemo(
+    () => [
+      ...formState.imageUrls.map((url) => {
+        const normalized =
+          url.startsWith("http://") || url.startsWith("https://")
+            ? url
+            : `${BASE_URL}/${url.replace(/^\//, "")}`;
+        return {
+          id: url,
+          url: normalized,
+          source: "remote" as const,
+        };
+      }),
+      ...imageDrafts.map((draft) => ({
+        id: draft.id,
+        url: draft.dataUrl,
+        source: "draft" as const,
+      })),
+    ],
+    [formState.imageUrls, imageDrafts]
+  );
+
+  const calculateRecipeCost = useCallback(
+    (recipe: Recipe) => {
+      if (!recipe?.ingredients) return 0;
+      return recipe.ingredients.reduce((total, item) => {
+        const price =
+          item.ingredient?.price ??
+          ingredientMap.get(item.ingredient?.id || "")?.price ??
+          0;
+        const quantity = Number(item.quantity) || 0;
+        return total + price * quantity;
+      }, 0);
+    },
+    [ingredientMap]
+  );
+
   // Helper function to generate unique recipe ID
   const generateUniqueRecipeId = (): string => {
     let newId = generateRecipeId();
@@ -251,6 +332,18 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     setSelectedRecipeForIngredients(null);
     setSelectedRecipeDetailId(null);
   }, [itemToEdit, isOpen, categories]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setImageDrafts([]);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (itemToEdit) {
+      setImageDrafts([]);
+    }
+  }, [itemToEdit]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -463,7 +556,6 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         continue;
       }
 
-      // Kiểm tra kích thước file (10MB)
       if (file.size > 10 * 1024 * 1024) {
         notify({
           tone: "warning",
@@ -473,43 +565,75 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         continue;
       }
 
-      const fileId = `${file.name}_${Date.now()}`;
-      setUploadingImages((prev) => [...prev, fileId]);
+      // Chế độ chỉnh sửa vẫn upload ngay lên server
+      if (itemToEdit) {
+        const fileId = `${file.name}_${Date.now()}`;
+        setUploadingImages((prev) => [...prev, fileId]);
+        try {
+          const maMonAn = itemToEdit?.id || undefined;
+          const result = await menuApi.uploadImage(file, maMonAn);
+          setFormState((prev) => ({
+            ...prev,
+            imageUrls: [...prev.imageUrls, result.url],
+          }));
 
+          notify({
+            tone: "success",
+            title: "Upload thành công",
+            description: `Đã upload ảnh ${file.name}`,
+          });
+        } catch (error: any) {
+          notify({
+            tone: "error",
+            title: "Upload thất bại",
+            description: error.message || `Không thể upload ảnh ${file.name}`,
+          });
+        } finally {
+          setUploadingImages((prev) => prev.filter((id) => id !== fileId));
+        }
+        continue;
+      }
+
+      // Thêm mới: lưu tạm vào localStorage cho đến khi bấm Lưu món
       try {
-        // Nếu đang edit món ăn, truyền maMonAn để upload vào thư mục của món ăn
-        const maMonAn = itemToEdit?.id || undefined;
-        const result = await menuApi.uploadImage(file, maMonAn);
-
-        setFormState((prev) => ({
-          ...prev,
-          imageUrls: [...prev.imageUrls, result.url],
-        }));
-
+        const dataUrl = await fileToDataUrl(file);
+        const draft: MenuImageDraft = {
+          id: `${file.name}_${Date.now()}_${Math.random()
+            .toString(36)
+            .slice(2)}`,
+          name: file.name,
+          dataUrl,
+          type: file.type,
+          size: file.size,
+          lastModified: file.lastModified,
+          createdAt: Date.now(),
+        };
+        setImageDrafts((prev) => [...prev, draft]);
         notify({
           tone: "success",
-          title: "Upload thành công",
-          description: `Đã upload ảnh ${file.name}`,
+          title: "Đã lưu ảnh tạm",
+          description: `${file.name} sẽ được tải lên khi bạn lưu món.`,
         });
       } catch (error: any) {
         notify({
           tone: "error",
-          title: "Upload thất bại",
-          description: error.message || `Không thể upload ảnh ${file.name}`,
+          title: "Không thể xử lý ảnh",
+          description: error?.message || `Không thể lưu tạm ảnh ${file.name}.`,
         });
-      } finally {
-        setUploadingImages((prev) => prev.filter((id) => id !== fileId));
       }
     }
 
-    // Reset input để có thể chọn lại file cùng tên
     e.target.value = "";
   };
-  const handleRemoveImage = (index: number) => {
-    setFormState((prev) => ({
-      ...prev,
-      imageUrls: prev.imageUrls.filter((_, i) => i !== index),
-    }));
+  const handleRemoveImage = (imageId: string, source: "remote" | "draft") => {
+    if (source === "remote") {
+      setFormState((prev) => ({
+        ...prev,
+        imageUrls: prev.imageUrls.filter((url) => url !== imageId),
+      }));
+      return;
+    }
+    setImageDrafts((prev) => prev.filter((draft) => draft.id !== imageId));
   };
 
   const handleRemoveSize = (index: number) => {
@@ -547,6 +671,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
 
   // Recipe Handlers
   const resetRecipeDraft = (options?: VersionOption[]) => {
+    setEditingRecipeId(null);
     const availableVersion = getFirstAvailableVersion(options);
     setRecipeDraftVersionId(availableVersion?.id || "");
     const generatedName = availableVersion
@@ -566,7 +691,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     }
   };
 
-  const handleAddRecipe = async () => {
+  const handleOpenCreateRecipe = async () => {
     if (dishIngredients.length === 0) {
       notify({
         tone: "warning",
@@ -592,13 +717,56 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     setIsRecipeModalOpen(true);
   };
 
+  const handleEditRecipe = (recipeId: string) => {
+    const target = recipes.find((recipe) => recipe.id === recipeId);
+    if (!target) {
+      notify({
+        tone: "error",
+        title: "Không tìm thấy công thức",
+        description: "Vui lòng tải lại dữ liệu và thử lại.",
+      });
+      return;
+    }
+    setEditingRecipeId(recipeId);
+    setRecipeDraftName(target.name);
+    setRecipeDraftVersionId(target.versionId || "");
+    const presetDrafts =
+      target.ingredients.length > 0
+        ? target.ingredients
+            .map((item) => ({
+              ingredientId: item.ingredient?.id || "",
+              quantity: item.quantity,
+            }))
+            .filter((draft) => draft.ingredientId)
+        : [];
+    if (presetDrafts.length > 0) {
+      setRecipeDraftIngredients(presetDrafts);
+    } else if (ingredientOptions[0]) {
+      setRecipeDraftIngredients([
+        { ingredientId: ingredientOptions[0].id, quantity: 0 },
+      ]);
+    } else {
+      setRecipeDraftIngredients([]);
+    }
+    setIsRecipeModalOpen(true);
+  };
+
   const handleCloseRecipeModal = () => {
     setIsRecipeModalOpen(false);
+    setEditingRecipeId(null);
     setRecipeDraftVersionId("");
+    setRecipeDraftIngredients([]);
+    setRecipeDraftName("");
   };
 
   const handleDraftVersionChange = (versionId: string) => {
-    if (versionId && recipes.some((recipe) => recipe.versionId === versionId)) {
+    const duplicated =
+      versionId &&
+      recipes.some(
+        (recipe) =>
+          recipe.versionId === versionId && recipe.id !== editingRecipeId
+      );
+    if (duplicated) {
       notify({
         tone: "warning",
         title: "Phiên bản đã được sử dụng",
@@ -702,7 +870,10 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       });
       return;
     }
-    if (recipes.some((r) => r.versionId === recipeDraftVersionId)) {
+    const duplicateVersion = recipes.some(
+      (r) => r.versionId === recipeDraftVersionId && r.id !== editingRecipeId
+    );
+    if (duplicateVersion) {
       notify({
         tone: "warning",
         title: "Phiên bản đã được sử dụng",
@@ -773,24 +944,47 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       });
     }
 
-    const newRecipe: Recipe = {
-      id: generateUniqueRecipeId(),
+    const baseRecipe: Recipe = {
+      id: editingRecipeId || generateUniqueRecipeId(),
       name: recipeDraftName.trim(),
       ingredients: recipeIngredients,
       versionId: recipeDraftVersionId,
       versionName: selectedVersion.name,
     };
 
-    setRecipes((prev) => [...prev, newRecipe]);
-    setSelectedRecipeForIngredients(newRecipe.id);
-    setSelectedRecipeDetailId(newRecipe.id);
+    if (editingRecipeId) {
+      setRecipes((prev) =>
+        prev.map((r) => (r.id === editingRecipeId ? baseRecipe : r))
+      );
+      const recipeClone: Recipe = JSON.parse(JSON.stringify(baseRecipe));
+      setFormState((prev) => ({
+        ...prev,
+        sizes: prev.sizes.map((s) =>
+          s.recipe.id === editingRecipeId ? { ...s, recipe: recipeClone } : s
+        ),
+      }));
+      setSelectedRecipeForIngredients(baseRecipe.id);
+      setSelectedRecipeDetailId(baseRecipe.id);
+      notify({
+        tone: "success",
+        title: "Đã cập nhật công thức",
+        description: `Công thức "${baseRecipe.name}" đã được cập nhật.`,
+      });
+    } else {
+      setRecipes((prev) => [...prev, baseRecipe]);
+      setSelectedRecipeForIngredients(baseRecipe.id);
+      setSelectedRecipeDetailId(baseRecipe.id);
+      notify({
+        tone: "success",
+        title: "Đã thêm công thức",
+        description: `Công thức "${baseRecipe.name}" đã được tạo.`,
+      });
+    }
+
     setIsRecipeModalOpen(false);
+    setEditingRecipeId(null);
     setRecipeDraftVersionId("");
-    notify({
-      tone: "success",
-      title: "Đã thêm công thức",
-      description: `Công thức "${newRecipe.name}" đã được tạo.`,
-    });
+    setRecipeDraftIngredients([]);
   };
 
   const handleRemoveRecipe = (recipeId: string) => {
@@ -1000,6 +1194,23 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     }));
   };
 
+  const uploadDraftImages = async (): Promise<string[]> => {
+    if (imageDrafts.length === 0) return [];
+    const uploadedUrls: string[] = [];
+    for (const draft of imageDrafts) {
+      try {
+        const file = dataUrlToFile(draft.dataUrl, draft.name, draft.type);
+        const result = await menuApi.uploadImage(file);
+        uploadedUrls.push(result.url);
+      } catch (error: any) {
+        throw new Error(
+          error?.message || `Không thể upload ảnh ${draft.name}.`
+        );
+      }
+    }
+    return uploadedUrls;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const {
@@ -1012,7 +1223,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       sizes,
     } = formState;
 
-    if (!name || sizes.length === 0 || imageUrls.length === 0) {
+    const totalImagesCount = formState.imageUrls.length + imageDrafts.length;
+
+    if (!name || sizes.length === 0 || totalImagesCount === 0) {
       notify({
         tone: "error",
         title: "Thiếu thông tin món ăn",
@@ -1046,6 +1259,28 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       (cat) => cat.id === categoryId || cat.name === category
     );
 
+    let imageUrlsForPayload = [...formState.imageUrls];
+
+    if (!itemToEdit) {
+      try {
+        const uploadedUrls = await uploadDraftImages();
+        if (uploadedUrls.length > 0) {
+          imageUrlsForPayload = [...imageUrlsForPayload, ...uploadedUrls];
+          setFormState((prev) => ({ ...prev, imageUrls: imageUrlsForPayload }));
+          setImageDrafts([]);
+        }
+      } catch (error: any) {
+        notify({
+          tone: "error",
+          title: "Upload ảnh thất bại",
+          description:
+            error?.message ||
+            "Không thể tải ảnh lên server. Vui lòng thử lại trước khi lưu món.",
+        });
+        return;
+      }
+    }
+
     if (itemToEdit) {
       // TODO: Implement update API
       updateMenuItem({
@@ -1054,7 +1289,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         description,
         category: matchedCategory?.name || category,
         categoryId: matchedCategory?.id ?? categoryId ?? itemToEdit?.categoryId,
-        imageUrls,
+        imageUrls: imageUrlsForPayload,
         inStock,
         sizes,
       });
@@ -1085,7 +1320,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
           TenMonAn: name,
           MaDanhMuc: matchedCategory?.id || categoryId || null,
           IsShow: true,
-          HinhAnhUrls: imageUrls,
+          HinhAnhUrls: imageUrlsForPayload,
           PhienBanMonAns: phienBanMonAns,
         };
 
@@ -1097,7 +1332,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
           description,
           category: matchedCategory?.name || category,
           categoryId: matchedCategory?.id ?? categoryId,
-          imageUrls,
+          imageUrls: imageUrlsForPayload,
           inStock,
           sizes,
         });
@@ -1209,23 +1444,6 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                       ))}
                     </select>
                   </div>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="description"
-                    className="block text-sm font-medium text-gray-700"
-                  >
-                    Mô tả
-                  </label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    value={formState.description}
-                    onChange={handleInputChange}
-                    rows={3}
-                    className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 resize-none"
-                  />
                 </div>
 
                 <div className="space-y-3">
@@ -1342,28 +1560,29 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                     Hình ảnh
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {formState.imageUrls.map((url, index) => {
-                      const imageUrl =
-                        url.startsWith("http://") || url.startsWith("https://")
-                          ? url
-                          : `${BASE_URL}/${url.replace(/^\//, "")}`;
-                      return (
-                        <div key={index} className="relative">
-                          <img
-                            src={imageUrl}
-                            alt={`Preview ${index}`}
-                            className="w-20 h-20 rounded-md object-cover border border-gray-200"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveImage(index)}
-                            className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 shadow-lg transition-transform hover:scale-110"
-                          >
-                            <XIcon className="w-3 h-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
+                    {displayImages.map((image) => (
+                      <div key={image.id} className="relative">
+                        <img
+                          src={image.url}
+                          alt="Preview"
+                          className="w-20 h-20 rounded-md object-cover border border-gray-200"
+                        />
+                        {image.source === "draft" && (
+                          <span className="absolute bottom-1 left-1 text-[10px] font-semibold bg-white/80 text-gray-700 px-1 rounded">
+                            Tạm
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRemoveImage(image.id, image.source)
+                          }
+                          className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 shadow-lg transition-transform hover:scale-110"
+                        >
+                          <XIcon className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
                     <label
                       htmlFor="image-upload"
                       className="cursor-pointer w-20 h-20 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-md hover:border-indigo-500 hover:bg-gray-50 transition"
@@ -1402,7 +1621,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={handleAddRecipe}
+                  onClick={handleOpenCreateRecipe}
                   disabled={
                     ingredientOptions.length === 0 ||
                     loadingVersions ||
@@ -1436,6 +1655,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                 ) : (
                   <div className="space-y-3">
                     {recipes.map((recipe) => {
+                      const recipeCost = calculateRecipeCost(recipe);
                       const versions = formState.sizes.filter(
                         (size) => size.recipe.id === recipe.id
                       );
@@ -1449,24 +1669,38 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                               : "border-gray-200 bg-gray-50"
                           }`}
                         >
-                          <button
-                            type="button"
-                            onClick={() => handleToggleRecipeDetail(recipe.id)}
-                            className="w-full flex items-center justify-between px-4 py-3 text-left"
-                          >
-                            <div>
-                              <p className="font-medium text-gray-900">
-                                {recipe.name}
-                              </p>
-                              <p className="text-xs text-gray-500 mt-1">
-                                {recipe.ingredients.length} nguyên liệu •{" "}
-                                {versions.length} phiên bản
-                              </p>
-                            </div>
-                            <span className="text-xs text-indigo-600">
-                              {isActive ? "Thu gọn" : "Xem chi tiết"}
-                            </span>
-                          </button>
+                          <div className="flex items-center justify-between gap-3 px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleRecipeDetail(recipe.id)
+                              }
+                              className="flex-1 flex items-center justify-between text-left"
+                            >
+                              <div>
+                                <p className="font-medium text-gray-900">
+                                  {recipe.name}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {recipe.ingredients.length} nguyên liệu •{" "}
+                                  {versions.length} phiên bản
+                                </p>
+                                <p className="text-xs font-semibold text-emerald-600 mt-1">
+                                  Chi phí nguyên liệu: {formatVND(recipeCost)}
+                                </p>
+                              </div>
+                              <span className="text-xs text-indigo-600">
+                                {isActive ? "Thu gọn" : "Xem chi tiết"}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleEditRecipe(recipe.id)}
+                              className="text-xs font-semibold text-indigo-700 hover:text-indigo-900 px-2 py-1 border border-indigo-200 rounded transition"
+                            >
+                              Sửa
+                            </button>
+                          </div>
                           {isActive && (
                             <div className="border-t border-gray-200 px-4 py-3 space-y-4 bg-white rounded-b-lg">
                               <div>
@@ -1498,38 +1732,6 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                                   </p>
                                 )}
                               </div>
-                              <div>
-                                <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
-                                  Phiên bản sử dụng công thức này
-                                </h4>
-                                {versions.length > 0 ? (
-                                  <div className="space-y-2">
-                                    {versions.map((version, idx) => (
-                                      <div
-                                        key={`${recipe.id}-version-${idx}`}
-                                        className="flex items-center justify-between text-sm text-gray-700"
-                                      >
-                                        <span>
-                                          {version.name || "Chưa đặt tên"}
-                                        </span>
-                                        <span className="text-gray-500">
-                                          {version.price?.toLocaleString(
-                                            "vi-VN",
-                                            {
-                                              style: "currency",
-                                              currency: "VND",
-                                            }
-                                          ) || "-"}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <p className="text-xs text-gray-500">
-                                    Chưa có phiên bản nào gán công thức này.
-                                  </p>
-                                )}
-                              </div>
                             </div>
                           )}
                         </div>
@@ -1550,11 +1752,14 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900">
-                    Thêm công thức mới
+                    {editingRecipeId
+                      ? "Chỉnh sửa công thức"
+                      : "Thêm công thức mới"}
                   </h3>
                   <p className="text-sm text-gray-500 mt-1">
-                    Mỗi công thức cần ít nhất một nguyên liệu với số lượng cụ
-                    thể.
+                    {editingRecipeId
+                      ? "Cập nhật tên, phiên bản hoặc nguyên liệu cho công thức đã tạo."
+                      : "Mỗi công thức cần ít nhất một nguyên liệu với số lượng cụ thể."}
                   </p>
                 </div>
                 <button
@@ -1590,7 +1795,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                   <option value="">Chọn phiên bản</option>
                   {versionOptions.map((opt) => {
                     const disabled = recipes.some(
-                      (recipe) => recipe.versionId === opt.id
+                      (recipe) =>
+                        recipe.versionId === opt.id &&
+                        recipe.id !== editingRecipeId
                     );
                     return (
                       <option key={opt.id} value={opt.id} disabled={disabled}>

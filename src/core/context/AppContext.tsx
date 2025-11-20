@@ -345,6 +345,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
                     ing.SoLuongTonKho ||
                     0
                 ),
+                price: Number(ing.giaBan || ing.GiaBan || 0) || undefined,
               };
               const minStockVal = Number(ing.minStock || ing.MinStock || 0);
               if (minStockVal > 0) {

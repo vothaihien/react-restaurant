@@ -3,7 +3,6 @@ import { useAppContext } from "@/core/context/AppContext";
 import MenuItemModal from "@/components/MenuItemModal";
 import type { MenuItem, Recipe } from "@/features/menu/domain/types";
 import { PlusCircleIcon, EditIcon, TrashIcon } from "@/components/Icons";
-import { formatVND } from "@/shared/utils";
 import { useFeedback } from "@/core/context/FeedbackContext";
 import { BASE_URL } from "@/shared/utils/api";
 import { menuApi } from "@/shared/api/menu";
@@ -211,15 +210,6 @@ const MenuView: React.FC = () => {
     }
   };
 
-  const getPriceRange = (item: MenuItem): string => {
-    if (!item.sizes || item.sizes.length === 0) return "N/A";
-    if (item.sizes.length === 1) return formatVND(item.sizes[0].price);
-    const prices = item.sizes.map((s) => s.price);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    return `${formatVND(minPrice)} - ${formatVND(maxPrice)}`;
-  };
-
   const filteredItems = useMemo(() => {
     const items = remoteItems ?? menuItems;
     if (!selectedCategory) return items;
@@ -340,6 +330,12 @@ const MenuView: React.FC = () => {
               <tr>
                 <th
                   scope="col"
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"
+                >
+                  STT
+                </th>
+                <th
+                  scope="col"
                   className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"
                 >
                   Món
@@ -354,12 +350,6 @@ const MenuView: React.FC = () => {
                   scope="col"
                   className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"
                 >
-                  Giá
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"
-                >
                   Trạng thái
                 </th>
                 <th scope="col" className="relative px-6 py-3">
@@ -369,66 +359,68 @@ const MenuView: React.FC = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {paginatedItems.length > 0 ? (
-                paginatedItems.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-12 w-12">
-                          <img
-                            className="h-12 w-12 rounded-md object-cover border border-gray-200"
-                            src={item.imageUrls[0]}
-                            alt={item.name}
-                          />
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {item.name}
+                paginatedItems.map((item, index) => {
+                  const orderNumber =
+                    (currentPage - 1) * itemsPerPage + index + 1;
+                  return (
+                    <tr
+                      key={item.id}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {orderNumber}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-12 w-12">
+                            <img
+                              className="h-12 w-12 rounded-md object-cover border border-gray-200"
+                              src={item.imageUrls[0]}
+                              alt={item.name}
+                            />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900">
+                              {item.name}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-700">
-                        {item.category}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 font-semibold">
-                        {getPriceRange(item)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          item.inStock
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {item.inStock ? "Còn hàng" : "Hết hàng"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-3">
-                        <button
-                          onClick={() => handleOpenEditModal(item)}
-                          className="text-indigo-600 hover:text-indigo-700 transition"
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-700">
+                          {item.category}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            item.inStock
+                              ? "bg-green-100 text-green-800"
+                              : "bg-red-100 text-red-800"
+                          }`}
                         >
-                          <EditIcon className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteItem(item)}
-                          className="text-red-600 hover:text-red-700 transition"
-                        >
-                          <TrashIcon className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {item.inStock ? "Còn hàng" : "Hết hàng"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            onClick={() => handleOpenEditModal(item)}
+                            className="text-indigo-600 hover:text-indigo-700 transition"
+                          >
+                            <EditIcon className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteItem(item)}
+                            className="text-red-600 hover:text-red-700 transition"
+                          >
+                            <TrashIcon className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td
