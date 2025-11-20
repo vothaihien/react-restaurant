@@ -1,34 +1,42 @@
-// src/services/inventoryService.ts
-import { request } from './apiClient';
+// src/services/InventoryService.ts
+import axiosClient from '../api/axiosClient';
+// Import Type từ file chung
+import { NhapKhoPayload } from '../types/InventoryTypes'; 
 
-export const inventoryService = {
-    getIngredients: () => 
-        request<any[]>('/api/InventoryAPI/ingredients'),
-
-    getIngredient: (maNguyenLieu: string) => 
-        request<any>(`/api/InventoryAPI/ingredients/${encodeURIComponent(maNguyenLieu)}`),
-
-    createIngredient: (data: {
-        TenNguyenLieu: string;
-        DonViTinh?: string;
-        SoLuongTonKho?: number;
-    }) => request<any>('/api/InventoryAPI/ingredients', { method: 'POST', body: data }),
-
-    importInventory: (data: {
-        MaNhanVien: string;
-        MaNhaCungCap?: string;
-        ChiTiet: Array<{ MaCungUng: string; SoLuong: number; GiaNhap: number }>;
-        GhiChu?: string;
-    }) => request<{ message: string; nhapHang: any }>('/api/InventoryAPI/import', {
-        method: 'POST',
-        body: data
-    }),
-
-    getInventoryTransactions: (fromDate?: string, toDate?: string) => {
-        const qs = new URLSearchParams();
-        if (fromDate) qs.set('fromDate', fromDate);
-        if (toDate) qs.set('toDate', toDate);
-        const suffix = qs.toString() ? `?${qs.toString()}` : '';
-        return request<any[]>(`/api/InventoryAPI/transactions${suffix}`);
+const InventoryService = {
+    // 1. Lấy danh sách Nhà Cung Cấp
+    getSuppliers: () => {
+        return axiosClient.get('/SuppliersAPI');
     },
+
+    // 2. Lấy nguyên liệu theo NCC
+    getIngredientsBySupplier: (maNCC: string) => {
+        return axiosClient.get(`/InventoryAPI/ingredients-by-supplier/${maNCC}`);
+    },
+
+    // 3. Lấy lịch sử phiếu nhập
+    getHistory: (trangThai: string | null) => {
+        let url = '/InventoryAPI/transactions';
+        if (trangThai) {
+            url += `?trangThai=${trangThai}`;
+        }
+        return axiosClient.get(url);
+    },
+
+    // 4. Lấy chi tiết 1 phiếu
+    getReceiptDetail: (maPhieu: string) => {
+        return axiosClient.get(`/InventoryAPI/receipt-detail/${maPhieu}`);
+    },
+
+    // 5. Tạo phiếu mới (Dùng type NhapKhoPayload)
+    createReceipt: (data: NhapKhoPayload) => {
+        return axiosClient.post('/InventoryAPI/import', data);
+    },
+
+    // 6. Cập nhật phiếu cũ
+    updateReceipt: (maPhieu: string, data: NhapKhoPayload) => {
+        return axiosClient.put(`/InventoryAPI/update?maPhieu=${maPhieu}`, data);
+    }
 };
+
+export default InventoryService;

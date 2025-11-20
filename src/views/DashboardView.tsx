@@ -3,8 +3,6 @@ import { useAppContext } from '@/core/context/AppContext';
 import TableCard from '@/components/TableCard';
 import OrderModal from '@/components/OrderModal';
 import PaymentModal from '@/components/PaymentModal';
-import type { Table } from '@/core/types';
-import { TableStatus } from '@/core/types'; 
 import OrderDetailModal from '@/components/OrderDetailModal';
 
 // *** CÁC IMPORT NÂNG CẤP (MUI, Service...) ***
@@ -29,6 +27,7 @@ import {
   HelpOutline,
 } from "@mui/icons-material";
 import { orderService } from '@/services/orderService';
+import { Table, TableStatus } from 'types';
 
 // ==========================================================
 // === COMPONENT CHÚ THÍCH (STATUS LEGEND) ===
@@ -138,7 +137,6 @@ const DashboardView: React.FC = () => {
                     return { 
                         ...table, 
                         orderId: matchedOrder.id,
-                        // SỬA LỖI TYPE Ở ĐÂY: Dùng Enum TableStatus.Occupied thay vì string cứng
                         status: TableStatus.Occupied 
                     };
                 }
@@ -179,7 +177,7 @@ const DashboardView: React.FC = () => {
                     return { 
                         ...table, 
                         orderId: matchedOrder.id,
-                        status: TableStatus.Occupied 
+                        status: TableStatus.Occupied
                     };
                 }
                 
@@ -285,12 +283,6 @@ const DashboardView: React.FC = () => {
             {/* === KHỐI 2: SƠ ĐỒ BÀN === */}
             <div>
                 <h2 className="text-xl font-bold mb-3 text-gray-800">Sơ đồ bàn</h2>
-                
-                {/* DEBUG LOG - XÓA ĐI KHI ĐÃ CHẠY ỔN */}
-                {/* <div className="text-xs text-gray-400 mb-2">
-                   DEBUG: {JSON.stringify(tables.map(t => ({ id: t.id, oid: t.orderId, status: t.status })).slice(0,3))}
-                </div> 
-                */}
 
                 {loading ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}><CircularProgress /></Box>

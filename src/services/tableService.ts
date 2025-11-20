@@ -1,6 +1,8 @@
 // src/services/tableService.ts
 import { request } from './apiClient';
 
+
+
 export interface Tang {
     maTang: string;
     tenTang: string;

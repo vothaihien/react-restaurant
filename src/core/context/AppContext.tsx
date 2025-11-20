@@ -143,10 +143,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, [reservationToOrderMap]);
     // Helper function to map Vietnamese status strings to TableStatus enum
     const mapTableStatus = (tenTrangThai: string | undefined): TableStatus => {
-        if (!tenTrangThai) return TableStatus.Available;
+        if (!tenTrangThai) return TableStatus.Empty;
         const statusLower = tenTrangThai.toLowerCase().trim();
         if (statusLower.includes('trống') || statusLower.includes('available') || statusLower.includes('sẵn sàng')) {
-            return TableStatus.Available;
+            return TableStatus.Empty;
         }
         if (statusLower.includes('đang sử dụng') || statusLower.includes('occupied') || statusLower.includes('đang dùng')) {
             return TableStatus.Occupied;
@@ -155,9 +155,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             return TableStatus.Reserved;
         }
         if (statusLower.includes('dọn') || statusLower.includes('cleaning') || statusLower.includes('bảo trì')) {
-            return TableStatus.CleaningNeeded;
+            return TableStatus.Maintenance;
         }
-        return TableStatus.Available; // Default
+        return TableStatus.Empty; // Default
     };
 
 
@@ -280,6 +280,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // 1. Tìm đơn hàng hiện tại của bàn này
         const currentOrder = getOrderForTable(tableId);
 
+        console.error(currentOrder);
+
         // NẾU KHÔNG TÌM THẤY ĐƠN -> DỪNG LUÔN (Bàn trống không cho thêm món)
         if (!currentOrder) {
             console.error(`Bàn ${tableId} chưa có đơn hàng (Trạng thái trống). Vui lòng tạo đơn/Check-in trước.`);
@@ -362,12 +364,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 const data = await Api.getTables();
                 if (Array.isArray(data) && data.length > 0) {
                     const mapped: Table[] = data.map((b: any) => ({
-                        id: b.maBan || b.MaBan,
-                        name: b.tenBan || b.TenBan,
-                        capacity: Number(b.sucChua || b.SucChua) || 0,
-                        status: mapTableStatus(b.tenTrangThai || b.TenTrangThai),
-                        orderId: null
-                    }));
+    id: b.maBan || b.MaBan,
+    name: b.tenBan || b.TenBan,
+    capacity: Number(b.sucChua || b.SucChua) || 0,
+    status: mapTableStatus(b.tenTrangThai || b.TenTrangThai),
+    
+    // 👇 THÊM DÒNG NÀY VÀO
+    maTang: b.maTang || b.MaTang || "", 
+    
+    orderId: null
+}));
                     setTables(mapped);
                 }
             } catch { }
@@ -600,12 +606,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setOrders(prev => prev.map(o => o.id === orderId ? { ...o, closedAt: Date.now(), paymentMethod } : o));
         const order = orders.find(o => o.id === orderId);
         if (order) {
-            setTables(prev => prev.map(t => t.id === order.tableId ? { ...t, status: TableStatus.CleaningNeeded, orderId } : t));
+            setTables(prev => prev.map(t => t.id === order.tableId ? { ...t, status: TableStatus.Maintenance, orderId } : t));
         }
     };
 
     const updateTableStatus = (tableId: string, status: TableStatus) => {
-        setTables(prev => prev.map(t => t.id === tableId ? { ...t, status, orderId: status === TableStatus.Available ? null : t.orderId } : t));
+        setTables(prev => prev.map(t => t.id === tableId ? { ...t, status, orderId: status === TableStatus.Empty ? null : t.orderId } : t));
     }
 
     const getOrderForTable = (tableId: string): Order | undefined => {
@@ -705,9 +711,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // 支持多张桌子：取消预订时将桌子状态改回 Available
         if (res) {
             if (res.tableIds && res.tableIds.length > 0) {
-                setTables(prev => prev.map(t => res.tableIds!.includes(t.id) ? { ...t, status: TableStatus.Available } : t));
+                setTables(prev => prev.map(t => res.tableIds!.includes(t.id) ? { ...t, status: TableStatus.Empty } : t));
             } else if (res.tableId) {
-                setTables(prev => prev.map(t => t.id === res.tableId ? { ...t, status: TableStatus.Available } : t));
+                setTables(prev => prev.map(t => t.id === res.tableId ? { ...t, status: TableStatus.Empty } : t));
             }
         }
     };
@@ -737,9 +743,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'NoShow' } : r));
         if (res.tableIds && res.tableIds.length > 0) {
-            setTables(prev => prev.map(t => res.tableIds!.includes(t.id) ? { ...t, status: TableStatus.Available } : t));
+            setTables(prev => prev.map(t => res.tableIds!.includes(t.id) ? { ...t, status: TableStatus.Empty } : t));
         } else if (res.tableId) {
-            setTables(prev => prev.map(t => t.id === res.tableId ? { ...t, status: TableStatus.Available } : t));
+            setTables(prev => prev.map(t => t.id === res.tableId ? { ...t, status: TableStatus.Empty } : t));
         }
     };
 
@@ -829,7 +835,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Tables CRUD
     const addTable = (t: Omit<Table, 'id' | 'status' | 'orderId'>) => {
         const newId = generateDailyId(tables.map(tb => tb.id));
-        const table: Table = { id: newId, name: t.name, capacity: t.capacity, status: TableStatus.Available, orderId: null };
+        const table: Table = { 
+    id: newId, 
+    name: t.name, 
+    capacity: t.capacity, 
+    status: TableStatus.Empty, 
+    orderId: null,
+    maTang: t.maTang // <--- THÊM CÁI NÀY VÀO
+    };
         setTables(prev => [...prev, table]);
     };
     const updateTable = (t: Table) => {

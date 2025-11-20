@@ -253,10 +253,10 @@ const CustomerPortalView: React.FC = () => {
         const statusStr = typeof statusValue === 'string' ? statusValue.toLowerCase().trim() : '';
 
         // Check if it's the enum value
-        if (statusValue === TableStatus.Available) {
+        if (statusValue === TableStatus.Empty) {
             return `${base} border-green-500 bg-green-50 hover:bg-green-100`;
         }
-        if (statusValue === TableStatus.Occupied || statusValue === TableStatus.Reserved || statusValue === TableStatus.CleaningNeeded) {
+        if (statusValue === TableStatus.Occupied || statusValue === TableStatus.Reserved) {
             return `${base} border-gray-300 bg-gray-50 opacity-60 cursor-not-allowed`;
         }
 
@@ -412,7 +412,7 @@ const CustomerPortalView: React.FC = () => {
                                         </div>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                                             {filteredTables.map((t: any) => {
-                                                const isAvailable = t.status === 'Đang trống' || t.status === 'Available' || t.status === TableStatus.Available;
+                                                const isAvailable = t.status === 'Đang trống' || t.status === 'Available' || t.status === TableStatus.Empty;
                                                 const disabled = !isAvailable;
                                                 const selected = selectedTableIds.includes(t.id);
                                                 return (
@@ -440,7 +440,7 @@ const CustomerPortalView: React.FC = () => {
                                                             </div>
                                                         )}
                                                         <div className="mt-1 text-sm text-gray-700">
-                                                            {t.status === 'Đang trống' || t.status === 'Available' || t.status === TableStatus.Available
+                                                            {t.status === 'Đang trống' || t.status === 'Available' || t.status === TableStatus.Empty
                                                                 ? 'Trống'
                                                                 : t.status === 'Đã đặt' || t.status === 'Reserved' || t.status === TableStatus.Reserved
                                                                     ? 'Đã đặt'

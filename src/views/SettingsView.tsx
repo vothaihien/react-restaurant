@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useAppContext } from '@/core/context/AppContext';
-import { TableStatus } from '@/features/tables/domain/types';
-
+import { TableStatus } from 'types';
 const SettingsView: React.FC = () => {
     const { tables, updateTableStatus } = useAppContext();
     const [selectedTable, setSelectedTable] = useState<string | null>(null);
@@ -64,7 +63,7 @@ const SettingsView: React.FC = () => {
                     </div>
                     <div>
                         <span className="font-semibold">Bàn trống:</span>{' '}
-                        {tables.filter(t => t.status === TableStatus.Available).length}
+                        {tables.filter(t => t.status === TableStatus.Empty).length}
                     </div>
                 </div>
             </div>
