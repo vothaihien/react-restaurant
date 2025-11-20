@@ -38,6 +38,8 @@ const MenuView: React.FC = () => {
           const tenDanhMuc = m.tenDanhMuc || m.TenDanhMuc || "";
           const sizes = (m.phienBanMonAns || m.PhienBanMonAns || []).map(
             (p: any) => {
+              const versionId = p.maPhienBan || p.MaPhienBan || "";
+              const versionName = p.tenPhienBan || p.TenPhienBan || "";
               // Load công thức từ CongThucNauAns nếu có
               const congThucNauAns = p.congThucNauAns || p.CongThucNauAns || [];
               const recipeIngredients = congThucNauAns.map((ct: any) => {
@@ -52,11 +54,15 @@ const MenuView: React.FC = () => {
               });
 
               return {
-                name: p.tenPhienBan || p.TenPhienBan,
+                name: versionName || p.tenPhienBan || p.TenPhienBan,
                 price: Number(p.gia || p.Gia) || 0,
                 recipe: {
-                  id: `recipe_${p.maPhienBan || p.MaPhienBan}`,
-                  name: `Công thức ${p.tenPhienBan || p.TenPhienBan}`,
+                  id: `recipe_${versionId || p.maPhienBan || p.MaPhienBan}`,
+                  name: `Công thức ${
+                    versionName || p.tenPhienBan || p.TenPhienBan
+                  }`,
+                  versionId,
+                  versionName: versionName || p.tenPhienBan || p.TenPhienBan,
                   ingredients: recipeIngredients,
                 },
               };
@@ -119,6 +125,8 @@ const MenuView: React.FC = () => {
         fullData.PhienBanMonAns ||
         []
       ).map((p: any) => {
+        const versionId = p.maPhienBan || p.MaPhienBan || "";
+        const versionName = p.tenPhienBan || p.TenPhienBan || "";
         // Lấy công thức từ CongThucNauAns (đã được flatten trong DTO)
         const congThucNauAns = p.congThucNauAns || p.CongThucNauAns || [];
         const recipeIngredients = congThucNauAns.map((ct: any) => {
@@ -134,13 +142,15 @@ const MenuView: React.FC = () => {
 
         // Tạo recipe cho phiên bản này
         const recipe: Recipe = {
-          id: `recipe_${p.maPhienBan || p.MaPhienBan}`,
-          name: `Công thức ${p.tenPhienBan || p.TenPhienBan}`,
+          id: `recipe_${versionId || p.maPhienBan || p.MaPhienBan}`,
+          name: `Công thức ${versionName || p.tenPhienBan || p.TenPhienBan}`,
+          versionId,
+          versionName: versionName || p.tenPhienBan || p.TenPhienBan,
           ingredients: recipeIngredients,
         };
 
         return {
-          name: p.tenPhienBan || p.TenPhienBan,
+          name: versionName || p.tenPhienBan || p.TenPhienBan,
           price: Number(p.gia || p.Gia) || 0,
           recipe: recipe,
         };
