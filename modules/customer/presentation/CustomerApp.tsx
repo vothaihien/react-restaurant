@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import CustomerPortalView, {
   CustomerTab,
-} from "../../../src/views/CustomerPortalView";
+} from "./../../customer/presentation/views/CustomerPortalView";
 
 const SiteHeader: React.FC<{
   onBook?: () => void;

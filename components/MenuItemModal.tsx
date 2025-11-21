@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import type {
   MenuItem,
   MenuItemSize,
@@ -6,11 +6,71 @@ import type {
   Recipe,
   Category,
 } from "@/features/menu/domain/types";
+import type { Ingredient } from "@/features/inventory/domain/types";
 import { useAppContext } from "@/core/context/AppContext";
 import { useFeedback } from "@/core/context/FeedbackContext";
 import { XIcon, PlusIcon, TrashIcon } from "@/components/Icons";
 import { BASE_URL } from "@/shared/utils/api";
 import { menuApi } from "@/shared/api/menu";
+import { formatVND } from "@/shared/utils";
+
+type RecipeDraftIngredient = {
+  ingredientId: string;
+  quantity: number | "";
+};
+
+type DishIngredientDraft = {
+  ingredientId: string;
+  defaultQuantity: number | "";
+};
+
+type VersionOption = {
+  id: string;
+  name: string;
+  status?: string;
+  order?: number | null;
+};
+
+type MenuImageDraft = {
+  id: string;
+  name: string;
+  dataUrl: string;
+  type: string;
+  size: number;
+  createdAt: number;
+  lastModified?: number;
+};
+
+const fileToDataUrl = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () =>
+      reject(new Error(`Không thể đọc file ${file.name}. Vui lòng thử lại.`));
+    reader.readAsDataURL(file);
+  });
+};
+
+const dataUrlToFile = (
+  dataUrl: string,
+  fileName: string,
+  mimeType?: string
+): File => {
+  const parts = dataUrl.split(",");
+  if (parts.length !== 2) {
+    throw new Error("Dữ liệu ảnh không hợp lệ.");
+  }
+  const meta = parts[0];
+  const base64Data = parts[1];
+  const mimeMatch = meta.match(/data:(.*?);base64/);
+  const mime = mimeType || mimeMatch?.[1] || "image/png";
+  const binary = atob(base64Data);
+  const array = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    array[i] = binary.charCodeAt(i);
+  }
+  return new File([array], fileName, { type: mime });
+};
 
 interface MenuItemModalProps {
   isOpen: boolean;
@@ -34,7 +94,116 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [selectedRecipeForIngredients, setSelectedRecipeForIngredients] =
     useState<string | null>(null);
+  const [selectedRecipeDetailId, setSelectedRecipeDetailId] = useState<
+    string | null
+  >(null);
   const [uploadingImages, setUploadingImages] = useState<string[]>([]);
+  const [isRecipeModalOpen, setIsRecipeModalOpen] = useState(false);
+  const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
+  const [recipeDraftName, setRecipeDraftName] = useState("");
+  const [recipeDraftVersionId, setRecipeDraftVersionId] = useState("");
+  const [recipeDraftIngredients, setRecipeDraftIngredients] = useState<
+    RecipeDraftIngredient[]
+  >([]);
+  const [versionOptions, setVersionOptions] = useState<VersionOption[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [dishIngredients, setDishIngredients] = useState<DishIngredientDraft[]>(
+    []
+  );
+  const [imageDrafts, setImageDrafts] = useState<MenuImageDraft[]>([]);
+
+  const ingredientMap = useMemo(() => {
+    const map = new Map<string, Ingredient>();
+    ingredients.forEach((ing) => {
+      if (ing.id) {
+        map.set(ing.id, ing);
+      }
+    });
+    if (itemToEdit) {
+      itemToEdit.sizes.forEach((size) => {
+        size.recipe?.ingredients?.forEach((ri) => {
+          const ing = ri.ingredient;
+          if (ing?.id && !map.has(ing.id)) {
+            map.set(ing.id, ing);
+          }
+        });
+      });
+    }
+    return map;
+  }, [ingredients, itemToEdit]);
+
+  const ingredientOptions = useMemo(
+    () => Array.from(ingredientMap.values()),
+    [ingredientMap]
+  );
+
+  const recipeIngredientOptions = useMemo(() => {
+    if (dishIngredients.length === 0) {
+      return ingredientOptions;
+    }
+    return ingredientOptions.filter((opt) =>
+      dishIngredients.some((item) => item.ingredientId === opt.id)
+    );
+  }, [ingredientOptions, dishIngredients]);
+
+  const buildDraftIngredientsFromDish =
+    useCallback((): RecipeDraftIngredient[] => {
+      if (dishIngredients.length === 0) return [];
+      return dishIngredients
+        .map((item) => {
+          const ing = ingredientMap.get(item.ingredientId);
+          if (!ing) return null;
+          return {
+            ingredientId: ing.id,
+            quantity:
+              item.defaultQuantity === "" ? "" : Number(item.defaultQuantity),
+          };
+        })
+        .filter((item): item is RecipeDraftIngredient => item !== null);
+    }, [dishIngredients, ingredientMap]);
+
+  const loadVersionOptions = useCallback(async () => {
+    setLoadingVersions(true);
+    try {
+      const data = await menuApi.getVersions();
+      const mapped: VersionOption[] = (data || [])
+        .map((item: any) => ({
+          id: item.maPhienBan || item.MaPhienBan || "",
+          name: item.tenPhienBan || item.TenPhienBan || "",
+          status: item.maTrangThai || item.MaTrangThai,
+          order:
+            typeof item.thuTu === "number"
+              ? item.thuTu
+              : typeof item.ThuTu === "number"
+              ? item.ThuTu
+              : null,
+        }))
+        .filter((item) => item.id && item.name);
+      setVersionOptions(mapped);
+      return mapped;
+    } catch (error: any) {
+      notify({
+        tone: "warning",
+        title: "Không thể tải phiên bản",
+        description:
+          error?.message ||
+          "Không thể tải danh sách phiên bản từ server. Vui lòng thử lại.",
+      });
+      return [];
+    } finally {
+      setLoadingVersions(false);
+    }
+  }, [notify]);
+
+  const getFirstAvailableVersion = useCallback(
+    (options?: VersionOption[]) => {
+      const source = options ?? versionOptions;
+      return source.find(
+        (opt) => !recipes.some((recipe) => recipe.versionId === opt.id)
+      );
+    },
+    [versionOptions, recipes]
+  );
 
   const getInitialState = (cats: Category[]): Omit<MenuItem, "id"> => ({
     name: "",
@@ -47,6 +216,43 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   });
 
   const [formState, setFormState] = useState(() => getInitialState(categories));
+
+  const displayImages = useMemo(
+    () => [
+      ...formState.imageUrls.map((url) => {
+        const normalized =
+          url.startsWith("http://") || url.startsWith("https://")
+            ? url
+            : `${BASE_URL}/${url.replace(/^\//, "")}`;
+        return {
+          id: url,
+          url: normalized,
+          source: "remote" as const,
+        };
+      }),
+      ...imageDrafts.map((draft) => ({
+        id: draft.id,
+        url: draft.dataUrl,
+        source: "draft" as const,
+      })),
+    ],
+    [formState.imageUrls, imageDrafts]
+  );
+
+  const calculateRecipeCost = useCallback(
+    (recipe: Recipe) => {
+      if (!recipe?.ingredients) return 0;
+      return recipe.ingredients.reduce((total, item) => {
+        const price =
+          item.ingredient?.price ??
+          ingredientMap.get(item.ingredient?.id || "")?.price ??
+          0;
+        const quantity = Number(item.quantity) || 0;
+        return total + price * quantity;
+      }, 0);
+    },
+    [ingredientMap]
+  );
 
   // Helper function to generate unique recipe ID
   const generateUniqueRecipeId = (): string => {
@@ -103,12 +309,46 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       });
       const uniqueRecipes = Array.from(recipeMap.values());
       setRecipes(uniqueRecipes);
+      const ingredientDefaults = new Map<string, number>();
+      uniqueRecipes.forEach((recipe) => {
+        recipe.ingredients.forEach((ri) => {
+          const ingredientId = ri.ingredient?.id;
+          if (ingredientId && !ingredientDefaults.has(ingredientId)) {
+            ingredientDefaults.set(ingredientId, ri.quantity);
+          }
+        });
+      });
+      setDishIngredients(
+        Array.from(ingredientDefaults.entries()).map(([ingredientId, qty]) => ({
+          ingredientId,
+          defaultQuantity: qty,
+        }))
+      );
     } else {
       setFormState(getInitialState(categories));
       setRecipes([]);
+      setDishIngredients([]);
     }
     setSelectedRecipeForIngredients(null);
+    setSelectedRecipeDetailId(null);
   }, [itemToEdit, isOpen, categories]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setImageDrafts([]);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (itemToEdit) {
+      setImageDrafts([]);
+    }
+  }, [itemToEdit]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    loadVersionOptions();
+  }, [isOpen, loadVersionOptions]);
 
   useEffect(() => {
     if (!itemToEdit && categories.length > 0) {
@@ -144,6 +384,59 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     }
   }, [recipes.length, recipes.map((r) => r.id).join(",")]);
 
+  useEffect(() => {
+    setFormState((prev) => {
+      const recipeIds = new Set(recipes.map((recipe) => recipe.id));
+      let changed = false;
+      const syncedSizes = prev.sizes.filter((size) => {
+        const keep = recipeIds.has(size.recipe.id);
+        if (!keep) {
+          changed = true;
+        }
+        return keep;
+      });
+      const existingRecipeIds = new Set(
+        syncedSizes.map((size) => size.recipe.id)
+      );
+      const additions: MenuItemSize[] = [];
+      recipes.forEach((recipe) => {
+        if (!existingRecipeIds.has(recipe.id)) {
+          changed = true;
+          additions.push({
+            name: recipe.versionName || recipe.name,
+            price: 0,
+            recipe: JSON.parse(JSON.stringify(recipe)),
+          });
+        }
+      });
+      if (!changed) {
+        return prev;
+      }
+      return { ...prev, sizes: [...syncedSizes, ...additions] };
+    });
+  }, [recipes]);
+
+  useEffect(() => {
+    if (
+      selectedRecipeDetailId &&
+      !recipes.some((recipe) => recipe.id === selectedRecipeDetailId)
+    ) {
+      setSelectedRecipeDetailId(null);
+    }
+  }, [recipes, selectedRecipeDetailId]);
+
+  useEffect(() => {
+    if (!isRecipeModalOpen) return;
+    if (recipeDraftVersionId) return;
+    const available = getFirstAvailableVersion();
+    if (available) {
+      setRecipeDraftVersionId(available.id);
+      setRecipeDraftName((prev) =>
+        prev ? prev : `Công thức ${available.name}`
+      );
+    }
+  }, [isRecipeModalOpen, recipeDraftVersionId, getFirstAvailableVersion]);
+
   if (!isOpen) return null;
 
   const handleInputChange = (
@@ -167,6 +460,86 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     }
   };
 
+  const handleToggleRecipeDetail = (recipeId: string) => {
+    setSelectedRecipeDetailId((prev) => (prev === recipeId ? null : recipeId));
+  };
+
+  const handleAddDishIngredient = () => {
+    if (ingredientOptions.length === 0) {
+      notify({
+        tone: "warning",
+        title: "Chưa có nguyên liệu",
+        description:
+          "Bạn cần tạo nguyên liệu trong kho trước khi gán cho món ăn.",
+      });
+      return;
+    }
+    const availableOption = ingredientOptions.find(
+      (opt) => !dishIngredients.some((item) => item.ingredientId === opt.id)
+    );
+    if (!availableOption) {
+      notify({
+        tone: "info",
+        title: "Đã dùng hết nguyên liệu",
+        description:
+          "Tất cả nguyên liệu khả dụng đã được thêm vào danh sách của món ăn.",
+      });
+      return;
+    }
+    setDishIngredients((prev) => [
+      ...prev,
+      { ingredientId: availableOption.id, defaultQuantity: "" },
+    ]);
+  };
+
+  const handleDishIngredientChange = (
+    index: number,
+    field: "ingredientId" | "defaultQuantity",
+    value: string
+  ) => {
+    setDishIngredients((prev) => {
+      const next = [...prev];
+      if (!next[index]) {
+        return prev;
+      }
+      if (field === "ingredientId") {
+        if (
+          next.some((item, idx) => idx !== index && item.ingredientId === value)
+        ) {
+          notify({
+            tone: "warning",
+            title: "Nguyên liệu trùng lặp",
+            description:
+              "Mỗi nguyên liệu chỉ cần khai báo một lần trong danh sách chung của món.",
+          });
+          return prev;
+        }
+        next[index] = { ...next[index], ingredientId: value };
+      } else {
+        next[index] = {
+          ...next[index],
+          defaultQuantity: value === "" ? "" : Number(value),
+        };
+      }
+      return next;
+    });
+  };
+
+  const handleRemoveDishIngredient = (index: number) => {
+    const removed = dishIngredients[index];
+    setDishIngredients((prev) => prev.filter((_, i) => i !== index));
+    if (removed) {
+      setRecipes((prev) =>
+        prev.map((recipe) => ({
+          ...recipe,
+          ingredients: recipe.ingredients.filter(
+            (ri) => ri.ingredient.id !== removed.ingredientId
+          ),
+        }))
+      );
+    }
+  };
+
   // Image Handlers
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -183,7 +556,6 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         continue;
       }
 
-      // Kiểm tra kích thước file (10MB)
       if (file.size > 10 * 1024 * 1024) {
         notify({
           tone: "warning",
@@ -193,67 +565,77 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         continue;
       }
 
-      const fileId = `${file.name}_${Date.now()}`;
-      setUploadingImages((prev) => [...prev, fileId]);
+      // Chế độ chỉnh sửa vẫn upload ngay lên server
+      if (itemToEdit) {
+        const fileId = `${file.name}_${Date.now()}`;
+        setUploadingImages((prev) => [...prev, fileId]);
+        try {
+          const maMonAn = itemToEdit?.id || undefined;
+          const result = await menuApi.uploadImage(file, maMonAn);
+          setFormState((prev) => ({
+            ...prev,
+            imageUrls: [...prev.imageUrls, result.url],
+          }));
 
+          notify({
+            tone: "success",
+            title: "Upload thành công",
+            description: `Đã upload ảnh ${file.name}`,
+          });
+        } catch (error: any) {
+          notify({
+            tone: "error",
+            title: "Upload thất bại",
+            description: error.message || `Không thể upload ảnh ${file.name}`,
+          });
+        } finally {
+          setUploadingImages((prev) => prev.filter((id) => id !== fileId));
+        }
+        continue;
+      }
+
+      // Thêm mới: lưu tạm vào localStorage cho đến khi bấm Lưu món
       try {
-        // Nếu đang edit món ăn, truyền maMonAn để upload vào thư mục của món ăn
-        const maMonAn = itemToEdit?.id || undefined;
-        const result = await menuApi.uploadImage(file, maMonAn);
-
-        setFormState((prev) => ({
-          ...prev,
-          imageUrls: [...prev.imageUrls, result.url],
-        }));
-
+        const dataUrl = await fileToDataUrl(file);
+        const draft: MenuImageDraft = {
+          id: `${file.name}_${Date.now()}_${Math.random()
+            .toString(36)
+            .slice(2)}`,
+          name: file.name,
+          dataUrl,
+          type: file.type,
+          size: file.size,
+          lastModified: file.lastModified,
+          createdAt: Date.now(),
+        };
+        setImageDrafts((prev) => [...prev, draft]);
         notify({
           tone: "success",
-          title: "Upload thành công",
-          description: `Đã upload ảnh ${file.name}`,
+          title: "Đã lưu ảnh tạm",
+          description: `${file.name} sẽ được tải lên khi bạn lưu món.`,
         });
       } catch (error: any) {
         notify({
           tone: "error",
-          title: "Upload thất bại",
-          description: error.message || `Không thể upload ảnh ${file.name}`,
+          title: "Không thể xử lý ảnh",
+          description: error?.message || `Không thể lưu tạm ảnh ${file.name}.`,
         });
-      } finally {
-        setUploadingImages((prev) => prev.filter((id) => id !== fileId));
       }
     }
 
-    // Reset input để có thể chọn lại file cùng tên
     e.target.value = "";
   };
-  const handleRemoveImage = (index: number) => {
-    setFormState((prev) => ({
-      ...prev,
-      imageUrls: prev.imageUrls.filter((_, i) => i !== index),
-    }));
+  const handleRemoveImage = (imageId: string, source: "remote" | "draft") => {
+    if (source === "remote") {
+      setFormState((prev) => ({
+        ...prev,
+        imageUrls: prev.imageUrls.filter((url) => url !== imageId),
+      }));
+      return;
+    }
+    setImageDrafts((prev) => prev.filter((draft) => draft.id !== imageId));
   };
 
-  // Size Handlers
-  const handleAddSize = () => {
-    // Use first recipe if available, otherwise create new recipe and add to recipes list
-    let defaultRecipe: Recipe;
-    if (recipes.length > 0) {
-      defaultRecipe = JSON.parse(JSON.stringify(recipes[0])); // Deep copy
-    } else {
-      const newId = generateUniqueRecipeId();
-      defaultRecipe = {
-        id: newId,
-        name: generateUniqueRecipeName(),
-        ingredients: [],
-      };
-      // Add new recipe to recipes list
-      setRecipes((prev) => [
-        ...prev,
-        JSON.parse(JSON.stringify(defaultRecipe)),
-      ]);
-    }
-    const newSize: MenuItemSize = { name: "", price: 0, recipe: defaultRecipe };
-    setFormState((prev) => ({ ...prev, sizes: [...prev.sizes, newSize] }));
-  };
   const handleRemoveSize = (index: number) => {
     setFormState((prev) => ({
       ...prev,
@@ -288,31 +670,334 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   };
 
   // Recipe Handlers
-  const handleAddRecipe = () => {
-    const newId = generateUniqueRecipeId();
-    const newRecipe: Recipe = {
-      id: newId,
-      name: generateUniqueRecipeName(),
-      ingredients: [],
-    };
-    setRecipes((prev) => [...prev, newRecipe]);
+  const resetRecipeDraft = (options?: VersionOption[]) => {
+    setEditingRecipeId(null);
+    const availableVersion = getFirstAvailableVersion(options);
+    setRecipeDraftVersionId(availableVersion?.id || "");
+    const generatedName = availableVersion
+      ? `Công thức ${availableVersion.name}`
+      : generateUniqueRecipeName();
+    setRecipeDraftName(generatedName);
+    const presetDrafts = buildDraftIngredientsFromDish();
+    if (presetDrafts.length > 0) {
+      setRecipeDraftIngredients(presetDrafts);
+    } else {
+      const firstIngredientId = ingredientOptions[0]?.id || "";
+      setRecipeDraftIngredients(
+        firstIngredientId
+          ? [{ ingredientId: firstIngredientId, quantity: 0 }]
+          : []
+      );
+    }
   };
 
-  const handleRemoveRecipe = (recipeId: string) => {
-    // Check if recipe is used by any size
-    const isUsed = formState.sizes.some((s) => s.recipe.id === recipeId);
-    if (isUsed) {
+  const handleOpenCreateRecipe = async () => {
+    if (dishIngredients.length === 0) {
       notify({
         tone: "warning",
-        title: "Không thể xoá công thức",
+        title: "Chưa có nguyên liệu cho món",
         description:
-          "Công thức đang được sử dụng bởi ít nhất một phiên bản món ăn.",
+          "Vui lòng thêm ít nhất một nguyên liệu trước khi tạo công thức.",
       });
       return;
     }
+    const options =
+      versionOptions.length > 0 ? versionOptions : await loadVersionOptions();
+    const available = getFirstAvailableVersion(options);
+    if (!available) {
+      notify({
+        tone: "warning",
+        title: "Hết phiên bản khả dụng",
+        description:
+          "Không còn phiên bản nào để gán cho công thức mới. Vui lòng kiểm tra lại danh sách phiên bản.",
+      });
+      return;
+    }
+    resetRecipeDraft(options);
+    setIsRecipeModalOpen(true);
+  };
+
+  const handleEditRecipe = (recipeId: string) => {
+    const target = recipes.find((recipe) => recipe.id === recipeId);
+    if (!target) {
+      notify({
+        tone: "error",
+        title: "Không tìm thấy công thức",
+        description: "Vui lòng tải lại dữ liệu và thử lại.",
+      });
+      return;
+    }
+    setEditingRecipeId(recipeId);
+    setRecipeDraftName(target.name);
+    setRecipeDraftVersionId(target.versionId || "");
+    const presetDrafts =
+      target.ingredients.length > 0
+        ? target.ingredients
+            .map((item) => ({
+              ingredientId: item.ingredient?.id || "",
+              quantity: item.quantity,
+            }))
+            .filter((draft) => draft.ingredientId)
+        : [];
+    if (presetDrafts.length > 0) {
+      setRecipeDraftIngredients(presetDrafts);
+    } else if (ingredientOptions[0]) {
+      setRecipeDraftIngredients([
+        { ingredientId: ingredientOptions[0].id, quantity: 0 },
+      ]);
+    } else {
+      setRecipeDraftIngredients([]);
+    }
+    setIsRecipeModalOpen(true);
+  };
+
+  const handleCloseRecipeModal = () => {
+    setIsRecipeModalOpen(false);
+    setEditingRecipeId(null);
+    setRecipeDraftVersionId("");
+    setRecipeDraftIngredients([]);
+    setRecipeDraftName("");
+  };
+
+  const handleDraftVersionChange = (versionId: string) => {
+    const duplicated =
+      versionId &&
+      recipes.some(
+        (recipe) =>
+          recipe.versionId === versionId && recipe.id !== editingRecipeId
+      );
+    if (duplicated) {
+      notify({
+        tone: "warning",
+        title: "Phiên bản đã được sử dụng",
+        description: "Vui lòng chọn phiên bản khác cho công thức mới.",
+      });
+      setRecipeDraftVersionId("");
+      return;
+    }
+    setRecipeDraftVersionId(versionId);
+    const selected = versionOptions.find((opt) => opt.id === versionId);
+    if (selected && recipeDraftName.toLowerCase().startsWith("công thức")) {
+      setRecipeDraftName(`Công thức ${selected.name}`);
+    }
+  };
+
+  const handleAddDraftIngredient = () => {
+    if (recipeIngredientOptions.length === 0) {
+      notify({
+        tone: "warning",
+        title: "Chưa có nguyên liệu",
+        description: "Không thể thêm công thức vì chưa có nguyên liệu nào.",
+      });
+      return;
+    }
+    const usedIds = recipeDraftIngredients.map((item) => item.ingredientId);
+    const availableIngredient = recipeIngredientOptions.find(
+      (ing) => !usedIds.includes(ing.id)
+    );
+    if (!availableIngredient) {
+      notify({
+        tone: "info",
+        title: "Hết nguyên liệu khả dụng",
+        description: "Tất cả nguyên liệu đã được sử dụng trong công thức này.",
+      });
+      return;
+    }
+    setRecipeDraftIngredients((prev) => [
+      ...prev,
+      { ingredientId: availableIngredient.id, quantity: 0 },
+    ]);
+  };
+
+  const handleRemoveDraftIngredient = (index: number) => {
+    setRecipeDraftIngredients((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDraftIngredientChange = (
+    index: number,
+    field: "ingredientId" | "quantity",
+    value: string
+  ) => {
+    setRecipeDraftIngredients((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      if (field === "ingredientId") {
+        if (
+          next.some((item, idx) => idx !== index && item.ingredientId === value)
+        ) {
+          notify({
+            tone: "warning",
+            title: "Nguyên liệu trùng lặp",
+            description:
+              "Mỗi nguyên liệu chỉ được chọn một lần trong công thức.",
+          });
+          return prev;
+        }
+        next[index] = { ...next[index], ingredientId: value };
+      } else {
+        next[index] = {
+          ...next[index],
+          quantity: value === "" ? "" : Number(value),
+        };
+      }
+      return next;
+    });
+  };
+
+  const handleSubmitRecipeModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recipeDraftName.trim()) {
+      notify({
+        tone: "warning",
+        title: "Thiếu tên công thức",
+        description: "Vui lòng nhập tên cho công thức.",
+      });
+      return;
+    }
+    if (recipeDraftIngredients.length === 0) {
+      notify({
+        tone: "warning",
+        title: "Chưa có nguyên liệu",
+        description: "Một công thức phải có ít nhất một nguyên liệu.",
+      });
+      return;
+    }
+    if (!recipeDraftVersionId) {
+      notify({
+        tone: "warning",
+        title: "Thiếu phiên bản",
+        description: "Vui lòng chọn phiên bản cho công thức.",
+      });
+      return;
+    }
+    const duplicateVersion = recipes.some(
+      (r) => r.versionId === recipeDraftVersionId && r.id !== editingRecipeId
+    );
+    if (duplicateVersion) {
+      notify({
+        tone: "warning",
+        title: "Phiên bản đã được sử dụng",
+        description: "Phiên bản này đã được gán cho công thức khác.",
+      });
+      return;
+    }
+    const selectedVersion = versionOptions.find(
+      (opt) => opt.id === recipeDraftVersionId
+    );
+    if (!selectedVersion) {
+      notify({
+        tone: "warning",
+        title: "Phiên bản không hợp lệ",
+        description: "Phiên bản đã chọn không tồn tại. Vui lòng chọn lại.",
+      });
+      return;
+    }
+    const hasEmptyIngredient = recipeDraftIngredients.some(
+      (item) => !item.ingredientId
+    );
+    if (hasEmptyIngredient) {
+      notify({
+        tone: "warning",
+        title: "Thiếu thông tin nguyên liệu",
+        description: "Vui lòng chọn đầy đủ nguyên liệu cho từng dòng.",
+      });
+      return;
+    }
+    const hasInvalidQuantity = recipeDraftIngredients.some(
+      (item) => item.quantity === "" || Number(item.quantity) <= 0
+    );
+    if (hasInvalidQuantity) {
+      notify({
+        tone: "warning",
+        title: "Số lượng không hợp lệ",
+        description: "Mỗi nguyên liệu cần có số lượng lớn hơn 0.",
+      });
+      return;
+    }
+    const duplicateCheck = new Set(
+      recipeDraftIngredients.map((item) => item.ingredientId)
+    );
+    if (duplicateCheck.size !== recipeDraftIngredients.length) {
+      notify({
+        tone: "warning",
+        title: "Nguyên liệu trùng lặp",
+        description: "Không thể lưu công thức có nguyên liệu trùng nhau.",
+      });
+      return;
+    }
+
+    const recipeIngredients: RecipeIngredient[] = [];
+    for (const item of recipeDraftIngredients) {
+      const ingredient = ingredientMap.get(item.ingredientId);
+      if (!ingredient) {
+        notify({
+          tone: "error",
+          title: "Nguyên liệu không tồn tại",
+          description:
+            "Vui lòng kiểm tra lại danh sách nguyên liệu của công thức.",
+        });
+        return;
+      }
+      recipeIngredients.push({
+        ingredient,
+        quantity: Number(item.quantity),
+      });
+    }
+
+    const baseRecipe: Recipe = {
+      id: editingRecipeId || generateUniqueRecipeId(),
+      name: recipeDraftName.trim(),
+      ingredients: recipeIngredients,
+      versionId: recipeDraftVersionId,
+      versionName: selectedVersion.name,
+    };
+
+    if (editingRecipeId) {
+      setRecipes((prev) =>
+        prev.map((r) => (r.id === editingRecipeId ? baseRecipe : r))
+      );
+      const recipeClone: Recipe = JSON.parse(JSON.stringify(baseRecipe));
+      setFormState((prev) => ({
+        ...prev,
+        sizes: prev.sizes.map((s) =>
+          s.recipe.id === editingRecipeId ? { ...s, recipe: recipeClone } : s
+        ),
+      }));
+      setSelectedRecipeForIngredients(baseRecipe.id);
+      setSelectedRecipeDetailId(baseRecipe.id);
+      notify({
+        tone: "success",
+        title: "Đã cập nhật công thức",
+        description: `Công thức "${baseRecipe.name}" đã được cập nhật.`,
+      });
+    } else {
+      setRecipes((prev) => [...prev, baseRecipe]);
+      setSelectedRecipeForIngredients(baseRecipe.id);
+      setSelectedRecipeDetailId(baseRecipe.id);
+      notify({
+        tone: "success",
+        title: "Đã thêm công thức",
+        description: `Công thức "${baseRecipe.name}" đã được tạo.`,
+      });
+    }
+
+    setIsRecipeModalOpen(false);
+    setEditingRecipeId(null);
+    setRecipeDraftVersionId("");
+    setRecipeDraftIngredients([]);
+  };
+
+  const handleRemoveRecipe = (recipeId: string) => {
     setRecipes((prev) => prev.filter((r) => r.id !== recipeId));
+    setFormState((prev) => ({
+      ...prev,
+      sizes: prev.sizes.filter((s) => s.recipe.id !== recipeId),
+    }));
     if (selectedRecipeForIngredients === recipeId) {
       setSelectedRecipeForIngredients(null);
+    }
+    if (selectedRecipeDetailId === recipeId) {
+      setSelectedRecipeDetailId(null);
     }
   };
 
@@ -327,21 +1012,62 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     setFormState((prev) => ({ ...prev, sizes: newSizes }));
   };
 
-  const handleSelectRecipeForSize = (sizeIndex: number, recipeId: string) => {
-    const selectedRecipe = recipes.find((r) => r.id === recipeId);
-    if (selectedRecipe) {
-      const newSizes = [...formState.sizes];
-      newSizes[sizeIndex].recipe = JSON.parse(JSON.stringify(selectedRecipe)); // Deep copy
-      setFormState((prev) => ({ ...prev, sizes: newSizes }));
+  const handleRecipeVersionChange = (recipeId: string, versionId: string) => {
+    if (!versionId) {
+      notify({
+        tone: "warning",
+        title: "Thiếu phiên bản",
+        description: "Vui lòng chọn phiên bản hợp lệ cho công thức này.",
+      });
+      return;
     }
+    const duplicated = recipes.some(
+      (r) => r.id !== recipeId && r.versionId === versionId
+    );
+    if (duplicated) {
+      notify({
+        tone: "warning",
+        title: "Phiên bản đã được sử dụng",
+        description: "Mỗi phiên bản chỉ có thể gắn với một công thức.",
+      });
+      return;
+    }
+    const selected = versionOptions.find((opt) => opt.id === versionId);
+    setRecipes((prev) =>
+      prev.map((r) =>
+        r.id === recipeId
+          ? {
+              ...r,
+              versionId,
+              versionName: selected?.name || r.versionName,
+            }
+          : r
+      )
+    );
+    setFormState((prev) => ({
+      ...prev,
+      sizes: prev.sizes.map((s) =>
+        s.recipe.id === recipeId
+          ? {
+              ...s,
+              name: selected?.name || s.name,
+              recipe: {
+                ...s.recipe,
+                versionId,
+                versionName: selected?.name || s.recipe.versionName,
+              },
+            }
+          : s
+      ),
+    }));
   };
 
   const handleAddIngredientToRecipe = (recipeId: string) => {
-    if (ingredients.length > 0) {
+    if (recipeIngredientOptions.length > 0) {
       // Check if ingredient already exists in recipe
       const recipe = recipes.find((r) => r.id === recipeId);
       if (recipe) {
-        const availableIngredients = ingredients.filter(
+        const availableIngredients = recipeIngredientOptions.filter(
           (ing) => !recipe.ingredients.some((ri) => ri.ingredient.id === ing.id)
         );
         if (availableIngredients.length === 0) {
@@ -426,9 +1152,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
           const newIngredients = r.ingredients.map((item, idx) => {
             if (idx === ingredientIndex) {
               if (field === "ingredient") {
-                const selectedIngredient = ingredients.find(
-                  (ing) => ing.id === value
-                );
+                const selectedIngredient = ingredientMap.get(value as string);
                 if (selectedIngredient) {
                   return { ...item, ingredient: selectedIngredient };
                 }
@@ -470,6 +1194,23 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     }));
   };
 
+  const uploadDraftImages = async (): Promise<string[]> => {
+    if (imageDrafts.length === 0) return [];
+    const uploadedUrls: string[] = [];
+    for (const draft of imageDrafts) {
+      try {
+        const file = dataUrlToFile(draft.dataUrl, draft.name, draft.type);
+        const result = await menuApi.uploadImage(file);
+        uploadedUrls.push(result.url);
+      } catch (error: any) {
+        throw new Error(
+          error?.message || `Không thể upload ảnh ${draft.name}.`
+        );
+      }
+    }
+    return uploadedUrls;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const {
@@ -482,7 +1223,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       sizes,
     } = formState;
 
-    if (!name || sizes.length === 0 || imageUrls.length === 0) {
+    const totalImagesCount = formState.imageUrls.length + imageDrafts.length;
+
+    if (!name || sizes.length === 0 || totalImagesCount === 0) {
       notify({
         tone: "error",
         title: "Thiếu thông tin món ăn",
@@ -502,11 +1245,41 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         });
         return;
       }
+      if (!size.recipe.versionId) {
+        notify({
+          tone: "error",
+          title: "Thiếu phiên bản",
+          description: `Phiên bản "${size.name}" chưa được gán mã phiên bản.`,
+        });
+        return;
+      }
     }
 
     const matchedCategory = categories.find(
       (cat) => cat.id === categoryId || cat.name === category
     );
+
+    let imageUrlsForPayload = [...formState.imageUrls];
+
+    if (!itemToEdit) {
+      try {
+        const uploadedUrls = await uploadDraftImages();
+        if (uploadedUrls.length > 0) {
+          imageUrlsForPayload = [...imageUrlsForPayload, ...uploadedUrls];
+          setFormState((prev) => ({ ...prev, imageUrls: imageUrlsForPayload }));
+          setImageDrafts([]);
+        }
+      } catch (error: any) {
+        notify({
+          tone: "error",
+          title: "Upload ảnh thất bại",
+          description:
+            error?.message ||
+            "Không thể tải ảnh lên server. Vui lòng thử lại trước khi lưu món.",
+        });
+        return;
+      }
+    }
 
     if (itemToEdit) {
       // TODO: Implement update API
@@ -516,7 +1289,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         description,
         category: matchedCategory?.name || category,
         categoryId: matchedCategory?.id ?? categoryId ?? itemToEdit?.categoryId,
-        imageUrls,
+        imageUrls: imageUrlsForPayload,
         inStock,
         sizes,
       });
@@ -531,6 +1304,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       try {
         // Chuyển đổi dữ liệu sang format API
         const phienBanMonAns = sizes.map((size, index) => ({
+          MaPhienBan: size.recipe.versionId,
           TenPhienBan: size.name,
           Gia: size.price,
           MaTrangThai: inStock ? "CON_HANG" : "HET_HANG",
@@ -546,7 +1320,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
           TenMonAn: name,
           MaDanhMuc: matchedCategory?.id || categoryId || null,
           IsShow: true,
-          HinhAnhUrls: imageUrls,
+          HinhAnhUrls: imageUrlsForPayload,
           PhienBanMonAns: phienBanMonAns,
         };
 
@@ -558,7 +1332,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
           description,
           category: matchedCategory?.name || category,
           categoryId: matchedCategory?.id ?? categoryId,
-          imageUrls,
+          imageUrls: imageUrlsForPayload,
           inStock,
           sizes,
         });
@@ -598,16 +1372,18 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
           onSubmit={handleSubmit}
           className="p-6 overflow-y-auto flex-1 bg-gray-50 scrollbar-hide min-h-0"
         >
-          <div className="grid grid-cols-2 gap-6 h-full min-h-0">
-            {/* Cột trái: Thông tin cơ bản */}
-            <div className="space-y-3 pr-4 overflow-hidden flex flex-col">
-              <h3 className="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 flex-shrink-0">
-                Thông tin cơ bản
-              </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full min-h-0">
+            {/* Phần 1: Nhập thông tin & thao tác */}
+            <div className="space-y-6 overflow-y-auto pr-4 scrollbar-hide min-h-0">
+              <section className="space-y-3 bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Thông tin món ăn
+                  </h3>
+                </div>
 
-              <div className="flex-1 flex flex-col space-y-3 min-h-0">
                 {itemToEdit && (
-                  <div className="flex-shrink-0">
+                  <div>
                     <label
                       htmlFor="itemId"
                       className="block text-sm font-medium text-gray-700"
@@ -625,7 +1401,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                   </div>
                 )}
 
-                <div className="flex-shrink-0 grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label
                       htmlFor="name"
@@ -670,24 +1446,99 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                   </div>
                 </div>
 
-                <div className="flex-shrink-0">
-                  <label
-                    htmlFor="description"
-                    className="block text-sm font-medium text-gray-700"
-                  >
-                    Mô tả
-                  </label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    value={formState.description}
-                    onChange={handleInputChange}
-                    rows={3}
-                    className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 resize-none"
-                  />
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Nguyên liệu món ăn
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddDishIngredient}
+                      disabled={ingredientOptions.length === 0}
+                      className={`flex items-center gap-1 text-xs py-1.5 px-3 font-semibold rounded-lg transition ${
+                        ingredientOptions.length === 0
+                          ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                          : "bg-emerald-600 text-white hover:bg-emerald-500"
+                      }`}
+                      title={
+                        ingredientOptions.length === 0
+                          ? "Chưa có nguyên liệu trong kho để lựa chọn"
+                          : undefined
+                      }
+                    >
+                      <PlusIcon className="w-3.5 h-3.5" /> Thêm nguyên liệu
+                    </button>
+                  </div>
+                  {dishIngredients.length === 0 ? (
+                    <p className="text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg p-4">
+                      Chưa có nguyên liệu nào. Nhấn &quot;Thêm nguyên liệu&quot;
+                      để chọn từ danh sách kho hiện có.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {dishIngredients.map((item, index) => {
+                        const selectedIngredient = ingredientMap.get(
+                          item.ingredientId
+                        );
+                        return (
+                          <div
+                            key={`${item.ingredientId}-${index}`}
+                            className="grid grid-cols-1 md:grid-cols-11 gap-3 items-center border border-gray-200 rounded-lg p-3 bg-gray-50"
+                          >
+                            <div className="md:col-span-10">
+                              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                                Nguyên liệu
+                              </label>
+                              <select
+                                value={item.ingredientId}
+                                onChange={(e) =>
+                                  handleDishIngredientChange(
+                                    index,
+                                    "ingredientId",
+                                    e.target.value
+                                  )
+                                }
+                                className="mt-1 block w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-sm text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                              >
+                                <option value="">Chọn nguyên liệu</option>
+                                {ingredientOptions.map((ing) => (
+                                  <option
+                                    key={ing.id}
+                                    value={ing.id}
+                                    disabled={dishIngredients.some(
+                                      (di, idx) =>
+                                        idx !== index &&
+                                        di.ingredientId === ing.id
+                                    )}
+                                  >
+                                    {ing.name} ({ing.unit})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="md:col-span-1 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleRemoveDishIngredient(index)
+                                }
+                                className="text-red-600 hover:text-red-700"
+                                title="Xóa nguyên liệu này khỏi danh sách"
+                              >
+                                <TrashIcon className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center flex-shrink-0">
+                <div className="flex items-center">
                   <input
                     id="inStock"
                     name="inStock"
@@ -704,35 +1555,34 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                   </label>
                 </div>
 
-                {/* Image Upload */}
-                <div className="border-t border-gray-200 pt-3 flex-shrink-0">
+                <div className="border-t border-gray-200 pt-3">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Hình ảnh
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {formState.imageUrls.map((url, index) => {
-                      // Nếu URL là relative path (bắt đầu bằng "images/"), thêm BASE_URL
-                      const imageUrl =
-                        url.startsWith("http://") || url.startsWith("https://")
-                          ? url
-                          : `${BASE_URL}/${url.replace(/^\//, "")}`;
-                      return (
-                        <div key={index} className="relative">
-                          <img
-                            src={imageUrl}
-                            alt={`Preview ${index}`}
-                            className="w-20 h-20 rounded-md object-cover border border-gray-200"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveImage(index)}
-                            className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 shadow-lg transition-transform hover:scale-110"
-                          >
-                            <XIcon className="w-3 h-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
+                    {displayImages.map((image) => (
+                      <div key={image.id} className="relative">
+                        <img
+                          src={image.url}
+                          alt="Preview"
+                          className="w-20 h-20 rounded-md object-cover border border-gray-200"
+                        />
+                        {image.source === "draft" && (
+                          <span className="absolute bottom-1 left-1 text-[10px] font-semibold bg-white/80 text-gray-700 px-1 rounded">
+                            Tạm
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRemoveImage(image.id, image.source)
+                          }
+                          className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 shadow-lg transition-transform hover:scale-110"
+                        >
+                          <XIcon className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
                     <label
                       htmlFor="image-upload"
                       className="cursor-pointer w-20 h-20 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-md hover:border-indigo-500 hover:bg-gray-50 transition"
@@ -755,296 +1605,313 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                     />
                   </div>
                 </div>
-              </div>
+              </section>
             </div>
 
-            {/* Cột phải: Phiên bản món ăn & Công thức */}
-            <div className="space-y-4 overflow-y-auto pl-4 border-l border-gray-200 scrollbar-hide min-h-0">
-              {/* Phần quản lý công thức */}
-              <div className="mb-4 pb-4 border-b border-gray-200">
-                <div className="flex justify-between items-center mb-3">
+            {/* Phần 2: Hiển thị công thức */}
+            <div className="space-y-3 overflow-y-auto pl-4 scrollbar-hide min-h-0">
+              <div className="flex justify-between items-center flex-shrink-0 gap-3 flex-wrap">
+                <div>
                   <h3 className="text-lg font-semibold text-gray-900">
                     Công thức
                   </h3>
+                  <span className="text-sm text-gray-500">
+                    {recipes.length} công thức
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenCreateRecipe}
+                  disabled={
+                    ingredientOptions.length === 0 ||
+                    loadingVersions ||
+                    dishIngredients.length === 0
+                  }
+                  title={
+                    dishIngredients.length === 0
+                      ? "Vui lòng thêm nguyên liệu trước khi tạo công thức"
+                      : ingredientOptions.length === 0
+                      ? "Cần có ít nhất một nguyên liệu để tạo công thức"
+                      : loadingVersions
+                      ? "Đang tải danh sách phiên bản..."
+                      : undefined
+                  }
+                  className={`flex items-center gap-1 text-sm py-1 px-3 bg-indigo-600 text-white font-semibold rounded-lg transition ${
+                    ingredientOptions.length === 0 ||
+                    loadingVersions ||
+                    dishIngredients.length === 0
+                      ? "opacity-60 cursor-not-allowed"
+                      : "hover:bg-indigo-500"
+                  }`}
+                >
+                  <PlusIcon className="w-4 h-4" /> Thêm công thức
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto bg-white rounded-lg border border-gray-200 p-4 scrollbar-hide">
+                {recipes.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-8">
+                    Chưa có công thức để hiển thị.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {recipes.map((recipe) => {
+                      const recipeCost = calculateRecipeCost(recipe);
+                      const versions = formState.sizes.filter(
+                        (size) => size.recipe.id === recipe.id
+                      );
+                      const isActive = selectedRecipeDetailId === recipe.id;
+                      return (
+                        <div
+                          key={recipe.id}
+                          className={`border rounded-lg ${
+                            isActive
+                              ? "border-indigo-300 bg-indigo-50"
+                              : "border-gray-200 bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3 px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleRecipeDetail(recipe.id)
+                              }
+                              className="flex-1 flex items-center justify-between text-left"
+                            >
+                              <div>
+                                <p className="font-medium text-gray-900">
+                                  {recipe.name}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {recipe.ingredients.length} nguyên liệu •{" "}
+                                  {versions.length} phiên bản
+                                </p>
+                                <p className="text-xs font-semibold text-emerald-600 mt-1">
+                                  Chi phí nguyên liệu: {formatVND(recipeCost)}
+                                </p>
+                              </div>
+                              <span className="text-xs text-indigo-600">
+                                {isActive ? "Thu gọn" : "Xem chi tiết"}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleEditRecipe(recipe.id)}
+                              className="text-xs font-semibold text-indigo-700 hover:text-indigo-900 px-2 py-1 border border-indigo-200 rounded transition"
+                            >
+                              Sửa
+                            </button>
+                          </div>
+                          {isActive && (
+                            <div className="border-t border-gray-200 px-4 py-3 space-y-4 bg-white rounded-b-lg">
+                              <div>
+                                <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
+                                  Nguyên liệu
+                                </h4>
+                                {recipe.ingredients.length > 0 ? (
+                                  <ul className="space-y-1">
+                                    {recipe.ingredients.map(
+                                      (ingredient, idx) => (
+                                        <li
+                                          key={`${recipe.id}-ingredient-${idx}`}
+                                          className="text-sm text-gray-700 flex justify-between"
+                                        >
+                                          <span>
+                                            {ingredient.ingredient.name}
+                                          </span>
+                                          <span className="text-gray-500">
+                                            {ingredient.quantity || 0}{" "}
+                                            {ingredient.ingredient.unit}
+                                          </span>
+                                        </li>
+                                      )
+                                    )}
+                                  </ul>
+                                ) : (
+                                  <p className="text-xs text-gray-500">
+                                    Chưa có nguyên liệu nào.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </form>
+        {isRecipeModalOpen && (
+          <div className="fixed inset-0 z-[60] bg-black/60 flex">
+            <form
+              onSubmit={handleSubmitRecipeModal}
+              className="bg-white shadow-2xl w-full h-full max-h-full overflow-y-auto p-6 space-y-5 flex flex-col"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">
+                    {editingRecipeId
+                      ? "Chỉnh sửa công thức"
+                      : "Thêm công thức mới"}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {editingRecipeId
+                      ? "Cập nhật tên, phiên bản hoặc nguyên liệu cho công thức đã tạo."
+                      : "Mỗi công thức cần ít nhất một nguyên liệu với số lượng cụ thể."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseRecipeModal}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <XIcon className="w-6 h-6" />
+                </button>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Tên công thức
+                </label>
+                <input
+                  type="text"
+                  value={recipeDraftName}
+                  onChange={(e) => setRecipeDraftName(e.target.value)}
+                  placeholder="VD: Công thức nước lẩu cay"
+                  className="mt-1 block w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Phiên bản (bắt buộc)
+                </label>
+                <select
+                  value={recipeDraftVersionId}
+                  onChange={(e) => handleDraftVersionChange(e.target.value)}
+                  disabled={versionOptions.length === 0}
+                  className="mt-1 block w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-500"
+                >
+                  <option value="">Chọn phiên bản</option>
+                  {versionOptions.map((opt) => {
+                    const disabled = recipes.some(
+                      (recipe) =>
+                        recipe.versionId === opt.id &&
+                        recipe.id !== editingRecipeId
+                    );
+                    return (
+                      <option key={opt.id} value={opt.id} disabled={disabled}>
+                        {opt.name}
+                        {disabled ? " (đã dùng)" : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+                {loadingVersions && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Đang tải danh sách phiên bản...
+                  </p>
+                )}
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  {/* <span className="text-sm font-medium text-gray-700">
+                    Nguyên liệu ({recipeDraftIngredients.length})
+                  </span> */}
                   <button
                     type="button"
-                    onClick={handleAddRecipe}
-                    className="flex items-center gap-1 text-sm py-1 px-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-500 transition"
+                    onClick={handleAddDraftIngredient}
+                    className="flex items-center gap-1 text-xs py-1 px-2 bg-indigo-600 text-white rounded hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={recipeIngredientOptions.length === 0}
                   >
-                    <PlusIcon className="w-4 h-4" /> Thêm công thức
+                    <PlusIcon className="w-3.5 h-3.5" /> Thêm nguyên liệu
                   </button>
                 </div>
-                <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-hide">
-                  {recipes.map((recipe, index) => (
-                    <div
-                      key={`${recipe.id}-${index}`}
-                      className="bg-white p-3 rounded-lg border border-gray-200"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <input
-                          type="text"
-                          value={recipe.name}
-                          onChange={(e) =>
-                            handleRecipeNameChange(recipe.id, e.target.value)
-                          }
-                          className="flex-1 bg-white border-gray-300 rounded-md py-1 px-2 text-sm text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                          placeholder="Tên công thức"
-                        />
+                {recipeDraftIngredients.length === 0 ? (
+                  <p className="text-xs text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded p-4 text-center">
+                    Chưa có nguyên liệu nào. Nhấn "Thêm nguyên liệu" để bắt đầu.
+                  </p>
+                ) : (
+                  <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                    {recipeDraftIngredients.map((draft, index) => (
+                      <div
+                        key={`${draft.ingredientId}-${index}`}
+                        className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg p-3"
+                      >
+                        <div className="flex-1">
+                          <label className="block text-[11px] uppercase text-gray-500 tracking-wide">
+                            Nguyên liệu
+                          </label>
+                          <select
+                            value={draft.ingredientId}
+                            onChange={(e) =>
+                              handleDraftIngredientChange(
+                                index,
+                                "ingredientId",
+                                e.target.value
+                              )
+                            }
+                            className="mt-1 w-full bg-white border border-gray-300 rounded-md py-1.5 px-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          >
+                            <option value="">Chọn nguyên liệu</option>
+                            {recipeIngredientOptions.map((ing) => (
+                              <option key={ing.id} value={ing.id}>
+                                {ing.name} ({ing.unit})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="w-32">
+                          <label className="block text-[11px] uppercase text-gray-500 tracking-wide">
+                            Số lượng
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={draft.quantity}
+                            onChange={(e) =>
+                              handleDraftIngredientChange(
+                                index,
+                                "quantity",
+                                e.target.value
+                              )
+                            }
+                            className="mt-1 w-full bg-white border border-gray-300 rounded-md py-1.5 px-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            placeholder="0"
+                          />
+                        </div>
                         <button
                           type="button"
-                          onClick={() => handleRemoveRecipe(recipe.id)}
-                          className="ml-2 text-red-600 hover:text-red-700"
+                          onClick={() => handleRemoveDraftIngredient(index)}
+                          className="text-red-600 hover:text-red-700 mt-5"
+                          title="Xóa nguyên liệu này"
                         >
                           <TrashIcon className="w-4 h-4" />
                         </button>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-500">
-                          Mã: {recipe.id}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSelectedRecipeForIngredients(
-                              selectedRecipeForIngredients === recipe.id
-                                ? null
-                                : recipe.id
-                            )
-                          }
-                          className="text-xs text-indigo-600 hover:text-indigo-700"
-                        >
-                          {selectedRecipeForIngredients === recipe.id
-                            ? "Ẩn"
-                            : "Thiết lập"}{" "}
-                          nguyên liệu
-                        </button>
-                      </div>
-                      {selectedRecipeForIngredients === recipe.id && (
-                        <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
-                          <div className="flex justify-between items-center">
-                            <h4 className="text-xs font-medium text-gray-700">
-                              Nguyên liệu ({recipe.ingredients.length})
-                            </h4>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleAddIngredientToRecipe(recipe.id)
-                              }
-                              className="flex items-center gap-1 text-xs py-1 px-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-500 transition"
-                            >
-                              <PlusIcon className="w-3 h-3" /> Thêm nguyên liệu
-                            </button>
-                          </div>
-                          {recipe.ingredients.length > 0 ? (
-                            <div className="space-y-2">
-                              {recipe.ingredients.map((recipeItem, rIndex) => (
-                                <div
-                                  key={`${recipe.id}-${rIndex}`}
-                                  className="flex items-center gap-2 p-2 bg-gray-50 rounded border border-gray-200"
-                                >
-                                  <select
-                                    value={recipeItem.ingredient.id}
-                                    onChange={(e) =>
-                                      handleIngredientChangeInRecipe(
-                                        recipe.id,
-                                        rIndex,
-                                        "ingredient",
-                                        e.target.value
-                                      )
-                                    }
-                                    className="flex-grow bg-white border-gray-300 rounded-md py-1.5 px-2 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                  >
-                                    {ingredients.map((ing) => (
-                                      <option key={ing.id} value={ing.id}>
-                                        {ing.name} ({ing.unit})
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleRemoveIngredientFromRecipe(
-                                        recipe.id,
-                                        rIndex
-                                      )
-                                    }
-                                    className="text-red-600 hover:text-red-700 p-1 hover:bg-red-50 rounded transition"
-                                    title="Xóa nguyên liệu"
-                                  >
-                                    <XIcon className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-gray-500 text-center py-4 bg-gray-50 rounded border border-gray-200">
-                              Chưa có nguyên liệu. Nhấn "Thêm nguyên liệu" để
-                              thêm.
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {recipes.length === 0 && (
-                    <p className="text-xs text-gray-500 text-center py-4">
-                      Chưa có công thức nào. Hãy thêm công thức trước.
-                    </p>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
-
-              {/* Phần quản lý Phiên bản món ăn */}
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Phiên bản món ăn
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={handleAddSize}
-                    className="flex items-center gap-1 text-sm py-1 px-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-500 transition"
-                  >
-                    <PlusIcon className="w-4 h-4" /> Thêm phiên bản
-                  </button>
-                </div>
-              </div>
-              {formState.sizes.map((size, sIndex) => (
-                <div
-                  key={sIndex}
-                  className="bg-white p-4 rounded-lg border border-gray-200 space-y-3"
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={handleCloseRecipeModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 rounded-lg border border-gray-300 hover:bg-gray-100"
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="flex-1 space-y-3">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700">
-                            Tên phiên bản
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="VD: Phần, Dĩa, Lẩu nhỏ"
-                            value={size.name}
-                            onChange={(e) =>
-                              handleSizeChange(sIndex, "name", e.target.value)
-                            }
-                            required
-                            className="mt-1 block w-full bg-white border-gray-300 rounded-md py-1 px-2 text-sm text-gray-900"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700">
-                            Giá
-                          </label>
-                          <input
-                            type="number"
-                            placeholder="12.50"
-                            value={size.price}
-                            onChange={(e) =>
-                              handleSizeChange(
-                                sIndex,
-                                "price",
-                                parseFloat(e.target.value)
-                              )
-                            }
-                            required
-                            min="0"
-                            step="0.01"
-                            className="mt-1 block w-full bg-white border-gray-300 rounded-md py-1 px-2 text-sm text-gray-900"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSize(sIndex)}
-                      className="text-red-600 hover:text-red-700 mt-1"
-                    >
-                      <TrashIcon className="w-5 h-5" />
-                    </button>
-                  </div>
-                  <div className="border-t border-gray-200 pt-3">
-                    <label className="block text-xs font-medium text-gray-700 mb-2">
-                      Chọn công thức
-                    </label>
-                    {recipes.length > 0 ? (
-                      <select
-                        value={size.recipe.id}
-                        onChange={(e) =>
-                          handleSelectRecipeForSize(sIndex, e.target.value)
-                        }
-                        className="w-full bg-white border-gray-300 rounded-md py-2 px-3 text-sm text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                      >
-                        {recipes.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="text-xs text-gray-500 py-2">
-                        Vui lòng thêm công thức trước.
-                      </p>
-                    )}
-                    <div className="mt-2 text-xs text-gray-500 mb-3">
-                      Công thức: {size.recipe.name || "Chưa chọn"} (
-                      {size.recipe.ingredients.length} nguyên liệu)
-                    </div>
-                    {size.recipe.ingredients.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <h4 className="text-xs font-medium text-gray-700 mb-2">
-                          Số lượng nguyên liệu cho phiên bản này
-                        </h4>
-                        <div className="space-y-2">
-                          {size.recipe.ingredients.map((recipeItem, rIndex) => (
-                            <div
-                              key={`${sIndex}-${rIndex}`}
-                              className="flex items-center gap-2 p-2 bg-gray-50 rounded border border-gray-200"
-                            >
-                              <div className="flex-1 text-xs text-gray-700">
-                                {recipeItem.ingredient.name} (
-                                {recipeItem.ingredient.unit})
-                              </div>
-                              <input
-                                type="number"
-                                placeholder="Số lượng"
-                                value={recipeItem.quantity || ""}
-                                onChange={(e) => {
-                                  const newSizes = [...formState.sizes];
-                                  const newIngredients = [
-                                    ...newSizes[sIndex].recipe.ingredients,
-                                  ];
-                                  newIngredients[rIndex] = {
-                                    ...newIngredients[rIndex],
-                                    quantity: Number(e.target.value),
-                                  };
-                                  newSizes[sIndex] = {
-                                    ...newSizes[sIndex],
-                                    recipe: {
-                                      ...newSizes[sIndex].recipe,
-                                      ingredients: newIngredients,
-                                    },
-                                  };
-                                  setFormState((prev) => ({
-                                    ...prev,
-                                    sizes: newSizes,
-                                  }));
-                                }}
-                                min="0"
-                                step="any"
-                                className="w-24 bg-white border-gray-300 rounded-md py-1.5 px-2 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-500"
+                >
+                  Lưu công thức
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        )}
         <footer className="p-4 flex justify-end gap-3 border-t border-gray-200 flex-shrink-0 bg-white">
           <button
             type="button"

@@ -19,6 +19,7 @@ export const menuApi = {
     IsShow?: boolean;
     HinhAnhUrls?: string[];
     PhienBanMonAns: Array<{
+      MaPhienBan?: string;
       TenPhienBan: string;
       Gia: number;
       MaTrangThai?: string;
@@ -30,6 +31,8 @@ export const menuApi = {
       }>;
     }>;
   }) => request<any>("/api/MonAnsAPI", { method: "POST", body: data }),
+
+  getVersions: () => request<any[]>("/api/PhienBanAPI"),
 
   uploadImage: async (
     file: File,
