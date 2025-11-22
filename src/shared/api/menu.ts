@@ -64,4 +64,23 @@ export const menuApi = {
 
   // Categories
   getCategories: () => request<any[]>("/api/DanhMucAPI"),
+
+  // Menu theo khung giờ
+  getMenuTheoKhungGio: (khungGio?: string) => {
+    const qs = new URLSearchParams();
+    if (khungGio) qs.set("khungGio", khungGio);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<any>(`/api/MenuAPI/TheoKhungGio${suffix}`);
+  },
+
+  // Menu hiện tại (tự động theo khung giờ)
+  getMenuHienTai: () => request<any>("/api/MenuAPI/HienTai"),
+
+  // Món ăn theo danh mục (E-menu)
+  getMonAnTheoDanhMuc: (maDanhMuc?: string) => {
+    const qs = new URLSearchParams();
+    if (maDanhMuc) qs.set("maDanhMuc", maDanhMuc);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<any>(`/api/MenuAPI/MonAnTheoDanhMuc${suffix}`);
+  },
 };
