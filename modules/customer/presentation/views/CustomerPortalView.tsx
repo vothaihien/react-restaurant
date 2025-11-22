@@ -374,7 +374,8 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   const total = cart.reduce((a, c) => a + c.price * c.qty, 0);
 
   const statusClass = (s: string | TableStatus, selected: boolean) => {
-    const base = "p-4 rounded-lg border-2 transition cursor-pointer";
+    const base =
+      "relative p-4 rounded-2xl border transition cursor-pointer bg-white/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col gap-2 overflow-hidden";
     if (selected) return `${base} border-indigo-600 bg-indigo-50`;
 
     // Normalize status to check
@@ -384,14 +385,14 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
 
     // Check if it's the enum value
     if (statusValue === TableStatus.Available) {
-      return `${base} border-green-500 bg-green-50 hover:bg-green-100`;
+      return `${base} border-emerald-400/70 bg-emerald-50/70 hover:bg-emerald-50`;
     }
     if (
       statusValue === TableStatus.Occupied ||
       statusValue === TableStatus.Reserved ||
       statusValue === TableStatus.CleaningNeeded
     ) {
-      return `${base} border-gray-300 bg-gray-50 opacity-60 cursor-not-allowed`;
+      return `${base} border-slate-200 bg-slate-50/80 opacity-80 cursor-not-allowed`;
     }
 
     // Check string values
@@ -417,12 +418,12 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       statusStr === "không đủ sức chứa" || statusStr === "không đủ chỗ";
 
     if (isAvailable) {
-      return `${base} border-green-500 bg-green-50 hover:bg-green-100`;
+      return `${base} border-emerald-400/70 bg-emerald-50/70 hover:bg-emerald-50`;
     }
     if (isOccupied || isReserved || isCleaning || isNotEnoughCapacity) {
-      return `${base} border-gray-300 bg-gray-50 opacity-60 cursor-not-allowed`;
+      return `${base} border-slate-200 bg-slate-50/80 opacity-80 cursor-not-allowed`;
     }
-    return `${base} border-gray-300 bg-white`;
+    return `${base} border-slate-200 bg-white`;
   };
 
   return (
@@ -529,185 +530,310 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
         </TabsContent>
 
         <TabsContent value="booking" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Chọn thời gian và số lượng khách</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Ngày và giờ muốn đặt
-                  </label>
-                  <DateTimePicker value={dateTime} onChange={setDateTime} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Số lượng khách
-                  </label>
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="Số khách"
-                    value={party}
-                    onChange={(e) => setParty(parseInt(e.target.value) || 1)}
-                  />
-                </div>
-              </div>
-              {dateTime && party >= 1 && (
-                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    Đã chọn:{" "}
-                    <strong>
-                      {new Date(dateTime).toLocaleString("vi-VN")}
-                    </strong>{" "}
-                    cho <strong>{party}</strong> khách
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-1 lg:grid-cols-[1.7fr,1.3fr] gap-4">
+            {/* Cột trái: thời gian + chọn bàn */}
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Chọn thời gian và số lượng khách</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Ngày và giờ muốn đặt
+                      </label>
+                      <DateTimePicker value={dateTime} onChange={setDateTime} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Số lượng khách
+                      </label>
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="Số khách"
+                        value={party}
+                        onChange={(e) =>
+                          setParty(parseInt(e.target.value) || 1)
+                        }
+                      />
+                    </div>
+                  </div>
+                  {dateTime && party >= 1 && (
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        Đã chọn:{" "}
+                        <strong>
+                          {new Date(dateTime).toLocaleString("vi-VN")}
+                        </strong>{" "}
+                        cho <strong>{party}</strong> khách
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-          {dateTime && party >= 1 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Chọn bàn có sẵn</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {loadingTables ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>Đang tải danh sách bàn có sẵn...</p>
-                  </div>
-                ) : availableTables.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>Không có bàn nào trống trong khung giờ này.</p>
-                    <p className="text-sm mt-2">
-                      Vui lòng chọn thời gian khác hoặc liên hệ nhà hàng.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
-                      <div className="text-sm text-gray-600">
-                        Tìm thấy <strong>{filteredTables.length}</strong> bàn có
-                        sẵn cho {party} khách vào{" "}
-                        {new Date(dateTime).toLocaleString("vi-VN")}
+              {dateTime && party >= 1 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Chọn bàn có sẵn</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {loadingTables ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <p>Đang tải danh sách bàn có sẵn...</p>
                       </div>
-                      {tangs.length > 0 && (
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm font-medium text-gray-700">
-                            Lọc theo tầng:
-                          </label>
-                          <select
-                            value={selectedTang}
-                            onChange={(e) => setSelectedTang(e.target.value)}
-                            className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                          >
-                            <option value="">Tất cả tầng</option>
-                            {tangs.map((tang) => (
-                              <option key={tang.maTang} value={tang.maTang}>
-                                {tang.tenTang}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                      {filteredTables.map((t: any) => {
-                        const isAvailable =
-                          t.status === "Đang trống" ||
-                          t.status === "Available" ||
-                          t.status === TableStatus.Available;
-                        const disabled = !isAvailable;
-                        const selected = selectedTableIds.includes(t.id);
-                        return (
-                          <button
-                            key={t.id}
-                            disabled={disabled}
-                            onClick={() => {
-                              if (selected) {
-                                setSelectedTableIds([]);
-                              } else {
-                                // Only allow selecting one table
-                                setSelectedTableIds([t.id]);
-                              }
-                            }}
-                            className={statusClass(t.status, selected)}
-                            title={
-                              disabled
-                                ? "Bàn không khả dụng"
-                                : selected
-                                ? "Bỏ chọn bàn này"
-                                : "Chọn bàn này"
-                            }
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-semibold text-gray-900">
-                                {t.name}
-                              </span>
-                              <span className="text-xs text-gray-600">
-                                {t.capacity} khách
-                              </span>
-                            </div>
-                            {t.tenTang && (
-                              <div className="mt-1 text-xs text-gray-500">
-                                {t.tenTang}
-                              </div>
-                            )}
-                            <div className="mt-1 text-sm text-gray-700">
-                              {t.status === "Đang trống" ||
-                              t.status === "Available" ||
-                              t.status === TableStatus.Available
-                                ? "Trống"
-                                : t.status === "Đã đặt" ||
-                                  t.status === "Reserved" ||
-                                  t.status === TableStatus.Reserved
-                                ? "Đã đặt"
-                                : t.status === "Đang sử dụng" ||
-                                  t.status === "Occupied" ||
-                                  t.status === TableStatus.Occupied
-                                ? "Đang sử dụng"
-                                : t.status === "Không đủ sức chứa"
-                                ? "Không đủ chỗ"
-                                : t.status === "Đang bảo trì"
-                                ? "Bảo trì"
-                                : t.status}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {selectedTableIds.length > 0 && (
-                      <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <p className="text-sm text-green-800">
-                          Đã chọn bàn:{" "}
-                          <strong>
-                            {availableTables.find(
-                              (t: any) => t.id === selectedTableIds[0]
-                            )?.name || selectedTableIds[0]}
-                          </strong>
-                          {availableTables.find(
-                            (t: any) => t.id === selectedTableIds[0]
-                          )?.tenTang && (
-                            <span>
-                              {" "}
-                              -{" "}
-                              {
-                                availableTables.find(
-                                  (t: any) => t.id === selectedTableIds[0]
-                                )?.tenTang
-                              }
-                            </span>
-                          )}
+                    ) : availableTables.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <p>Không có bàn nào trống trong khung giờ này.</p>
+                        <p className="text-sm mt-2">
+                          Vui lòng chọn thời gian khác hoặc liên hệ nhà hàng.
                         </p>
                       </div>
+                    ) : (
+                      <>
+                        <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
+                          <div className="text-sm text-gray-600">
+                            Tìm thấy <strong>{filteredTables.length}</strong>{" "}
+                            bàn có sẵn cho {party} khách vào{" "}
+                            {new Date(dateTime).toLocaleString("vi-VN")}
+                          </div>
+                          {tangs.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <label className="text-sm font-medium text-gray-700">
+                                Lọc theo tầng:
+                              </label>
+                              <select
+                                value={selectedTang}
+                                onChange={(e) =>
+                                  setSelectedTang(e.target.value)
+                                }
+                                className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                              >
+                                <option value="">Tất cả tầng</option>
+                                {tangs.map((tang) => (
+                                  <option key={tang.maTang} value={tang.maTang}>
+                                    {tang.tenTang}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                          {filteredTables.map((t: any) => {
+                            const isAvailable =
+                              t.status === "Đang trống" ||
+                              t.status === "Available" ||
+                              t.status === TableStatus.Available;
+                            const disabled = !isAvailable;
+                            const selected = selectedTableIds.includes(t.id);
+                            const isReserved =
+                              t.status === "Đã đặt" ||
+                              t.status === "Reserved" ||
+                              t.status === TableStatus.Reserved;
+                            const isOccupiedNow =
+                              t.status === "Đang sử dụng" ||
+                              t.status === "Occupied" ||
+                              t.status === TableStatus.Occupied;
+
+                            const statusDotClass = isAvailable
+                              ? "bg-emerald-500"
+                              : isReserved
+                              ? "bg-amber-500"
+                              : isOccupiedNow
+                              ? "bg-blue-500"
+                              : "bg-slate-400";
+
+                            return (
+                              <button
+                                key={t.id}
+                                disabled={disabled}
+                                onClick={() => {
+                                  if (selected) {
+                                    setSelectedTableIds([]);
+                                  } else {
+                                    // Only allow selecting one table
+                                    setSelectedTableIds([t.id]);
+                                  }
+                                }}
+                                className={statusClass(t.status, selected)}
+                                title={
+                                  disabled
+                                    ? "Bàn không khả dụng"
+                                    : selected
+                                    ? "Bỏ chọn bàn này"
+                                    : "Chọn bàn này"
+                                }
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex flex-col">
+                                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                                      <span
+                                        className={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}
+                                      />
+                                      {t.name}
+                                    </span>
+                                    {t.tenTang && (
+                                      <span className="mt-0.5 text-[11px] uppercase tracking-wide text-gray-500">
+                                        {t.tenTang}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="mt-2 flex items-center justify-between text-xs font-medium">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={
+                                        t.status === "Đang trống" ||
+                                        t.status === "Available" ||
+                                        t.status === TableStatus.Available
+                                          ? "text-emerald-600"
+                                          : t.status === "Đã đặt" ||
+                                            t.status === "Reserved" ||
+                                            t.status === TableStatus.Reserved
+                                          ? "text-amber-600"
+                                          : t.status === "Đang sử dụng" ||
+                                            t.status === "Occupied" ||
+                                            t.status === TableStatus.Occupied
+                                          ? "text-blue-600"
+                                          : t.status === "Không đủ sức chứa"
+                                          ? "text-rose-600"
+                                          : t.status === "Đang bảo trì"
+                                          ? "text-slate-500"
+                                          : "text-gray-600"
+                                      }
+                                    >
+                                      {t.status === "Đang trống" ||
+                                      t.status === "Available" ||
+                                      t.status === TableStatus.Available
+                                        ? "Trống"
+                                        : t.status === "Đã đặt" ||
+                                          t.status === "Reserved" ||
+                                          t.status === TableStatus.Reserved
+                                        ? "Đã đặt"
+                                        : t.status === "Đang sử dụng" ||
+                                          t.status === "Occupied" ||
+                                          t.status === TableStatus.Occupied
+                                        ? "Đang sử dụng"
+                                        : t.status === "Không đủ sức chứa"
+                                        ? "Không đủ chỗ"
+                                        : t.status === "Đang bảo trì"
+                                        ? "Bảo trì"
+                                        : t.status}
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                                      {t.capacity} khách
+                                    </span>
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {selectedTableIds.length > 0 && (
+                          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                            <p className="text-sm text-green-800">
+                              Đã chọn bàn:{" "}
+                              <strong>
+                                {availableTables.find(
+                                  (t: any) => t.id === selectedTableIds[0]
+                                )?.name || selectedTableIds[0]}
+                              </strong>
+                              {availableTables.find(
+                                (t: any) => t.id === selectedTableIds[0]
+                              )?.tenTang && (
+                                <span>
+                                  {" "}
+                                  -{" "}
+                                  {
+                                    availableTables.find(
+                                      (t: any) => t.id === selectedTableIds[0]
+                                    )?.tenTang
+                                  }
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* Cột phải: thông tin đặt bàn */}
+            <div className="space-y-4">
+              <Card className="lg:sticky lg:top-20">
+                <CardHeader>
+                  <CardTitle>Thông tin đặt bàn</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={submitBooking} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Họ tên *
+                        </label>
+                        <Input
+                          placeholder="Nhập họ tên"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Điện thoại
+                        </label>
+                        <Input
+                          placeholder="Nhập số điện thoại"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Ghi chú (dịp, yêu cầu đặc biệt)
+                      </label>
+                      <Input
+                        placeholder="Ví dụ: Sinh nhật, yêu cầu bàn gần cửa sổ..."
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                      <div className="text-sm text-muted-foreground">
+                        {selectedTableIds.length > 0
+                          ? `Đã chọn bàn: ${
+                              availableTables.find(
+                                (t: any) => t.id === selectedTableIds[0]
+                              )?.name || selectedTableIds[0]
+                            }${
+                              availableTables.find(
+                                (t: any) => t.id === selectedTableIds[0]
+                              )?.tenTang
+                                ? ` - ${
+                                    availableTables.find(
+                                      (t: any) => t.id === selectedTableIds[0]
+                                    )?.tenTang
+                                  }`
+                                : ""
+                            }`
+                          : "Chưa chọn bàn (tuỳ chọn)"}
+                      </div>
+                      <Button type="submit" disabled={!name || !dateTime}>
+                        Gửi yêu cầu đặt bàn
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
 
           {/* Phần đặt món trước đã được ẩn tạm thời */}
           {/* <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -752,7 +878,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                         </div>
                     </div> */}
 
-          {dateTime && party >= 1 && (
+          {/* {dateTime && party >= 1 && (
             <Card>
               <CardHeader>
                 <CardTitle>Thông tin đặt bàn</CardTitle>
@@ -819,7 +945,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                 </form>
               </CardContent>
             </Card>
-          )}
+          )} */}
         </TabsContent>
 
         <TabsContent value="menu">
