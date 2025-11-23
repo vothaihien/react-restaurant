@@ -1,24 +1,37 @@
-
 import React from 'react';
-import type { View } from '@/core/types';
-import { ChefHatIcon, GridIcon, MenuIcon, ChartIcon, SettingsIcon } from '@/components/Icons';
+// 💡 Import NavLink từ react-router-dom để điều hướng và highlight
+import { NavLink } from 'react-router-dom'; 
 
-interface SidebarProps {
-    currentView: View;
-    setCurrentView: (view: View) => void;
+import { ChefHatIcon, GridIcon, MenuIcon, ChartIcon, SettingsIcon } from '@/components/Icons';
+import { UserIcon } from 'lucide-react';
+
+interface SidebarProps { 
+    currentPath: string; // Chấp nhận prop mới
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView }) => {
+// Component Sidebar không cần nhận props điều hướng nữa
+const Sidebar: React.FC<SidebarProps> = ({currentPath}) => { 
+    // Thay đổi id thành path (đường dẫn URL)
     const navItems = [
-        { id: 'dashboard', label: 'Sơ đồ bàn', icon: GridIcon },
-        { id: 'menu', label: 'Thực đơn', icon: MenuIcon },
-        { id: 'reservations', label: 'Đặt bàn', icon: GridIcon },
-        { id: 'inventory', label: 'Kho', icon: MenuIcon },
-        { id: 'masterdata', label: 'Danh mục', icon: SettingsIcon },
-        { id: 'kds', label: 'Màn hình bếp', icon: ChefHatIcon },
-        { id: 'reports', label: 'Báo cáo', icon: ChartIcon },
-        { id: 'settings', label: 'Cài đặt', icon: SettingsIcon },
+        { path: '/', label: 'Sơ đồ bàn', icon: GridIcon }, // / sẽ khớp với DashboardView
+        { path: '/menu', label: 'Thực đơn', icon: MenuIcon },
+        { path: '/reservations', label: 'Đặt bàn', icon: GridIcon },
+        { path: '/inventory', label: 'Kho', icon: MenuIcon },
+        { path: '/masterdata', label: 'Danh mục', icon: SettingsIcon },
+        { path: '/kds', label: 'Màn hình bếp', icon: ChefHatIcon },
+        { path: '/reports', label: 'Báo cáo', icon: ChartIcon },
+        { path: '/settings', label: 'Cài đặt', icon: SettingsIcon },
+        { path: '/customer', label: 'Cổng Khách hàng', icon: UserIcon }, 
     ];
+
+    // Hàm để tạo CSS class dựa trên trạng thái active của NavLink
+    const getNavLinkClass = ({ isActive }: { isActive: boolean }) => {
+        const baseClasses = "flex items-center p-3 rounded-lg transition-colors duration-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900";
+        const activeClasses = "bg-indigo-600 text-white hover:bg-indigo-700 hover:text-white";
+
+        return isActive ? `${baseClasses} ${activeClasses}` : baseClasses;
+    };
+
 
     return (
         <div className="w-20 md:w-64 bg-white border-r border-gray-200 flex flex-col">
@@ -28,18 +41,18 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView }) => {
             </div>
             <nav className="flex-1 px-2 py-4 space-y-2">
                 {navItems.map((item) => (
-                    <a
-                        key={item.id}
-                        href="#"
-                        onClick={(e) => { e.preventDefault(); setCurrentView(item.id as View); }}
-                        className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${currentView === item.id
-                            ? 'bg-indigo-600 text-white'
-                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                            }`}
+                    // 💡 Thay thế thẻ <a> bằng NavLink
+                    <NavLink
+                        key={item.path}
+                        to={item.path} // Định nghĩa đường dẫn đích
+                        // Sử dụng hàm getNavLinkClass để tự động kiểm tra isActive
+                        className={getNavLinkClass} 
+                        // Dùng end cho đường dẫn gốc ("/") để nó không highlight luôn các route khác (như /menu)
+                        end={item.path === "/"} 
                     >
                         <item.icon className="w-6 h-6" />
                         <span className="hidden md:block ml-4 font-semibold">{item.label}</span>
-                    </a>
+                    </NavLink>
                 ))}
             </nav>
         </div>

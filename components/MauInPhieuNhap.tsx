@@ -56,7 +56,6 @@ export const MauInPhieuNhap = React.forwardRef<HTMLDivElement, Props>((props, re
                     </tr>
                 </thead>
                 <tbody>
-                    {/* Lưu ý: Dùng data.chiTiet để map */}
                     {data.chiTiet?.map((item: any, idx: number) => (
                         <tr key={idx}>
                             <td className="border border-black p-2 text-center">{idx + 1}</td>

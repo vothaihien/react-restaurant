@@ -9,38 +9,33 @@ import {
   Chip,
   CircularProgress,
   Paper,
-  FormControl,
-  SelectChangeEvent,
   Popover,
   MenuList,
+  MenuItem,
   Autocomplete,
-  MenuItem, // Phải import MenuItem để dùng
 } from "@mui/material";
-import OrderDetailModal from '@/components/OrderDetailModal';
-
-import {
-  LocalizationProvider,
-  DateTimePicker,
-  DatePicker,
-} from "@mui/x-date-pickers";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import dayjs, { Dayjs } from "dayjs";
 import {
   People,
   CheckCircle,
-  AccessTime,
   Cancel,
   HelpOutline,
-  CalendarMonth,
+  Search,
+  Star,
+  PersonOff
 } from "@mui/icons-material";
+import { LocalizationProvider, DateTimePicker, DatePicker } from "@mui/x-date-pickers";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import dayjs, { Dayjs } from "dayjs";
 
-// Import service
+// --- IMPORT SERVICES (Đảm bảo đường dẫn đúng với dự án của bạn) ---
+import OrderDetailModal from '@/components/OrderDetailModal';
 import { tableService } from "@/services/tableService";
 import { bookingService } from "@/services/bookingService";
 import { orderService } from "@/services/orderService";
 import { donHangService, DonHangActive } from "@/services/donHangService";
+import { khachHangService } from "@/services/khachHangService"; // <--- SERVICE MỚI
 
-// Định nghĩa kiểu dữ liệu (Nên dời ra file models/)
+// --- ĐỊNH NGHĨA TYPE ---
 interface BanAn {
   maBan: string;
   tenBan: string;
@@ -51,52 +46,100 @@ interface BanAn {
   tenTang: string;
 }
 
-// =================================================================
-// COMPONENT FORM ĐẶT BÀN (Không thay đổi)
-// =================================================================
 const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
   onBookingSuccess,
 }) => {
+  // State Form Data
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [partySize, setPartySize] = useState(2);
   const [bookingTime, setBookingTime] = useState<Dayjs | null>(dayjs());
   const [selectedTables, setSelectedTables] = useState<BanAn[]>([]);
+  
+  // State xử lý dữ liệu bàn & loading
   const [availableTables, setAvailableTables] = useState<BanAn[]>([]);
   const [loadingTables, setLoadingTables] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // State Logic Khách Hàng & Khuyến Mãi
+  const [isWalkInGuest, setIsWalkInGuest] = useState(false);
+  const [isCustomerFound, setIsCustomerFound] = useState(false);
+  const [loyaltyMessage, setLoyaltyMessage] = useState<string | null>(null);
+  const [isVipEligible, setIsVipEligible] = useState(false);
+
+  // --- HÀM TÌM KIẾM BÀN TRỐNG ---
   const fetchAvailableTables = async (time: Dayjs, party: number) => {
-    setLoadingTables(true);
-    try {
-      const tables = await tableService.getTablesByTime(
-        time.toISOString(),
-        party
-      );
-      // SỬA LẠI DÒNG NÀY: Bỏ .filter()
-      setAvailableTables(tables); 
-    } catch (error) {
-      console.error("Lỗi tải bàn trống:", error);
-      setAvailableTables([]);
-    } finally {
-      setLoadingTables(false);
-    }
-  };
+    setLoadingTables(true);
+    try {
+      const tables = await tableService.getTablesByTime(time.toISOString(), party);
+      setAvailableTables(tables);
+    } catch (error) {
+      console.error("Lỗi tải bàn trống:", error);
+      setAvailableTables([]);
+    } finally {
+      setLoadingTables(false);
+    }
+  };
 
   useEffect(() => {
     if (bookingTime) {
       fetchAvailableTables(bookingTime, partySize);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingTime, partySize]);
 
+  // --- HÀM TÌM KIẾM KHÁCH HÀNG ---
+  const handleSearchCustomer = async () => {
+    if (!phone) {
+      alert("Vui lòng nhập SĐT để tìm!");
+      return;
+    }
+    try {
+      const data = await khachHangService.searchByPhone(phone);
+      if (data.found) {
+        setName(data.tenKhach || ""); 
+        setEmail(data.email || "");
+        setIsCustomerFound(true);
+        setLoyaltyMessage(data.message || null);
+        setIsVipEligible(data.duocGiamGia || false);
+      } else {
+        setIsCustomerFound(false);
+        setName("");
+        setEmail("");
+        setLoyaltyMessage("Khách hàng mới (Chưa có lịch sử tích lũy)");
+        setIsVipEligible(false);
+      }
+    } catch (err) {
+      console.error("Lỗi tìm kiếm:", err);
+      alert("Không tìm thấy khách hàng hoặc lỗi kết nối.");
+    }
+  };
+
+  // --- HÀM CHUYỂN CHẾ ĐỘ KHÁCH LẺ ---
+  const handleSetWalkInGuest = () => {
+    setIsWalkInGuest(true);
+    setPhone("");       
+    setEmail("");       
+    setName("Khách Vãng Lai");
+    setIsCustomerFound(false);
+    setLoyaltyMessage(null);
+    setIsVipEligible(false);
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhone(e.target.value);
+    if (isWalkInGuest) {
+        setIsWalkInGuest(false); 
+        setName(""); 
+    }
+  };
+
+  // --- HÀM SUBMIT TẠO ĐƠN (ĐÃ CẬP NHẬT GỌI API STAFF) ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone || !bookingTime || selectedTables.length === 0) {
-      alert(
-        "Vui lòng nhập đủ thông tin (Tên, SĐT, Thời gian, và ít nhất 1 Bàn)"
-      );
+    
+    if (!name || (!isWalkInGuest && !phone) || !bookingTime || selectedTables.length === 0) {
+      alert("Vui lòng nhập đủ thông tin và chọn bàn!");
       return;
     }
 
@@ -105,23 +148,31 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
       const data = {
         DanhSachMaBan: selectedTables.map((t) => t.maBan),
         HoTenKhach: name,
-        SoDienThoaiKhach: phone,
+        SoDienThoaiKhach: isWalkInGuest ? "" : phone,
         Email: email || null,
-        ThoiGianDatHang: bookingTime!.toISOString(), // Thêm ! vì đã check ở trên
+        ThoiGianDatHang: bookingTime!.toISOString(),
         SoLuongNguoi: partySize,
-        MaNhanVien: "NV001", // TODO: Lấy mã NV đang đăng nhập
+        // TODO: Lấy MaNhanVien từ Context đăng nhập. Tạm thời hardcode NV001
+        MaNhanVien: "NV001", 
       };
-      await bookingService.createReservation(data);
-      alert("Tạo đặt bàn thành công!");
+      
+      // GỌI HÀM DÀNH CHO NHÂN VIÊN (staff/create)
+      const res = await bookingService.createReservationByStaff(data);
+      
+      // Xử lý thông báo dựa trên kết quả trả về từ C#
+      let msg = res.Message || "Tạo đặt bàn thành công!";
+      
+      // Kiểm tra thông báo khuyến mãi từ Server trả về
+      if (res.KhuyenMai && res.KhuyenMai !== "Không có") {
+          msg += `\n🎉 ${res.KhuyenMai}`;
+      }
+      
+      alert(msg);
       onBookingSuccess();
       
-      // Reset form
-      setName("");
-      setPhone("");
-      setEmail("");
-      setPartySize(2);
-      setBookingTime(dayjs());
-      setSelectedTables([]); // Sửa lỗi
+      // Reset Form
+      setName(""); setPhone(""); setEmail(""); setPartySize(2); setBookingTime(dayjs()); setSelectedTables([]);
+      setIsWalkInGuest(false); setIsCustomerFound(false); setLoyaltyMessage(null); setIsVipEligible(false);
     } catch (error: any) {
       console.error("Lỗi tạo đặt bàn:", error);
       alert(`Lỗi: ${error.message || "Không thể tạo đặt bàn"}`);
@@ -132,11 +183,43 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
 
   return (
     <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
-      <Typography variant="h6" gutterBottom>
-        Tạo Đặt Bàn Mới
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6">Tạo Đặt Bàn Mới (Nhân Viên)</Typography>
+        <Button 
+            variant={isWalkInGuest ? "contained" : "outlined"} 
+            color="secondary"
+            size="small"
+            onClick={handleSetWalkInGuest}
+            startIcon={<PersonOff />}
+        >
+            Khách Lẻ (Không lưu)
+        </Button>
+      </Box>
+
       <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
         <Box sx={{ display: "flex", flexWrap: "wrap", mx: -1.5 }}>
+          
+          {/* CỘT 1: SĐT & TÌM */}
+          <Box sx={{ p: 1.5, width: { xs: "100%", sm: "50%" }, display: 'flex', gap: 1 }}>
+            <TextField
+              fullWidth
+              label={isWalkInGuest ? "Không cần SĐT" : "Điện thoại (Nhập để tìm)"}
+              value={phone}
+              onChange={handlePhoneChange}
+              required={!isWalkInGuest}
+              disabled={isWalkInGuest}
+              placeholder={isWalkInGuest ? "Chế độ Khách Lẻ" : "09xxxx..."}
+              sx={{ bgcolor: isWalkInGuest ? '#f0f0f0' : 'white' }}
+            />
+            <Button 
+                variant="contained" color="info" onClick={handleSearchCustomer}
+                disabled={isWalkInGuest || !phone} sx={{ minWidth: '50px' }}
+            >
+                <Search />
+            </Button>
+          </Box>
+
+          {/* CỘT 2: TÊN KHÁCH */}
           <Box sx={{ p: 1.5, width: { xs: "100%", sm: "50%" } }}>
             <TextField
               fullWidth
@@ -144,96 +227,84 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
+              InputProps={{
+                readOnly: isCustomerFound,
+                style: isCustomerFound ? { backgroundColor: '#f0f4f8' } : {}
+              }}
             />
           </Box>
+
+          {/* THÔNG BÁO VIP (HIỂN THỊ KHI TÌM THẤY) */}
+          {loyaltyMessage && (
+            <Box sx={{ p: 1.5, width: "100%" }}>
+                <Paper 
+                    variant="outlined" 
+                    sx={{ 
+                        p: 1.5, 
+                        bgcolor: isVipEligible ? '#e8f5e9' : '#f5f5f5',
+                        borderColor: isVipEligible ? '#66bb6a' : '#ddd',
+                        display: 'flex', alignItems: 'center', gap: 1
+                    }}
+                >
+                    {isVipEligible ? <Star color="success" /> : <People color="action" />}
+                    <Typography 
+                        variant="body2" 
+                        color={isVipEligible ? "success.main" : "text.secondary"} 
+                        fontWeight={isVipEligible ? "bold" : "regular"}
+                    >
+                        {loyaltyMessage}
+                    </Typography>
+                </Paper>
+            </Box>
+          )}
+
+          {/* EMAIL */}
           <Box sx={{ p: 1.5, width: { xs: "100%", sm: "50%" } }}>
             <TextField
-              fullWidth
-              label="Điện thoại"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-            />
-          </Box>
-          <Box sx={{ p: 1.5, width: { xs: "100%", sm: "50%" } }}>
-            <TextField
-              fullWidth
-              label="Email (Không bắt buộc)"
-              value={email}
+              fullWidth label="Email" value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </Box>
+
+          {/* SỐ LƯỢNG KHÁCH */}
           <Box sx={{ p: 1.5, width: { xs: "100%", sm: "50%" } }}>
             <TextField
-              fullWidth
-              type="number"
-              label="Số lượng khách"
+              fullWidth type="number" label="Số lượng khách"
               value={partySize}
               onChange={(e) => setPartySize(parseInt(e.target.value) || 1)}
-              required
-              InputProps={{ inputProps: { min: 1 } }}
+              required InputProps={{ inputProps: { min: 1 } }}
             />
           </Box>
+          
+          {/* THỜI GIAN */}
           <Box sx={{ p: 1.5, width: { xs: "100%", sm: "50%" } }}>
             <LocalizationProvider dateAdapter={AdapterDayjs}>
               <DateTimePicker
-                label="Thời gian nhận bàn"
-                value={bookingTime}
+                label="Thời gian nhận bàn" value={bookingTime}
                 onChange={(newValue) => setBookingTime(newValue)}
                 slots={{ textField: TextField }}
-                slotProps={{
-                  textField: {
-                    fullWidth: true,
-                    required: true,
-                  },
-                }}
-                enableAccessibleFieldDOMStructure={false}
+                slotProps={{ textField: { fullWidth: true, required: true } }}
               />
             </LocalizationProvider>
           </Box>
+
+          {/* CHỌN BÀN */}
           <Box sx={{ p: 1.5, width: { xs: "100%", sm: "50%" } }}>
             <Autocomplete
-              multiple // CHO PHÉP CHỌN NHIỀU
-              id="danh-sach-ban"
+              multiple
               options={availableTables}
-              getOptionLabel={(option) =>
-                `${option.tenBan} (Tầng: ${option.tenTang}, Sức chứa: ${option.sucChua})`
-              }
+              getOptionLabel={(option) => `${option.tenBan} (${option.sucChua} chỗ)`}
               value={selectedTables}
-              onChange={(event, newValue) => {
-                setSelectedTables(newValue);
-              }}
-              isOptionEqualToValue={(option, value) =>
-                option.maBan === value.maBan
-              }
-              loading={loadingTables}
+              onChange={(event, newValue) => setSelectedTables(newValue)}
               renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Chọn bàn phù hợp"
-                  placeholder="Có thể chọn nhiều bàn"
-                  InputProps={{
-                    ...params.InputProps,
-                    endAdornment: (
-                      <>
-                        {loadingTables ? (
-                          <CircularProgress color="inherit" size={20} />
-                        ) : null}
-                        {params.InputProps.endAdornment}
-                      </>
-                    ),
-                  }}
-                />
+                <TextField {...params} label="Chọn bàn" placeholder="Chọn bàn..." />
               )}
             />
           </Box>
+
+          {/* NÚT SUBMIT */}
           <Box sx={{ p: 1.5, width: "100%", textAlign: "right" }}>
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={submitting}
-            >
+            <Button type="submit" variant="contained" size="large" disabled={submitting}>
               {submitting ? <CircularProgress size={24} /> : "Tạo Đặt Bàn"}
             </Button>
           </Box>
@@ -244,36 +315,30 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
 };
 
 // =================================================================
-// COMPONENT CHÍNH (Đã xóa Sơ Đồ Bàn và sửa lỗi)
+// 2. COMPONENT VIEW CHÍNH (ReservationsView)
 // =================================================================
 const ReservationsView: React.FC = () => {
   const [orders, setOrders] = useState<DonHangActive[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewDetailOrderId, setViewDetailOrderId] = useState<string | null>(null); // <--- Thêm dòng này
+  const [viewDetailOrderId, setViewDetailOrderId] = useState<string | null>(null);
 
-  // State cho Popover (menu hành động)
+  // State Popover Menu
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedOrder, setSelectedOrder] = useState<DonHangActive | null>(null);
-
-  // State cho bộ lọc ngày
+  
+  // State Bộ lọc ngày
   const [selectedDate, setSelectedDate] = useState<Dayjs | null>(dayjs());
 
-  // HÀM GỌI API (ĐÃ SỬA LẠI)
+  // HÀM TẢI DANH SÁCH ĐƠN HÀNG
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Format ngày để gửi API (VD: '2025-11-18')
-      const dateParam = selectedDate
-        ? selectedDate.format("YYYY-MM-DD")
-        : dayjs().format("YYYY-MM-DD");
-
-      // Chỉ gọi API lấy đơn hàng
+      const dateParam = selectedDate ? selectedDate.format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD");
       const ordersData = await donHangService.getActiveBookings(dateParam);
       setOrders(ordersData as DonHangActive[]);
-
     } catch (error) {
       console.error("Lỗi tải đơn hàng:", error);
-      setOrders([]); // Set rỗng nếu lỗi
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -283,11 +348,8 @@ const ReservationsView: React.FC = () => {
     fetchData();
   }, [selectedDate]); 
 
-  
-  const handleOrderClick = (
-    event: React.MouseEvent<HTMLElement>,
-    order: DonHangActive
-  ) => {
+  // --- CÁC HÀM XỬ LÝ HÀNH ĐỘNG ---
+  const handleOrderClick = (event: React.MouseEvent<HTMLElement>, order: DonHangActive) => {
     setAnchorEl(event.currentTarget);
     setSelectedOrder(order);
   };
@@ -297,46 +359,23 @@ const ReservationsView: React.FC = () => {
     setSelectedOrder(null);
   };
 
+  // Xác nhận khách đến -> Chuyển sang CHO_THANH_TOAN
   const handleCheckIn = async (maDonHang: string) => {
     handleCloseMenu();
-    if (
-      !window.confirm(
-        "Xác nhận khách đã đến? Đơn hàng sẽ chuyển sang 'Đang ăn' (Chờ thanh toán)."
-      )
-    )
-      return;
+    if (!window.confirm("Xác nhận khách đã đến?")) return;
     try {
       await orderService.updateOrderStatus(maDonHang, "CHO_THANH_TOAN");
       alert("Check-in thành công!");
       fetchData();
     } catch (error: any) {
-      alert(`Lỗi check-in: ${error.message}`);
+      alert(`Lỗi: ${error.message}`);
     }
   };
 
-  // const handlePayment = async (maDonHang: string) => {
-  //   handleCloseMenu();
-  //   if (
-  //     !window.confirm(
-  //       "Xác nhận thanh toán cho đơn này? Bàn sẽ chuyển về 'Trống'."
-  //     )
-  //   )
-  //     return;
-  //   try {
-  //     await orderService.updateOrderStatus(maDonHang, "DA_HOAN_THANH");
-  //     alert("Thanh toán thành công!");
-  //     fetchData();
-  //   } catch (error: any) {
-  //     alert(`Lỗi thanh toán: ${error.message}`);
-  //   }
-  // };
-
+  // Mở modal thanh toán
   const handlePayment = (maDonHang: string) => {
-    handleCloseMenu(); // Đóng cái menu 3 chấm lại
-    
-    // Thay vì gọi API ngay, ta lưu ID đơn hàng vào state này
-    // Việc này sẽ kích hoạt Modal hiển thị lên
-    setViewDetailOrderId(maDonHang);
+    handleCloseMenu();
+    setViewDetailOrderId(maDonHang); 
   };
 
   const handleCancel = async (maDonHang: string) => {
@@ -344,94 +383,77 @@ const ReservationsView: React.FC = () => {
     if (!window.confirm("Bạn có chắc muốn HỦY đơn hàng này?")) return;
     try {
       await orderService.updateOrderStatus(maDonHang, "DA_HUY");
-      alert("Hủy đơn thành công!");
-      fetchData(); // Tải lại danh sách
+      alert("Đã hủy đơn!");
+      fetchData();
     } catch (error: any) {
-      alert(`Lỗi hủy đơn: ${error.message}`);
+      alert(`Lỗi: ${error.message}`);
     }
   };
 
-  // BÁO NO-SHOW (CHO ĐƠN 'DA_XAC_NHAN' CỦA HÔM NAY)
   const handleNoShow = async (maDonHang: string) => {
     handleCloseMenu();
-    if (!window.confirm("Xác nhận khách KHÔNG ĐẾN (No-show)?")) return;
+    if (!window.confirm("Xác nhận khách No-show?")) return;
     try {
       await orderService.updateOrderStatus(maDonHang, "NO_SHOW");
-      alert("Cập nhật No-show thành công!");
-      fetchData(); // Tải lại danh sách
+      alert("Đã cập nhật No-show!");
+      fetchData();
     } catch (error: any) {
-      alert(`Lỗi No-show: ${error.message}`);
+      alert(`Lỗi: ${error.message}`);
     }
   };
 
+  // --- GIAO DIỆN CHÍNH ---
   return (
-    <Box sx={{ p: 3, bgcolor: "#f4f6f8" }}>
-      {/* 1. Form đặt bàn */}
+    <Box sx={{ p: 3, bgcolor: "#f4f6f8", minHeight: "100vh" }}>
+      {/* 1. FORM ĐẶT BÀN */}
       <BookingForm onBookingSuccess={fetchData} />
 
-      {/* 2. Danh sách đơn hàng (không còn 2 cột) */}
+      {/* 2. DANH SÁCH ĐƠN HÀNG */}
       <Paper elevation={3} sx={{ p: 3, mt: 4 }}>
-        <Typography variant="h6" gutterBottom>
-          Đơn Hàng Đang Chờ
-        </Typography>
+        <Typography variant="h6" gutterBottom>Đơn Hàng Đang Chờ</Typography>
 
-        {/* BỘ LỌC NGÀY */}
         <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <DatePicker
-            label="Chọn ngày xem đơn"
-            value={selectedDate}
-            onChange={(newValue) => setSelectedDate(newValue)}
-            slots={{ textField: TextField }}
-            slotProps={{ textField: { fullWidth: true, sx: { mb: 2 } } }}
-            enableAccessibleFieldDOMStructure={false}
-          />
-        </LocalizationProvider>
+  <DatePicker
+    label="Chọn ngày xem đơn"
+    value={selectedDate}
+    onChange={(newValue) => setSelectedDate(newValue)}
+    
+    // 1. XÓA DÒNG NÀY ĐI: slots={{ textField: TextField }}
+    
+    // 2. Giữ nguyên dòng này
+    enableAccessibleFieldDOMStructure={false} 
+    
+    // 3. Styling vẫn hoạt động bình thường nhờ dòng này
+    slotProps={{ textField: { fullWidth: true, sx: { mb: 2 } } }} 
+  />
+</LocalizationProvider>
 
-        {/* DANH SÁCH ĐƠN HÀNG */}
+        {/* Danh sách Card */}
         {loading ? (
           <CircularProgress />
         ) : (
-          <Box
-            sx={{
-              maxHeight: 600,
-              overflowY: "auto",
-              display: "flex",
-              flexDirection: "column",
-              gap: 2,
-            }}
-          >
-            {orders.length === 0 && (
-              <Typography>Không có đơn hàng nào cho ngày đã chọn.</Typography>
-            )}
-
+          <Box sx={{ maxHeight: 600, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+            {orders.length === 0 && <Typography>Không có đơn hàng nào.</Typography>}
             {orders.map((order) => (
-              <Card
-                key={order.maDonHang}
-                variant="outlined"
+              <Card 
+                key={order.maDonHang} variant="outlined" 
                 onClick={(e) => handleOrderClick(e, order)}
                 sx={{ cursor: "pointer", "&:hover": { boxShadow: 2 } }}
               >
-                <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+                <CardContent sx={{ p: 2 }}>
                   <Typography variant="subtitle1" fontWeight="bold">
                     {order.tenNguoiNhan} ({order.soNguoi} người)
                   </Typography>
                   <Typography color="text.secondary" variant="body2">
-                    {dayjs(order.thoiGianNhanBan).format("HH:mm DD/MM/YYYY")}
+                    Giờ ăn: {dayjs(order.thoiGianNhanBan).format("HH:mm DD/MM/YYYY")}
                   </Typography>
                   <Typography color="text.secondary" variant="body2">
                     Bàn: {order.banAn.join(", ")}
                   </Typography>
-                  <Chip
-                    label={order.trangThai}
-                    color={
-                      order.maTrangThai === "CHO_THANH_TOAN"
-                        ? "error"
-                        : order.maTrangThai === "DA_XAC_NHAN"
-                        ? "primary"
-                        : "warning" // CHO_XAC_NHAN
-                    }
-                    size="small"
-                    sx={{ mt: 1 }}
+                  <Chip 
+                    label={order.trangThai} 
+                    size="small" sx={{ mt: 1 }}
+                    color={order.maTrangThai === "CHO_THANH_TOAN" ? "error" : order.maTrangThai === "DA_XAC_NHAN" ? "primary" : "warning"}
                   />
                 </CardContent>
               </Card>
@@ -440,80 +462,56 @@ const ReservationsView: React.FC = () => {
         )}
       </Paper>
 
-      {/* 3. Popover (Menu hành động - ĐÃ CẬP NHẬT LOGIC) */}
+      {/* 3. MENU HÀNH ĐỘNG (POPOVER) */}
       <Popover
         open={Boolean(anchorEl)}
         anchorEl={anchorEl}
         onClose={handleCloseMenu}
         anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
       >
-        {selectedOrder && ( // Thêm check này cho an toàn
-          <Popover
-        open={Boolean(anchorEl)}
-        anchorEl={anchorEl}
-        onClose={handleCloseMenu}
-        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-      >
-        <MenuList>
-          {selectedOrder?.maTrangThai === "CHO_XAC_NHAN" && [
-            <MenuItem key="confirm" onClick={() => handleCheckIn(selectedOrder.maDonHang)}>
-              <CheckCircle sx={{ mr: 1 }} color="primary" /> XÁC NHẬN ĐƠN
-            </MenuItem>,
-            <MenuItem key="cancel" onClick={() => handleCancel(selectedOrder.maDonHang)}>
-              <Cancel sx={{ mr: 1 }} color="error" /> Hủy đơn
-            </MenuItem>
-          ]}
-
-          {selectedOrder?.maTrangThai === "DA_XAC_NHAN" && [
-            // Logic kiểm tra ngày hôm nay
-            dayjs(selectedOrder.thoiGianNhanBan).isSame(dayjs(), "day") ? (
-              [
-                <MenuItem key="checkin" onClick={() => handleCheckIn(selectedOrder.maDonHang)}>
-                  <CheckCircle sx={{ mr: 1 }} color="success" /> Check-in (Vào bàn)
-                </MenuItem>,
-                <MenuItem key="cancel" onClick={() => handleCancel(selectedOrder.maDonHang)}>
-                  <Cancel sx={{ mr: 1 }} color="error" /> Hủy đơn
-                </MenuItem>,
-                <MenuItem key="noshow" onClick={() => handleNoShow(selectedOrder.maDonHang)}>
-                  <HelpOutline sx={{ mr: 1 }} color="warning" /> Báo No-Show
-                </MenuItem>
-              ]
-            ) : (
-              <MenuItem key="cancel_future" onClick={() => handleCancel(selectedOrder.maDonHang)}>
-                <Cancel sx={{ mr: 1 }} color="error" /> Hủy đơn
+        {selectedOrder && (
+          <MenuList>
+            {/* Menu cho trạng thái CHỜ XÁC NHẬN */}
+            {selectedOrder.maTrangThai === "CHO_XAC_NHAN" && [
+              <MenuItem key="check" onClick={() => handleCheckIn(selectedOrder.maDonHang)}>
+                 <CheckCircle sx={{ mr: 1 }} color="primary" /> Xác nhận đơn
+              </MenuItem>,
+              <MenuItem key="cancel" onClick={() => handleCancel(selectedOrder.maDonHang)}>
+                 <Cancel sx={{ mr: 1 }} color="error" /> Hủy đơn
               </MenuItem>
-            )
-          ]}
-
-          {selectedOrder?.maTrangThai === "CHO_THANH_TOAN" && [
-            <MenuItem key="pay" onClick={() => handlePayment(selectedOrder.maDonHang)}>
-              <CheckCircle sx={{ mr: 1 }} color="primary" /> Thanh Toán & Trả bàn
-            </MenuItem>,
-            <MenuItem key="edit" onClick={handleCloseMenu}>
-              Thêm/Sửa món ăn (Vào Sơ Đồ Bàn)
+            ]}
+            {/* Menu cho trạng thái ĐÃ XÁC NHẬN */}
+            {selectedOrder.maTrangThai === "DA_XAC_NHAN" && [
+               <MenuItem key="in" onClick={() => handleCheckIn(selectedOrder.maDonHang)}>
+                  <CheckCircle sx={{ mr: 1 }} color="success" /> Khách vào bàn (Check-in)
+               </MenuItem>,
+               <MenuItem key="noshow" onClick={() => handleNoShow(selectedOrder.maDonHang)}>
+                  <HelpOutline sx={{ mr: 1 }} color="warning" /> Báo No-Show
+               </MenuItem>,
+               <MenuItem key="cancel" onClick={() => handleCancel(selectedOrder.maDonHang)}>
+                  <Cancel sx={{ mr: 1 }} color="error" /> Hủy đơn
+               </MenuItem>
+            ]}
+            {/* Menu cho trạng thái ĐANG ĂN (CHỜ THANH TOÁN) */}
+            {selectedOrder.maTrangThai === "CHO_THANH_TOAN" && [
+               <MenuItem key="pay" onClick={() => handlePayment(selectedOrder.maDonHang)}>
+                  <CheckCircle sx={{ mr: 1 }} color="primary" /> Thanh Toán
+               </MenuItem>
+            ]}
+            {/* Menu chung */}
+            <MenuItem key="detail" onClick={() => { handleCloseMenu(); setViewDetailOrderId(selectedOrder.maDonHang); }}>
+               Xem chi tiết
             </MenuItem>
-          ]}
-
-          <MenuItem 
-            key="detail"
-            onClick={() => {
-                handleCloseMenu();
-                if (selectedOrder) setViewDetailOrderId(selectedOrder.maDonHang);
-            }}>
-            Xem chi tiết đơn
-          </MenuItem>
-        </MenuList>
-      </Popover>
+          </MenuList>
         )}
       </Popover>
+
+      {/* 4. MODAL CHI TIẾT ĐƠN HÀNG */}
       {viewDetailOrderId && (
         <OrderDetailModal
           maDonHang={viewDetailOrderId}
           onClose={() => setViewDetailOrderId(null)}
-          onPaymentSuccess={() => {
-             fetchData(); // Tải lại danh sách sau khi thanh toán xong
-             setViewDetailOrderId(null);
-          }}
+          onPaymentSuccess={() => { fetchData(); setViewDetailOrderId(null); }}
         />
       )}
     </Box>

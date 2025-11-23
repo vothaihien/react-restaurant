@@ -25,7 +25,7 @@ export interface CartItem {
     giaNhap: number;
 }
 
-// 4. Thông tin hiển thị Lịch sử phiếu nhập
+
 export interface PhieuNhapHistory {
     maNhapHang: string;
     ngayLap: string;
@@ -37,7 +37,6 @@ export interface PhieuNhapHistory {
     tenTrangThai: string;
 }
 
-// 5. Cấu trúc dữ liệu gửi đi (Payload) để Tạo/Sửa phiếu
 export interface NhapKhoPayload {
     maNhanVien: string;
     maNhaCungCap: string;
