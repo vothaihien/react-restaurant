@@ -1651,10 +1651,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                     </button>
                   )}
                 </div>
-                <form
-                  onSubmit={handleSubmitRecipeForm}
-                  className="mt-4 space-y-4"
-                >
+                <div className="mt-4 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700">
@@ -1664,6 +1661,12 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                         type="text"
                         value={recipeDraftName}
                         onChange={(e) => setRecipeDraftName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleSubmitRecipeForm();
+                          }
+                        }}
                         placeholder="VD: Công thức nước lẩu cay"
                         className="mt-1 block w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                       />
@@ -1749,6 +1752,12 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                                       e.target.value
                                     )
                                   }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      handleSubmitRecipeForm();
+                                    }
+                                  }}
                                   className="mt-1 w-full bg-white border border-gray-300 rounded-md py-1.5 px-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                   placeholder="0"
                                   disabled={!ingredient}
@@ -1772,7 +1781,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                         : "Thêm công thức"}
                     </button>
                   </div>
-                </form>
+                </div>
               </div>
             </div>
           </div>
