@@ -37,7 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView }) => {
     return (
         <div className="w-20 md:w-64 bg-white border-r border-gray-200 flex flex-col">
             <div className="flex items-center justify-center md:justify-start md:pl-6 h-20 border-b border-gray-200">
-                <ChefHat className="w-8 h-8 text-indigo-500" />
+                <ChefHat className="w-8 h-8" style={{ color: 'hsl(var(--primary))' }} />
                 <span className="hidden md:block ml-3 text-2xl font-bold text-gray-900">POS Pro</span>
             </div>
             <nav className="flex-1 px-2 py-4 space-y-2">
@@ -48,10 +48,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView }) => {
                             key={item.id}
                             href="#"
                             onClick={(e) => { e.preventDefault(); setCurrentView(item.id as View); }}
-                            className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${currentView === item.id
-                                ? 'bg-indigo-600 text-white'
-                                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                                }`}
+                            className={`flex items-center p-3 rounded-lg transition-colors duration-200 ${
+                                currentView === item.id
+                                    ? 'text-white'
+                                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                            }`}
+                            style={currentView === item.id ? { backgroundColor: 'hsl(var(--primary))' } : {}}
                         >
                             <IconComponent className="w-6 h-6" />
                             <span className="hidden md:block ml-4 font-semibold">{item.label}</span>
