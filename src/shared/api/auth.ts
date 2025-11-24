@@ -18,4 +18,13 @@ export const authApi = {
       "/api/Auth/login",
       { method: "POST", body: payload }
     ),
+
+  adminLogin: (payload: { tenDangNhap: string; matKhau: string }) =>
+    request<{
+      token: string;
+      hoTen: string;
+      maNhanVien: string;
+      maVaiTro: string;
+      tenVaiTro: string;
+    }>("/api/Auth/admin/login", { method: "POST", body: payload }),
 };

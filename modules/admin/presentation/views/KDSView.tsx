@@ -21,7 +21,7 @@ const KDSView: React.FC = () => {
                     <div key={k.id} className="bg-white border border-gray-200 p-4 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
                             <div className="text-gray-900 font-semibold">Bàn {k.tableName}</div>
-                            <div className="text-xs text-gray-500">{new Date(k.createdAt).toLocaleTimeString()}</div>
+                            <div className="text-xs text-gray-500">{new Date(k.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</div>
                         </div>
                         <div className="text-gray-700 text-sm mb-2">Trạng thái: {viKdsStatus(k.status)}</div>
                         <div className="space-y-1">

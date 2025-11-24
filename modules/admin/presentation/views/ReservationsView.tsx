@@ -111,7 +111,7 @@ const ReservationsView: React.FC = () => {
                     <div key={r.id} className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between">
                         <div>
                             <div className="text-gray-900 font-semibold">{r.customerName} · {r.partySize} khách</div>
-                            <div className="text-gray-600 text-sm">{new Date(r.time).toLocaleTimeString()} · Bàn: {getTableNames(r)} · Trạng thái: {viResStatus(r.status)}</div>
+                            <div className="text-gray-600 text-sm">{new Date(r.time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} · Bàn: {getTableNames(r)} · Trạng thái: {viResStatus(r.status)}</div>
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => confirmArrival(r.id)} className="px-3 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white">Check-in</button>

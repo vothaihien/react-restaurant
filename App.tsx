@@ -9,6 +9,7 @@ import {
   ReservationsView,
   InventoryView,
   MasterDataView,
+  EmployeesView,
   KDSView,
   ReportsView,
   SettingsView,
@@ -34,6 +35,8 @@ const App: React.FC = () => {
         return <InventoryView />;
       case "masterdata":
         return <MasterDataView />;
+      case "employees":
+        return <EmployeesView />;
       case "kds":
         return <KDSView />;
       case "reports":

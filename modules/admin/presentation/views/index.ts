@@ -6,3 +6,5 @@ export { default as MasterDataView } from "./MasterDataView";
 export { default as KDSView } from "./KDSView";
 export { default as ReportsView } from "./ReportsView";
 export { default as SettingsView } from "./SettingsView";
+export { default as LoginView } from "./LoginView";
+export { default as EmployeesView } from "./EmployeesView";

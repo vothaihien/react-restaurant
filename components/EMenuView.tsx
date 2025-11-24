@@ -63,8 +63,47 @@ const EMenuView: React.FC = () => {
         const response = await menuApi.getMonAnTheoDanhMuc(
           selectedCategory || undefined
         );
-        const data = response?.data || [];
-        setMonAns(data);
+        
+        // Xử lý response: API trả về { success: true, data: [...] } hoặc có thể là array trực tiếp
+        let data: any[] = [];
+        if (Array.isArray(response)) {
+          data = response;
+        } else if (response && typeof response === 'object') {
+          // Xử lý object response với data property
+          if (Array.isArray(response.data)) {
+            data = response.data;
+          } else if (Array.isArray((response as any).Data)) {
+            data = (response as any).Data;
+          }
+        }
+        
+        // Map dữ liệu từ API sang format MonAnItem
+        const mapped: MonAnItem[] = data.map((item: any) => {
+          // Xử lý cả camelCase và PascalCase từ API
+          const hinhAnhs = item.hinhAnhs || item.HinhAnhs || [];
+          const phienBans = item.phienBans || item.PhienBans || [];
+          
+          return {
+            maMonAn: item.maMonAn || item.MaMonAn || "",
+            tenMonAn: item.tenMonAn || item.TenMonAn || "",
+            maDanhMuc: item.maDanhMuc || item.MaDanhMuc || "",
+            tenDanhMuc: item.tenDanhMuc || item.TenDanhMuc || "",
+            moTa: item.moTa || item.MoTa || "",
+            hinhAnhs: Array.isArray(hinhAnhs) ? hinhAnhs : [],
+            phienBans: Array.isArray(phienBans) ? phienBans.map((pb: any) => ({
+              maPhienBan: pb.maPhienBan || pb.MaPhienBan || "",
+              tenPhienBan: pb.tenPhienBan || pb.TenPhienBan || "",
+              gia: Number(pb.gia || pb.Gia) || 0,
+            })) : [],
+            giaMin: Number(item.giaMin || item.GiaMin) || 0,
+            giaMax: Number(item.giaMax || item.GiaMax) || 0,
+            conHang: item.conHang !== undefined 
+              ? Boolean(item.conHang) 
+              : (item.ConHang !== undefined ? Boolean(item.ConHang) : true),
+          };
+        });
+        
+        setMonAns(mapped);
       } catch (error: any) {
         notify({
           tone: "error",
@@ -110,9 +149,11 @@ const EMenuView: React.FC = () => {
   }, [filteredMonAns]);
 
   const getImageUrl = (url: string) => {
-    if (!url) return "";
+    if (!url) return "https://via.placeholder.com/300x200?text=No+Image";
     if (url.startsWith("http://") || url.startsWith("https://")) return url;
-    return `${BASE_URL}/${url.replace(/^\//, "")}`;
+    // Xử lý relative path từ API
+    const cleanUrl = url.replace(/^\//, "");
+    return `${BASE_URL}/${cleanUrl}`;
   };
 
   return (
@@ -220,6 +261,10 @@ const EMenuView: React.FC = () => {
                             }
                             alt={item.tenMonAn}
                             className="w-full h-48 object-cover"
+                            onError={(e) => {
+                              // Fallback nếu ảnh lỗi
+                              (e.target as HTMLImageElement).src = "https://via.placeholder.com/300x200?text=No+Image";
+                            }}
                           />
                           {!item.conHang && (
                             <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
@@ -295,6 +340,10 @@ const EMenuView: React.FC = () => {
                       src={getImageUrl(img)}
                       alt={`${selectedItem.tenMonAn} ${idx + 1}`}
                       className="w-full h-32 object-cover rounded"
+                      onError={(e) => {
+                        // Fallback nếu ảnh lỗi
+                        (e.target as HTMLImageElement).src = "https://via.placeholder.com/300x200?text=No+Image";
+                      }}
                     />
                   ))}
                 </div>

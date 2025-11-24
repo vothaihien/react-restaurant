@@ -1,12 +1,27 @@
 import { request } from "../utils/api";
 
+// Helper để lấy token từ localStorage
+const getToken = (): string | undefined => {
+  try {
+    const authUser = localStorage.getItem('auth_user');
+    if (authUser) {
+      const user = JSON.parse(authUser);
+      return user?.token;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+};
+
 export const employeesApi = {
   // Employees
-  getEmployees: () => request<any[]>("/api/EmployeesAPI"),
+  getEmployees: () => request<any[]>("/api/EmployeesAPI", { token: getToken() }),
 
   getEmployee: (maNhanVien: string) =>
     request<any>(
-      `/api/EmployeesAPI/${encodeURIComponent(maNhanVien)}`
+      `/api/EmployeesAPI/${encodeURIComponent(maNhanVien)}`,
+      { token: getToken() }
     ),
 
   createEmployee: (data: {
@@ -23,6 +38,7 @@ export const employeesApi = {
       {
         method: "POST",
         body: data,
+        token: getToken(),
       }
     ),
 
@@ -41,6 +57,7 @@ export const employeesApi = {
       {
         method: "PUT",
         body: data,
+        token: getToken(),
       }
     ),
 
@@ -49,10 +66,11 @@ export const employeesApi = {
       `/api/EmployeesAPI/${encodeURIComponent(maNhanVien)}`,
       {
         method: "DELETE",
+        token: getToken(),
       }
     ),
 
-  getRoles: () => request<any[]>("/api/EmployeesAPI/roles"),
+  getRoles: () => request<any[]>("/api/EmployeesAPI/roles", { token: getToken() }),
 };
 
 

@@ -27,56 +27,83 @@ const MenuView: React.FC = () => {
           ? { maDanhMuc: selectedCategory }
           : undefined;
         const data = await menuApi.getDishes(params);
-        const mapped: MenuItem[] = (data || []).map((m: any) => {
-          const imgs: string[] = (m.hinhAnhMonAns || m.HinhAnhMonAns || []).map(
-            (h: any) => {
-              const url = h.urlHinhAnh || h.URLHinhAnh;
-              return url?.startsWith("http") ? url : `${BASE_URL}/${url}`;
+        // Xử lý response: có thể là array trực tiếp hoặc object với data property
+        let dishes: any[] = [];
+        if (Array.isArray(data)) {
+          dishes = data;
+        } else if (data && typeof data === 'object' && Array.isArray((data as any).data)) {
+          dishes = (data as any).data;
+        }
+        
+        const mapped: MenuItem[] = dishes.map((m: any) => {
+          // Xử lý hình ảnh - hỗ trợ cả camelCase và PascalCase
+          const hinhAnhList = m.hinhAnhMonAns || m.HinhAnhMonAns || [];
+          const imgs: string[] = hinhAnhList.map((h: any) => {
+            const url = h.urlHinhAnh || h.URLHinhAnh || "";
+            if (!url) return "";
+            // Nếu đã là full URL thì giữ nguyên, nếu không thì thêm BASE_URL
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+              return url;
             }
-          );
+            // Xử lý relative path
+            const cleanUrl = url.replace(/^\//, "");
+            return `${BASE_URL}/${cleanUrl}`;
+          }).filter((url: string) => url !== ""); // Loại bỏ URL rỗng
+          
           const tenDanhMuc = m.tenDanhMuc || m.TenDanhMuc || "";
-          const sizes = (m.phienBanMonAns || m.PhienBanMonAns || []).map(
-            (p: any) => {
-              const versionId = p.maPhienBan || p.MaPhienBan || "";
-              const versionName = p.tenPhienBan || p.TenPhienBan || "";
-              // Load công thức từ CongThucNauAns nếu có
-              const congThucNauAns = p.congThucNauAns || p.CongThucNauAns || [];
-              const recipeIngredients = congThucNauAns.map((ct: any) => {
-                return {
+          
+          // Xử lý phiên bản món ăn
+          const phienBanList = m.phienBanMonAns || m.PhienBanMonAns || [];
+          const sizes = phienBanList.map((p: any) => {
+            const versionId = p.maPhienBan || p.MaPhienBan || "";
+            const versionName = p.tenPhienBan || p.TenPhienBan || "";
+            
+            // Lưu ý: Khi load danh sách, API không trả về CongThucNauAns
+            // Chỉ có khi get single dish (getDish)
+            const congThucNauAns = p.congThucNauAns || p.CongThucNauAns || [];
+            const recipeIngredients = Array.isArray(congThucNauAns) 
+              ? congThucNauAns.map((ct: any) => ({
                   ingredient: {
                     id: ct.maNguyenLieu || ct.MaNguyenLieu || "",
                     name: ct.tenNguyenLieu || ct.TenNguyenLieu || "",
                     unit: ct.donViTinh || ct.DonViTinh || "",
                   },
-                  quantity: ct.soLuongCanDung || ct.SoLuongCanDung || 0,
-                };
-              });
+                  quantity: Number(ct.soLuongCanDung || ct.SoLuongCanDung) || 0,
+                }))
+              : [];
 
-              return {
-                name: versionName || p.tenPhienBan || p.TenPhienBan,
-                price: Number(p.gia || p.Gia) || 0,
-                recipe: {
-                  id: `recipe_${versionId || p.maPhienBan || p.MaPhienBan}`,
-                  name: `Công thức ${
-                    versionName || p.tenPhienBan || p.TenPhienBan
-                  }`,
-                  versionId,
-                  versionName: versionName || p.tenPhienBan || p.TenPhienBan,
-                  ingredients: recipeIngredients,
-                },
-              };
+            return {
+              name: versionName,
+              price: Number(p.gia || p.Gia) || 0,
+              recipe: {
+                id: `recipe_${versionId}`,
+                name: `Công thức ${versionName}`,
+                versionId,
+                versionName,
+                ingredients: recipeIngredients, // Có thể là mảng rỗng khi load danh sách
+              },
+            };
+          });
+          
+          // Xác định trạng thái còn hàng
+          // Kiểm tra xem có phiên bản nào có MaTrangThai = "CON_HANG" không
+          // Nếu không có MaTrangThai, mặc định là còn hàng
+          const hasInStock = phienBanList.length > 0 && phienBanList.some(
+            (p: any) => {
+              const trangThai = p.maTrangThai || p.MaTrangThai;
+              // Nếu không có trạng thái, mặc định là còn hàng
+              return !trangThai || trangThai === "CON_HANG";
             }
           );
+          
           return {
-            id: m.maMonAn || m.MaMonAn,
-            name: m.tenMonAn || m.TenMonAn,
+            id: m.maMonAn || m.MaMonAn || "",
+            name: m.tenMonAn || m.TenMonAn || "",
             description: "",
-            categoryId: m.maDanhMuc || m.MaDanhMuc,
+            categoryId: m.maDanhMuc || m.MaDanhMuc || "",
             category: tenDanhMuc,
             imageUrls: imgs,
-            inStock: (m.phienBanMonAns || m.PhienBanMonAns || []).some(
-              (p: any) => (p.maTrangThai || p.MaTrangThai) === "CON_HANG"
-            ),
+            inStock: hasInStock,
             sizes,
           } as MenuItem;
         });
@@ -107,66 +134,70 @@ const MenuView: React.FC = () => {
       const fullData = await menuApi.getDish(item.id);
 
       // Map dữ liệu từ API sang format MenuItem (DTO format)
-      const imgs: string[] = (
-        fullData.hinhAnhMonAns ||
-        fullData.HinhAnhMonAns ||
-        []
-      ).map((h: any) => {
-        const url = h.urlHinhAnh || h.URLHinhAnh;
-        return url?.startsWith("http") ? url : `${BASE_URL}/${url}`;
-      });
+      const hinhAnhList = fullData.hinhAnhMonAns || fullData.HinhAnhMonAns || [];
+      const imgs: string[] = hinhAnhList.map((h: any) => {
+        const url = h.urlHinhAnh || h.URLHinhAnh || "";
+        if (!url) return "";
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+          return url;
+        }
+        const cleanUrl = url.replace(/^\//, "");
+        return `${BASE_URL}/${cleanUrl}`;
+      }).filter((url: string) => url !== "");
 
       const tenDanhMuc = fullData.tenDanhMuc || fullData.TenDanhMuc || "";
 
       // Map phiên bản món ăn với công thức đầy đủ
-      const sizes = (
-        fullData.phienBanMonAns ||
-        fullData.PhienBanMonAns ||
-        []
-      ).map((p: any) => {
+      const phienBanList = fullData.phienBanMonAns || fullData.PhienBanMonAns || [];
+      const sizes = phienBanList.map((p: any) => {
         const versionId = p.maPhienBan || p.MaPhienBan || "";
         const versionName = p.tenPhienBan || p.TenPhienBan || "";
-        // Lấy công thức từ CongThucNauAns (đã được flatten trong DTO)
+        
+        // Lấy công thức từ CongThucNauAns (có đầy đủ khi get single dish)
         const congThucNauAns = p.congThucNauAns || p.CongThucNauAns || [];
-        const recipeIngredients = congThucNauAns.map((ct: any) => {
-          return {
-            ingredient: {
-              id: ct.maNguyenLieu || ct.MaNguyenLieu || "",
-              name: ct.tenNguyenLieu || ct.TenNguyenLieu || "",
-              unit: ct.donViTinh || ct.DonViTinh || "",
-            },
-            quantity: ct.soLuongCanDung || ct.SoLuongCanDung || 0,
-          };
-        });
+        const recipeIngredients = Array.isArray(congThucNauAns)
+          ? congThucNauAns.map((ct: any) => ({
+              ingredient: {
+                id: ct.maNguyenLieu || ct.MaNguyenLieu || "",
+                name: ct.tenNguyenLieu || ct.TenNguyenLieu || "",
+                unit: ct.donViTinh || ct.DonViTinh || "",
+              },
+              quantity: Number(ct.soLuongCanDung || ct.SoLuongCanDung) || 0,
+            }))
+          : [];
 
         // Tạo recipe cho phiên bản này
         const recipe: Recipe = {
-          id: `recipe_${versionId || p.maPhienBan || p.MaPhienBan}`,
-          name: `Công thức ${versionName || p.tenPhienBan || p.TenPhienBan}`,
+          id: `recipe_${versionId}`,
+          name: `Công thức ${versionName}`,
           versionId,
-          versionName: versionName || p.tenPhienBan || p.TenPhienBan,
+          versionName,
           ingredients: recipeIngredients,
         };
 
         return {
-          name: versionName || p.tenPhienBan || p.TenPhienBan,
+          name: versionName,
           price: Number(p.gia || p.Gia) || 0,
           recipe: recipe,
         };
       });
 
+      // Xác định trạng thái còn hàng
+      const hasInStock = phienBanList.length > 0 && phienBanList.some(
+        (p: any) => {
+          const trangThai = p.maTrangThai || p.MaTrangThai;
+          return !trangThai || trangThai === "CON_HANG";
+        }
+      );
+
       const fullMenuItem: MenuItem = {
-        id: fullData.maMonAn || fullData.MaMonAn,
-        name: fullData.tenMonAn || fullData.TenMonAn,
+        id: fullData.maMonAn || fullData.MaMonAn || "",
+        name: fullData.tenMonAn || fullData.TenMonAn || "",
         description: "",
-        categoryId: fullData.maDanhMuc || fullData.MaDanhMuc,
+        categoryId: fullData.maDanhMuc || fullData.MaDanhMuc || "",
         category: tenDanhMuc,
         imageUrls: imgs,
-        inStock: (
-          fullData.phienBanMonAns ||
-          fullData.PhienBanMonAns ||
-          []
-        ).some((p: any) => (p.maTrangThai || p.MaTrangThai) === "CON_HANG"),
+        inStock: hasInStock,
         sizes: sizes,
       };
 
@@ -375,8 +406,11 @@ const MenuView: React.FC = () => {
                           <div className="flex-shrink-0 h-12 w-12">
                             <img
                               className="h-12 w-12 rounded-md object-cover border border-gray-200"
-                              src={item.imageUrls[0]}
+                              src={item.imageUrls[0] || "https://via.placeholder.com/48x48?text=No+Image"}
                               alt={item.name}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "https://via.placeholder.com/48x48?text=No+Image";
+                              }}
                             />
                           </div>
                           <div className="ml-4">
@@ -457,34 +491,65 @@ const MenuView: React.FC = () => {
                 ? { maDanhMuc: selectedCategory }
                 : undefined;
               const data = await menuApi.getDishes(params);
-              const mapped: MenuItem[] = (data || []).map((m: any) => {
-                const imgs: string[] = (
-                  m.hinhAnhMonAns ||
-                  m.HinhAnhMonAns ||
-                  []
-                ).map((h: any) => {
-                  const url = h.urlHinhAnh || h.URLHinhAnh;
-                  return url?.startsWith("http") ? url : `${BASE_URL}/${url}`;
-                });
-                const tenDanhMuc =
-                  m.maDanhMucNavigation?.tenDanhMuc ||
-                  m.MaDanhMucNavigation?.TenDanhMuc ||
-                  "";
-                const sizes = (m.phienBanMonAns || m.PhienBanMonAns || []).map(
-                  (p: any) => ({
-                    name: p.tenPhienBan || p.TenPhienBan,
+              
+              // Xử lý response: có thể là array trực tiếp hoặc object với data property
+              let dishes: any[] = [];
+              if (Array.isArray(data)) {
+                dishes = data;
+              } else if (data && typeof data === 'object' && Array.isArray((data as any).data)) {
+                dishes = (data as any).data;
+              }
+              
+              const mapped: MenuItem[] = dishes.map((m: any) => {
+                // Xử lý hình ảnh
+                const hinhAnhList = m.hinhAnhMonAns || m.HinhAnhMonAns || [];
+                const imgs: string[] = hinhAnhList.map((h: any) => {
+                  const url = h.urlHinhAnh || h.URLHinhAnh || "";
+                  if (!url) return "";
+                  if (url.startsWith("http://") || url.startsWith("https://")) {
+                    return url;
+                  }
+                  const cleanUrl = url.replace(/^\//, "");
+                  return `${BASE_URL}/${cleanUrl}`;
+                }).filter((url: string) => url !== "");
+                
+                const tenDanhMuc = m.tenDanhMuc || m.TenDanhMuc || "";
+                
+                // Xử lý phiên bản món ăn
+                const phienBanList = m.phienBanMonAns || m.PhienBanMonAns || [];
+                const sizes = phienBanList.map((p: any) => {
+                  const versionId = p.maPhienBan || p.MaPhienBan || "";
+                  const versionName = p.tenPhienBan || p.TenPhienBan || "";
+                  
+                  return {
+                    name: versionName,
                     price: Number(p.gia || p.Gia) || 0,
-                    recipe: { id: "", name: "", ingredients: [] },
-                  })
+                    recipe: {
+                      id: `recipe_${versionId}`,
+                      name: `Công thức ${versionName}`,
+                      versionId,
+                      versionName,
+                      ingredients: [], // Khi reload danh sách, không có ingredients
+                    },
+                  };
+                });
+                
+                // Xác định trạng thái còn hàng
+                const hasInStock = phienBanList.length > 0 && phienBanList.some(
+                  (p: any) => {
+                    const trangThai = p.maTrangThai || p.MaTrangThai;
+                    return !trangThai || trangThai === "CON_HANG";
+                  }
                 );
+                
                 return {
-                  id: m.maMonAn || m.MaMonAn,
-                  name: m.tenMonAn || m.TenMonAn,
+                  id: m.maMonAn || m.MaMonAn || "",
+                  name: m.tenMonAn || m.TenMonAn || "",
                   description: "",
-                  categoryId: m.maDanhMuc || m.MaDanhMuc,
+                  categoryId: m.maDanhMuc || m.MaDanhMuc || "",
                   category: tenDanhMuc,
                   imageUrls: imgs,
-                  inStock: true,
+                  inStock: hasInStock,
                   sizes,
                 } as MenuItem;
               });
