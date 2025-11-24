@@ -1,4 +1,4 @@
-// src/services/authService.ts
+import axiosClient from 'src/api/axiosClient';
 import { request } from './apiClient';
 
 type AuthResponse = {
@@ -8,18 +8,16 @@ type AuthResponse = {
 };
 
 export const authService = {
-    checkUser: (identifier: string) => 
-        request<{ userExists: boolean }>('/api/Auth/check-user', { 
-            method: 'POST', body: { identifier } 
-        }),
 
-    register: (payload: { identifier: string; hoTen: string; otp: string }) =>
-        request<AuthResponse>('/api/Auth/register', { 
-            method: 'POST', body: payload 
-        }),
+    checkUser: (identifier: string) => {
+        return axiosClient.post<{ userExists: boolean }>('/api/Auth/check-user', { identifier });
+    },
 
-    login: (payload: { identifier: string; otp: string }) =>
-        request<AuthResponse>('/api/Auth/login', { 
-            method: 'POST', body: payload 
-        }),
+    register: (payload: { identifier: string; hoTen: string; otp: string }) => {
+        return axiosClient.post<AuthResponse>('/api/Auth/register', payload);
+    },
+
+    login: (payload: { identifier: string; otp: string }) => {
+        return axiosClient.post<AuthResponse>('/api/Auth/login', payload);
+    },
 };

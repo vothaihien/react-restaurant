@@ -1,36 +1,50 @@
-import { request } from './apiClient';
+import axiosClient from "src/api/axiosClient";
 
 interface StaffBookingResponse {
-  Success: boolean;
-  Message: string;
-  MaDonHang: string;
-  KhuyenMai: string;
+    Success: boolean;
+    Message: string;
+    MaDonHang: string;
+    KhuyenMai: string;
 }
 
 export const bookingService = {
-  createReservation: (data: any) => 
-      request<any>('/api/DatBanAPI/TaoDatBan', { method: 'POST', body: data }),
+    // 1. Đặt bàn thường
+    createReservation: (data: any) => {
+        return axiosClient.post<any>('/api/DatBanAPI/TaoDatBan', data);
+    },
 
-  // 2. API MỚI (Dành cho Nhân viên Lễ tân) -> Gọi vào staff/create
-  createReservationByStaff: (data: {
-      DanhSachMaBan: string[];
-      HoTenKhach: string;
-      SoDienThoaiKhach: string;
-      Email?: string | null;
-      ThoiGianDatHang: string;
-      SoLuongNguoi: number;
-      MaNhanVien: string; // Bắt buộc phải có mã nhân viên
-  }) => request<StaffBookingResponse>('/api/DatBanAPI/staff/create', { 
-      method: 'POST', body: data 
-  }),
+    // 2. API MỚI (Dành cho Nhân viên Lễ tân)
+    createReservationByStaff: (data: {
+        DanhSachMaBan: string[];
+        HoTenKhach: string;
+        SoDienThoaiKhach: string;
+        Email?: string | null;
+        ThoiGianDatHang: string;
+        SoLuongNguoi: number;
+        MaNhanVien: string;
+    }) => {
+        return axiosClient.post<StaffBookingResponse>('/api/DatBanAPI/staff/create', data);
+    },
 
-  // ... Các hàm khác (getMyBookings, cancelBooking...) giữ nguyên
-  getMyBookings: (token: string) => 
-      request<any[]>('/api/BookingHistory/me', { token }),
+    // 3. Lấy lịch sử đặt bàn (Cần Token)
+    getMyBookings: (token: string) => {
+        return axiosClient.get<any[]>('/api/BookingHistory/me', {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+    },
 
-  cancelBooking: (maDonHang: string, token: string) =>
-      request<{ message: string }>(`/api/BookingHistory/cancel/${encodeURIComponent(maDonHang)}`, {
-          method: 'POST',
-          token
-      }),
+    // 4. Hủy đặt bàn (Cần Token)
+    cancelBooking: (maDonHang: string, token: string) => {
+        return axiosClient.post<{ message: string }>(
+            `/api/BookingHistory/cancel/${encodeURIComponent(maDonHang)}`,
+            {}, 
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            }
+        );
+    },
 };
