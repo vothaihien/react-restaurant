@@ -24,7 +24,6 @@ const MainLayout: React.FC = () => {
 }
 
 const App: React.FC = () => {
-    // Bao bọc toàn bộ ứng dụng bằng BrowserRouter ở cấp cao nhất
     return (
         <BrowserRouter>
             <MainLayout />

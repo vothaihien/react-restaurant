@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppContext } from '@/core/context/AppContext';
-import { TableStatus } from 'types';
+import { TableStatus } from '@/core/types';
 const SettingsView: React.FC = () => {
     const { tables, updateTableStatus } = useAppContext();
     const [selectedTable, setSelectedTable] = useState<string | null>(null);

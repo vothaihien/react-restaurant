@@ -4,15 +4,16 @@ import { useReactToPrint } from 'react-to-print'; // Nhớ npm install react-to-
 // import { MauInPhieuNhap } from './MauInPhieuNhap'; // Import mẫu in vừa tạo
 
 // --- IMPORT TYPES ---
-import { 
+
+import InventoryService from '@/services/inventoryService';
+import { MauInPhieuNhap } from '@/components/MauInPhieuNhap';
+import {  
     NhaCungCap, 
     NguyenLieuNCC, 
     CartItem, 
     PhieuNhapHistory, 
     NhapKhoPayload 
-} from '../types/InventoryTypes';
-import InventoryService from '@/services/inventoryService';
-import { MauInPhieuNhap } from '@/components/MauInPhieuNhap';
+}  from 'src/types/InventoryTypes';
 
 const InventoryScreen = () => {
     // --- 1. STATE QUẢN LÝ ---

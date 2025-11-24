@@ -29,6 +29,7 @@ import { suppliersApi } from "@/shared/api/other";
 import { employeesApi } from "@/shared/api/employees";
 import { reservationsApi } from "@/shared/api/reservations";
 import { orderService } from '@/services/orderService';
+import { donHangService } from "@/services/donHangService";
 
 
 const generateDailyId = (existingIds: string[]): string => {
@@ -868,7 +869,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
         if (!res) return;
         const maDon = reservationToOrderMap[id];
         if (maDon) {
-            try { await Api.updateOrderStatus(maDon, 'NO_SHOW'); } catch { }
+            try { await donHangService.updateOrderStatus(maDon, 'NO_SHOW'); } catch { }
         }
         setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'NoShow' } : r));
         if (res.tableIds && res.tableIds.length > 0) {
@@ -1096,7 +1097,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
         updateStaff,
         deleteStaff,
              addItemsToTableOrder,
-             ,
+             
       }}
     >
       {children}

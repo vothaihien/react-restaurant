@@ -27,7 +27,8 @@ import {
   HelpOutline,
 } from "@mui/icons-material";
 import { orderService } from '@/services/orderService';
-import { Table, TableStatus } from 'types';
+import { Table, TableStatus } from '@/core/types';
+//import { Table, TableStatus } from 'types';
 
 // ==========================================================
 // === COMPONENT CHÚ THÍCH (STATUS LEGEND) ===
