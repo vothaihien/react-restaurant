@@ -15,8 +15,7 @@ export type View =
     | 'employees'
     | 'kds'
     | 'customer'
-    | 'reports'
-    | 'settings';
+    | 'reports';
 
 export type Role = 'Admin' | 'Manager' | 'Cashier' | 'Waiter' | 'Kitchen';
 
