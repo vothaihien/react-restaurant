@@ -9,7 +9,8 @@ import { DateTimePicker } from '@/shared/components/ui/date-time-picker';
 import { formatVND } from '@/shared/utils';
 import { useFeedback } from '@/core/context/FeedbackContext';
 import { useAuth } from '@/core/context/AuthContext';
-import { Api } from '@/shared/utils/api';
+import { tableService } from '@/services/tableService';
+import { bookingService } from '@/services/bookingService';
 
 const CustomerPortalView: React.FC = () => {
     const { menuItems, createReservation, tables, getAvailableTables } = useAppContext() as any;
@@ -44,7 +45,7 @@ const CustomerPortalView: React.FC = () => {
         const loadTangs = async () => {
             try {
                 console.log('Loading tầng from API...');
-                const data = await Api.getTangs();
+                const data = await tableService.getTangs();
                 console.log('Fetched tầng (raw):', data);
                 console.log('Type of data:', typeof data, 'Is array:', Array.isArray(data));
 
@@ -646,7 +647,7 @@ const CustomerPortalView: React.FC = () => {
                                 <div className="space-y-4">
                                     <div className="space-y-2">
                                         <div className="text-gray-900">Xin chào, <span className="font-semibold">{user?.name}</span></div>
-                                        <div className="text-gray-700 text-sm">Mã KH: {user?.customerId}</div>
+                                        <div className="text-gray-700 text-sm">Mã KH: {(user as any)?.customerId || (user as any)?.id}</div>
                                         <Button variant="outline" onClick={logout}>Đăng xuất</Button>
                                     </div>
                                     <BookingHistorySection token={user?.token || ''} />
@@ -694,7 +695,7 @@ const BookingHistorySection: React.FC<{ token: string }> = ({ token }) => {
         const load = async () => {
             setLoading(true);
             try {
-                const data = await Api.getMyBookings(token);
+                const data = await bookingService.getMyBookings(token);
                 setBookings(data || []);
             } catch (err: any) {
                 notify({
@@ -720,7 +721,7 @@ const BookingHistorySection: React.FC<{ token: string }> = ({ token }) => {
         });
         if (!shouldCancel) return;
         try {
-            await Api.cancelBooking(maDonHang, token);
+            await bookingService.cancelBooking(maDonHang, token);
             notify({
                 tone: 'success',
                 title: 'Đã hủy đặt bàn',

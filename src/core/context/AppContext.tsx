@@ -30,6 +30,8 @@ import { employeesApi } from "@/shared/api/employees";
 import { reservationsApi } from "@/shared/api/reservations";
 import { orderService } from '@/services/orderService';
 import { donHangService } from "@/services/donHangService";
+import dishService from "@/services/dishService";
+import { tableService } from "@/services/tableService";
 
 
 const generateDailyId = (existingIds: string[]): string => {
@@ -190,10 +192,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     saveToStorage("restaurant_categories", categories);
   }, [categories]);
 
-  // Don't save ingredients to localStorage - always load from API
-  // React.useEffect(() => {
-  //     saveToStorage('restaurant_ingredients', ingredients);
-  // }, [ingredients]);
 
     React.useEffect(() => {
         saveToStorage('restaurant_reservations', reservations);
@@ -201,7 +199,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     React.useEffect(() => {
         saveToStorage('restaurant_res_to_order', reservationToOrderMap);
     }, [reservationToOrderMap]);
-    // Helper function to map Vietnamese status strings to TableStatus enum
     const mapTableStatus = (tenTrangThai: string | undefined): TableStatus => {
         if (!tenTrangThai) return TableStatus.Empty;
         const statusLower = tenTrangThai.toLowerCase().trim();
@@ -357,7 +354,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
             items: items.map(i => ({
                 maMonAn: i.menuItem.id,
                 // Lấy ID của phiên bản (Size). Nếu không có thì để chuỗi rỗng (cần đảm bảo data đầu vào chuẩn)
-                maPhienBan: i.menuItem.sizes.find(s => s.name === i.size)?.id || '', 
+                maPhienBan: i.menuItem.sizes.find(s => s.name === i.size)?.name || '', 
                 soLuong: i.quantity,
                 ghiChu: i.notes || ''
             }))
@@ -421,7 +418,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     useEffect(() => {
         (async () => {
             try {
-                const data = await Api.getTables();
+                const data = await tableService.getTables();
                 if (Array.isArray(data) && data.length > 0) {
                     const mapped: Table[] = data.map((b: any) => ({
     id: b.maBan || b.MaBan,
@@ -443,7 +440,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     useEffect(() => {
         (async () => {
             try {
-                const data = await Api.getCategories();
+                const data = await dishService.getCategories();
                 if (Array.isArray(data)) {
                     const mapped: Category[] = data
                         .map((cat: any) => ({
@@ -465,7 +462,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     useEffect(() => {
         (async () => {
             try {
-                const data = await Api.getDishes();
+                const data = await dishService.getDishes();
                 if (Array.isArray(data) && data.length > 0) {
                     const mapped: MenuItem[] = data.map((m: any) => {
                         const imgs: string[] = (m.hinhAnhMonAns || m.HinhAnhMonAns || []).map((h: any) => {
@@ -821,7 +818,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
         // cập nhật trạng thái backend nếu có mapping
         const maDon = reservationToOrderMap[id];
         if (maDon) {
-            try { await Api.updateOrderStatus(maDon, 'DA_HUY'); } catch { }
+            try { await orderService.updateOrderStatus(maDon, 'DA_HUY'); } catch { }
         }
         setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'Cancelled' } : r));
         // 支持多张桌子：取消预订时将桌子状态改回 Available
@@ -869,7 +866,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
         if (!res) return;
         const maDon = reservationToOrderMap[id];
         if (maDon) {
-            try { await donHangService.updateOrderStatus(maDon, 'NO_SHOW'); } catch { }
+            try { await orderService.updateOrderStatus(maDon, 'NO_SHOW'); } catch { }
         }
         setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'NoShow' } : r));
         if (res.tableIds && res.tableIds.length > 0) {

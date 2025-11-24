@@ -32,7 +32,7 @@ export const bookingService = {
             headers: {
                 Authorization: `Bearer ${token}`
             }
-        });
+        }).then(res => res.data); // <--- THÊM ĐOẠN NÀY VÀO (Lấy ruột data ra)
     },
 
     // 4. Hủy đặt bàn (Cần Token)

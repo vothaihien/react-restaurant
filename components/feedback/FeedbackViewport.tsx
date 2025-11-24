@@ -7,7 +7,8 @@ import {
     InfoIcon,
     XIcon,
 } from '../Icons';
-import type { FeedbackDialogState, FeedbackNotification } from '../../types';
+import { FeedbackDialogState, FeedbackNotification } from '@/core/types';
+//import type { FeedbackDialogState, FeedbackNotification } from '../../types';
 
 interface FeedbackViewportProps {
     notifications: FeedbackNotification[];
