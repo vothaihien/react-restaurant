@@ -1,0 +1,10 @@
+export { default as DashboardView } from "./DashboardView";
+export { default as MenuView } from "./MenuView";
+export { default as ReservationsView } from "./ReservationsView";
+export { default as InventoryView } from "./InventoryView";
+export { default as MasterDataView } from "./MasterDataView";
+export { default as KDSView } from "./KDSView";
+export { default as ReportsView } from "./ReportsView";
+export { default as SettingsView } from "./SettingsView";
+export { default as LoginView } from "./LoginView";
+export { default as EmployeesView } from "./EmployeesView";

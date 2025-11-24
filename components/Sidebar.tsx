@@ -1,4 +1,17 @@
 import React from 'react';
+import type { View } from '@/core/types';
+import { useAuth } from '@/core/context/AuthContext';
+import {
+  LayoutGrid,
+  Menu,
+  Calendar,
+  Package,
+  Database,
+  Users,
+  ChefHat,
+  BarChart3,
+  Settings,
+} from 'lucide-react';
 // 💡 Import NavLink từ react-router-dom để điều hướng và highlight
 import { NavLink } from 'react-router-dom'; 
 
@@ -12,6 +25,9 @@ interface SidebarProps {
 // Component Sidebar không cần nhận props điều hướng nữa
 const Sidebar: React.FC<SidebarProps> = ({currentPath}) => { 
     // Thay đổi id thành path (đường dẫn URL)
+    const { user } = useAuth();
+    const isManager = user?.type === "admin" && user?.maVaiTro === "VT001";
+
     const navItems = [
         { path: '/', label: 'Sơ đồ bàn', icon: GridIcon }, // / sẽ khớp với DashboardView
         { path: '/menu', label: 'Thực đơn', icon: MenuIcon },
@@ -36,7 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({currentPath}) => {
     return (
         <div className="w-20 md:w-64 bg-white border-r border-gray-200 flex flex-col">
             <div className="flex items-center justify-center md:justify-start md:pl-6 h-20 border-b border-gray-200">
-                <ChefHatIcon className="w-8 h-8 text-indigo-500" />
+                <ChefHat className="w-8 h-8" style={{ color: 'hsl(var(--primary))' }} />
                 <span className="hidden md:block ml-3 text-2xl font-bold text-gray-900">POS Pro</span>
             </div>
             <nav className="flex-1 px-2 py-4 space-y-2">

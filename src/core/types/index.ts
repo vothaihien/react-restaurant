@@ -12,6 +12,7 @@ export type View =
     | 'reservations'
     | 'inventory'
     | 'masterdata'
+    | 'employees'
     | 'kds'
     | 'customer'
     | 'reports';

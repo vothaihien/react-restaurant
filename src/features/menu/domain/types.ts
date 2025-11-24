@@ -1,36 +1,36 @@
-import type { Ingredient } from '@/features/inventory/domain/types';
+import type { Ingredient } from "@/features/inventory/domain/types";
 
 export interface Category {
-    id: string;
-    name: string;
+  id: string;
+  name: string;
 }
 
 export interface RecipeIngredient {
-    ingredient: Ingredient;
-    quantity: number;
+  ingredient: Ingredient;
+  quantity: number;
 }
 
 export interface Recipe {
-    id: string; // Auto-generated: DDMMYYYYNNN
-    name: string;
-    ingredients: RecipeIngredient[];
+  id: string; // Auto-generated: DDMMYYYYNNN
+  name: string;
+  ingredients: RecipeIngredient[];
+  versionId?: string;
+  versionName?: string;
 }
 
 export interface MenuItemSize {
-    id?: string; // Auto-generated: DDMMYYYYNNN
-    name: string; // e.g., 'S', 'M', 'L'
-    price: number;
-    recipe: Recipe;
+  name: string; // e.g., 'S', 'M', 'L'
+  price: number;
+  recipe: Recipe;
 }
 
 export interface MenuItem {
-    id: string; // Auto-generated: DDMMYYYYNNN
-    name: string;
-    description: string;
-    categoryId?: string;
-    category: string;
-    imageUrls: string[];
-    inStock: boolean;
-    sizes: MenuItemSize[];
+  id: string; // Auto-generated: DDMMYYYYNNN
+  name: string;
+  description: string;
+  categoryId?: string;
+  category: string;
+  imageUrls: string[];
+  inStock: boolean;
+  sizes: MenuItemSize[];
 }
-

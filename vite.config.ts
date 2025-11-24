@@ -26,12 +26,10 @@ export default defineConfig(({ mode }) => {
         { find: '@/shared', replacement: path.resolve(__dirname, 'src/shared') },
         { find: '@/core', replacement: path.resolve(__dirname, 'src/core') },
         { find: '@/infrastructure', replacement: path.resolve(__dirname, 'src/infrastructure') },
-
+        { find: '@/models', replacement: path.resolve(__dirname, 'src/models') },
+        { find: '@/services', replacement: path.resolve(__dirname, 'src/services') },
         { find: '@admin', replacement: path.resolve(__dirname, 'modules/admin') },
         { find: '@customer', replacement: path.resolve(__dirname, 'modules/customer') },
-        { find: '@domain', replacement: path.resolve(__dirname, 'domain') },
-        { find: '@application', replacement: path.resolve(__dirname, 'application') },
-        { find: '@infrastructure', replacement: path.resolve(__dirname, 'infrastructure') },
       ]
     }
   };

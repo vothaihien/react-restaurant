@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { formatVND } from "@/shared/utils"; // Giữ lại hàm format tiền của bạn
-import { Api } from "@/shared/utils/api"; // Giữ lại để gọi API cho chart
+import { reportsApi } from "@/shared/api/other"; // API cho biểu đồ doanh thu
 
 import dashboardService, { TimeRange } from "@/services/dashboardService";
 
@@ -66,7 +66,7 @@ const StatisticsDashboard: React.FC = () => {
       setLoadingMonthly(true);
       setMonthlyError(null);
       try {
-        const data = await Api.getRevenueByMonth(year);
+        const data = await reportsApi.getRevenueByMonth(year);
 
         const normalizedData = (data || []).map((item: any) => ({
           thang: item.thang || item.Thang,
