@@ -1,4 +1,4 @@
-import axiosClient from 'src/api/axiosClient';
+import axiosClient from '@/api/axiosClient';
 import { request } from './apiClient';
 
 type AuthResponse = {
@@ -21,3 +21,4 @@ export const authService = {
         return axiosClient.post<AuthResponse>('/api/Auth/login', payload);
     },
 };
+

@@ -1,4 +1,4 @@
-import axiosClient from '../api/axiosClient';
+import axiosClient from '@/api/axiosClient';
 
 // Nếu có interface MonAn thì thay 'any' bằng MonAn nhé
 export const dishService = {

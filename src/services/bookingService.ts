@@ -1,4 +1,4 @@
-import axiosClient from "src/api/axiosClient";
+import axiosClient from "@/api/axiosClient";
 
 interface StaffBookingResponse {
     Success: boolean;
@@ -48,3 +48,4 @@ export const bookingService = {
         );
     },
 };
+

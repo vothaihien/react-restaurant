@@ -19,20 +19,10 @@ export default defineConfig(({ mode }) => {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
     },
     resolve: {
-      alias: [
-        { find: '@/components', replacement: path.resolve(__dirname, 'components') },
-        { find: '@/lib', replacement: path.resolve(__dirname, 'lib') },
-        { find: '@/features', replacement: path.resolve(__dirname, 'src/features') },
-        { find: '@/shared', replacement: path.resolve(__dirname, 'src/shared') },
-        { find: '@/core', replacement: path.resolve(__dirname, 'src/core') },
-        { find: '@/infrastructure', replacement: path.resolve(__dirname, 'src/infrastructure') },
-        { find: '@/models', replacement: path.resolve(__dirname, 'src/models') },
-        { find: '@/services', replacement: path.resolve(__dirname, 'src/services') },
-        { find: '@admin', replacement: path.resolve(__dirname, 'modules/admin') },
-        { find: '@customer', replacement: path.resolve(__dirname, 'modules/customer') },
-      ]
+      alias: {
+        '@': path.resolve(__dirname, 'src'),
+      }
     }
   };
 });
-
 

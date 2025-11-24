@@ -1,4 +1,4 @@
-import axiosClient from '../api/axiosClient'; 
+import axiosClient from '@/api/axiosClient'; 
 export interface CustomerSearchResult {
   found: boolean;
   maKhachHang?: string;

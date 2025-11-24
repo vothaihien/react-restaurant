@@ -1,5 +1,5 @@
-import axiosClient from '../api/axiosClient';
-import { DashboardStat } from '../models/DashboardStat';
+import axiosClient from '@/api/axiosClient';
+import { DashboardStat } from '@/models/DashboardStat';
 
 export type TimeRange = 'TODAY' | 'WEEK' | 'MONTH';
 
