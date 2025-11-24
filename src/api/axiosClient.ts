@@ -1,4 +1,3 @@
-// src/api/axiosClient.ts
 import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
 
 const axiosClient: AxiosInstance = axios.create({

@@ -282,7 +282,7 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
               <DateTimePicker
                 label="Thời gian nhận bàn" value={bookingTime}
                 onChange={(newValue) => setBookingTime(newValue)}
-                slots={{ textField: TextField }}
+                // Dòng 'slots' đã bị xóa
                 slotProps={{ textField: { fullWidth: true, required: true } }}
               />
             </LocalizationProvider>
@@ -413,20 +413,15 @@ const ReservationsView: React.FC = () => {
         <Typography variant="h6" gutterBottom>Đơn Hàng Đang Chờ</Typography>
 
         <LocalizationProvider dateAdapter={AdapterDayjs}>
-  <DatePicker
-    label="Chọn ngày xem đơn"
-    value={selectedDate}
-    onChange={(newValue) => setSelectedDate(newValue)}
-    
-    // 1. XÓA DÒNG NÀY ĐI: slots={{ textField: TextField }}
-    
-    // 2. Giữ nguyên dòng này
-    enableAccessibleFieldDOMStructure={false} 
-    
-    // 3. Styling vẫn hoạt động bình thường nhờ dòng này
-    slotProps={{ textField: { fullWidth: true, sx: { mb: 2 } } }} 
-  />
-</LocalizationProvider>
+          <DatePicker
+            label="Chọn ngày xem đơn"
+            value={selectedDate}
+            onChange={(newValue) => setSelectedDate(newValue)}
+            // Dòng 'slots' đã bị xóa
+            enableAccessibleFieldDOMStructure={false} 
+            slotProps={{ textField: { fullWidth: true, sx: { mb: 2 } } }} 
+          />
+        </LocalizationProvider>
 
         {/* Danh sách Card */}
         {loading ? (
