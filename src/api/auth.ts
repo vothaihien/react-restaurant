@@ -26,6 +26,6 @@ export const authApi = {
       maNhanVien: string;
       maVaiTro: string;
       tenVaiTro: string;
-    }>("/api/Auth/admin/login", { method: "POST", body: payload }),
+    }>("/api/auth/nhanvien-login", { method: "POST", body: payload }),
 };
 

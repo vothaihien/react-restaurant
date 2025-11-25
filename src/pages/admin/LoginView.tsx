@@ -4,7 +4,7 @@ import { useFeedback } from "@/contexts/FeedbackContext";
 
 const LoginView: React.FC = () => {
   const { adminLogin } = useAuth();
-  const { notify } = useFeedback();
+  const { notify } = useFeedback(); 
   const [tenDangNhap, setTenDangNhap] = useState("");
   const [matKhau, setMatKhau] = useState("");
   const [loading, setLoading] = useState(false);
