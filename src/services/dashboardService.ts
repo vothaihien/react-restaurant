@@ -1,11 +1,6 @@
-<<<<<<< Updated upstream
-import axiosClient from '../api/axiosClient';
-import { DashboardStat } from '../models/DashboardStat';
-=======
 import axiosClient from '@/api/axiosClient';
 // Đảm bảo bạn đã có file model này, nếu chưa thì tạo interface ngay trong file này luôn cũng được
 import { DashboardStat } from '@/models/DashboardStat'; 
->>>>>>> Stashed changes
 
 export type TimeRange = 'TODAY' | 'WEEK' | 'MONTH';
 

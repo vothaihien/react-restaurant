@@ -36,11 +36,6 @@ export const donHangService = {
         return rawResponse as unknown as any;
     },
     
-<<<<<<< Updated upstream
-    // API đã có trong DonHangsAPIController
-    getCustomersToCall: () => 
-        request<any[]>('/api/DonHangsAPI/get-customers-to-call'),
-=======
     // 3. Lấy danh sách khách hàng cần gọi điện nhắc nhở
     getCustomersToCall: async () => {
         const rawResponse = await axiosClient.get('/DonHangsAPI/get-customers-to-call');
@@ -48,5 +43,4 @@ export const donHangService = {
         // Ép kiểu về mảng
         return rawResponse as unknown as any[];
     },
->>>>>>> Stashed changes
 };

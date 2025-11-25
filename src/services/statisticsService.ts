@@ -18,11 +18,6 @@ export const statisticsService = {
         return rawResponse as unknown as RevenueByMonth[];
     },
     
-<<<<<<< Updated upstream
-    // (Tui thêm hàm này từ code dashboard của bạn)
-    getDashboardStats: (timeRange: 'TODAY' | 'WEEK' | 'MONTH') =>
-        request<any>(`/api/Statistics/dashboard-stats?timeRange=${timeRange}`),
-=======
     // 2. Lấy thống kê Dashboard
     getDashboardStats: async (timeRange: 'TODAY' | 'WEEK' | 'MONTH') => {
         const rawResponse = await axiosClient.get('/Statistics/dashboard-stats', {
@@ -32,5 +27,4 @@ export const statisticsService = {
         // Ép kiểu về any (hoặc Interface DashboardStat nếu bạn có import vào)
         return rawResponse as unknown as any;
     },
->>>>>>> Stashed changes
 };

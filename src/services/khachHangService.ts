@@ -1,9 +1,5 @@
-<<<<<<< Updated upstream
-import axiosClient from '../api/axiosClient'; 
-=======
 import axiosClient from '@/api/axiosClient'; 
 
->>>>>>> Stashed changes
 export interface CustomerSearchResult {
   found: boolean;
   maKhachHang?: string;
@@ -32,8 +28,4 @@ export const khachHangService = {
       // Ép kiểu và return trực tiếp (không dùng .data)
       return rawResponse as unknown as any;
   }
-<<<<<<< Updated upstream
-  
-=======
->>>>>>> Stashed changes
 };

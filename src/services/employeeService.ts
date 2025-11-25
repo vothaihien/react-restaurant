@@ -77,14 +77,9 @@ export const employeeService = {
         return rawResponse as unknown as { message: string };
     },
 
-<<<<<<< Updated upstream
-    getRoles: () => 
-        request<any[]>('/api/EmployeesAPI/roles'),
-=======
     // 6. Lấy danh sách vai trò (Roles) để fill dropdown
     getRoles: async () => {
         const rawResponse = await axiosClient.get('/EmployeesAPI/roles');
         return rawResponse as unknown as Role[];
     },
->>>>>>> Stashed changes
 };

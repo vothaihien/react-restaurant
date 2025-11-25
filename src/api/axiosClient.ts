@@ -1,8 +1,8 @@
 import axios, { AxiosInstance, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { StorageKeys } from 'src/constants/StorageKeys';
+import { StorageKeys } from '@/constants/StorageKeys';
 
 const axiosClient: AxiosInstance = axios.create({
-    baseURL: 'http://localhost:5555', 
+    baseURL: 'http://localhost:5555/api', 
     headers: {
         'Content-Type': 'application/json',
     },
@@ -77,3 +77,4 @@ axiosClient.interceptors.response.use(
 );
 
 export default axiosClient;
+

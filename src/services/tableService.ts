@@ -52,14 +52,9 @@ export const tableService = {
         return rawResponse as unknown as any[];
     },
 
-<<<<<<< Updated upstream
-    getTangs: () => 
-        request<any[]>('/api/TangAPI'),
-=======
     // 4. Lấy danh sách tầng
     getTangs: async () => {
         const rawResponse = await axiosClient.get('/TangAPI');
         return rawResponse as unknown as Tang[];
     },
->>>>>>> Stashed changes
 };

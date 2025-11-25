@@ -1,4 +1,4 @@
-import axiosClient from '../api/axiosClient';
+import axiosClient from '@/api/axiosClient';
 
 // =============================================================================
 // 1. ĐỊNH NGHĨA INTERFACE (Map theo MonAnDetailDTO.cs)

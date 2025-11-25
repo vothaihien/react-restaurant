@@ -11,10 +11,6 @@ export interface Supplier {
 }
 
 export const supplierService = {
-<<<<<<< Updated upstream
-    getSuppliers: () => 
-        request<any[]>('/api/SuppliersAPI'),
-=======
     // Lấy danh sách nhà cung cấp
     getSuppliers: async () => {
         // Axios gọi API (đã bỏ '/api' ở đầu)
@@ -23,5 +19,4 @@ export const supplierService = {
         // Ép kiểu về mảng Supplier[]
         return rawResponse as unknown as Supplier[];
     },
->>>>>>> Stashed changes
 };

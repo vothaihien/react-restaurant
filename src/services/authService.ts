@@ -1,11 +1,6 @@
-<<<<<<< Updated upstream
-import axiosClient from 'src/api/axiosClient';
-import { request } from './apiClient';
-=======
 // src/services/AuthService.ts
 import axiosClient from '@/api/axiosClient';
 import { StorageKeys } from '@/constants/StorageKeys';
->>>>>>> Stashed changes
 
 // Import kiểu dữ liệu từ file model vừa tạo
 import { CustomerAuthResponse, EmployeeAuthResponse } from '@/models/AuthModel';
@@ -29,11 +24,6 @@ export const authService = {
         return response;
     },
 
-<<<<<<< Updated upstream
-    login: (payload: { identifier: string; otp: string }) => {
-        return axiosClient.post<AuthResponse>('/api/Auth/login', payload);
-    },
-=======
     // 3. Đăng nhập Khách (Trả về CustomerAuthResponse)
     login: async (payload: { identifier: string; otp: string }) => {
         const rawResponse = await axiosClient.post('/Auth/login', payload);
@@ -60,5 +50,4 @@ export const authService = {
         localStorage.removeItem(StorageKeys.ACCESS_TOKEN);
         localStorage.removeItem(StorageKeys.REFRESH_TOKEN);
     }
->>>>>>> Stashed changes
 };
