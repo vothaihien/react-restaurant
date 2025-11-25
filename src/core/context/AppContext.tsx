@@ -19,6 +19,7 @@ import type {
   Staff,
   Category,
   Role,
+<<<<<<< Updated upstream:src/core/context/AppContext.tsx
 } from "@/core/types";
 import { TableStatus, PaymentMethod } from "@/core/types";
 import { BASE_URL } from "@/shared/utils/api";
@@ -33,7 +34,24 @@ import { donHangService } from "@/services/donHangService";
 import dishService from "@/services/dishService";
 import { tableService } from "@/services/tableService";
 
+=======
+} from "@/types";
+import { TableStatus, PaymentMethod } from "@/types";
+import { BASE_URL } from "@/utils/api";
+// Import Services đã sửa đổi (dùng axiosClient)
+import { inventoryApi } from "@/api/inventory";
+import { suppliersApi } from "@/api/other";
+import { employeesApi } from "@/api/employees";
+import { reservationsApi } from "@/api/reservations";
+import { orderService } from "@/services/orderService";
+import { employeeService } from "@/services/employeeService";
+import { tableService } from "@/services/tableService";
+import dishService from "@/services/dishService";
+// Import StorageKeys để check token
+import { StorageKeys } from "@/constants/StorageKeys";
+>>>>>>> Stashed changes:src/contexts/AppContext.tsx
 
+// Helper để tạo ID tạm (nếu cần cho optimistic update)
 const generateDailyId = (existingIds: string[]): string => {
   const today = new Date();
   const day = String(today.getDate()).padStart(2, "0");
@@ -120,62 +138,27 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Helper functions for localStorage
-const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
-  try {
-    const item = localStorage.getItem(key);
-    if (item) {
-      return JSON.parse(item);
-    }
-  } catch (error) {
-    console.error(`Error loading ${key} from localStorage:`, error);
-  }
-  return defaultValue;
-};
-
-const saveToStorage = <T,>(key: string, value: T): void => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    console.error(`Error saving ${key} to localStorage:`, error);
-  }
-};
-
 export const AppProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  // Load from localStorage or use empty arrays (no mock data)
-  const [tables, setTables] = useState<Table[]>(() =>
-    loadFromStorage("restaurant_tables", [])
-  );
-  const [orders, setOrders] = useState<Order[]>(() =>
-    loadFromStorage("restaurant_orders", [])
-  );
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(() =>
-    loadFromStorage("restaurant_menuItems", [])
-  );
-  const [categories, setCategories] = useState<Category[]>(() =>
-    loadFromStorage("restaurant_categories", [])
-  );
-  // Ingredients are loaded from API only, no hardcoded data
+  // --- KHỞI TẠO STATE RỖNG (Không load từ LocalStorage nữa) ---
+  const [tables, setTables] = useState<Table[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [reservations, setReservations] = useState<Reservation[]>(() =>
-    loadFromStorage("restaurant_reservations", [])
-  );
+  const [reservations, setReservations] = useState<Reservation[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [kdsQueue, setKdsQueue] = useState<KDSItem[]>(() =>
-    loadFromStorage("restaurant_kdsQueue", [])
-  );
+  const [kdsQueue, setKdsQueue] = useState<KDSItem[]>([]);
   const [inventoryTransactions, setInventoryTransactions] = useState<
     InventoryTransaction[]
-  >(() => loadFromStorage("restaurant_inventoryTransactions", []));
+  >([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [reservationToOrderMap, setReservationToOrderMap] = useState<
     Record<string, string>
-  >(() =>
-    loadFromStorage("restaurant_res_to_order", {} as Record<string, string>)
-  );
+  >({});
 
+<<<<<<< Updated upstream:src/core/context/AppContext.tsx
   // Save to localStorage whenever state changes
   React.useEffect(() => {
     saveToStorage("restaurant_tables", tables);
@@ -357,6 +340,157 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
                 maPhienBan: i.menuItem.sizes.find(s => s.name === i.size)?.name || '', 
                 soLuong: i.quantity,
                 ghiChu: i.notes || ''
+=======
+  // Helper function to map Vietnamese status strings to TableStatus enum
+  const mapTableStatus = (tenTrangThai: string | undefined): TableStatus => {
+    if (!tenTrangThai) return TableStatus.Empty;
+    const statusLower = tenTrangThai.toLowerCase().trim();
+    if (
+      statusLower.includes("trống") ||
+      statusLower.includes("available") ||
+      statusLower.includes("sẵn sàng")
+    ) {
+      return TableStatus.Empty;
+    }
+    if (
+      statusLower.includes("đang sử dụng") ||
+      statusLower.includes("occupied") ||
+      statusLower.includes("đang dùng")
+    ) {
+      return TableStatus.Occupied;
+    }
+    if (
+      statusLower.includes("đã đặt") ||
+      statusLower.includes("reserved") ||
+      statusLower.includes("đặt trước")
+    ) {
+      return TableStatus.Reserved;
+    }
+    if (
+      statusLower.includes("dọn") ||
+      statusLower.includes("cleaning") ||
+      statusLower.includes("bảo trì")
+    ) {
+      return TableStatus.Maintenance;
+    }
+    return TableStatus.Empty; // Default
+  };
+
+  const normalizeRoleFromApi = (roleName?: string): Role => {
+    if (!roleName) return "Waiter";
+    const value = roleName.toLowerCase();
+    if (value.includes("admin")) return "Admin";
+    if (value.includes("quản") || value.includes("manager")) return "Manager";
+    if (value.includes("thu")) return "Cashier";
+    if (value.includes("bếp") || value.includes("kitchen")) return "Kitchen";
+    return "Waiter";
+  };
+
+  const isActiveFromStatus = (status?: string) => {
+    if (!status) return true;
+    return !status.toLowerCase().includes("nghỉ");
+  };
+
+  // --- USE EFFECT LOAD DỮ LIỆU (Đã thêm Token Check) ---
+
+  // 1. Load Active Orders & Tables Status
+  useEffect(() => {
+    (async () => {
+      // CHỐT CHẶN: Không có token thì dừng, tránh vòng lặp Login
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
+      try {
+        const data = await orderService.getActiveOrders();
+
+        if (Array.isArray(data) && data.length > 0) {
+          // Map Order
+          const mappedOrders: Order[] = data.map((d: any) => {
+            let localItems: any[] = [];
+            if (Array.isArray(d.chiTietDonHang)) {
+              localItems = d.chiTietDonHang.map((ct: any) => ({
+                id: ct.maMonAn,
+                menuItemId: ct.maMonAn,
+                quantity: ct.soLuong,
+                notes: ct.ghiChu || "",
+                price: ct.donGia || 0,
+              }));
+            }
+            return {
+              id: d.maDonHang,
+              tableId:
+                d.listMaBan && d.listMaBan.length > 0 ? d.listMaBan[0] : "",
+              items: [...localItems],
+              subtotal: d.tongTien || 0,
+              total: d.tongTien || 0,
+              discount: 0,
+              createdAt: new Date(d.thoiGianNhanBan).getTime(),
+              status: "active",
+            };
+          });
+
+          setOrders(mappedOrders);
+
+          // Cập nhật trạng thái bàn dựa trên đơn hàng
+          setTables((prevTables) =>
+            prevTables.map((t) => {
+              const rawOrderData = data.find(
+                (d: any) => d.listMaBan && d.listMaBan.includes(t.id)
+              );
+              if (rawOrderData) {
+                return {
+                  ...t,
+                  status: TableStatus.Occupied,
+                  orderId: rawOrderData.maDonHang,
+                };
+              }
+              return t;
+            })
+          );
+        }
+      } catch (error) {
+        console.warn("Lỗi tải đơn hàng:", error);
+      }
+    })();
+  }, []);
+
+  // 2. Load Tables
+  useEffect(() => {
+    (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
+      try {
+        const data = await tableService.getTables();
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped: Table[] = data.map((b: any) => ({
+            id: b.maBan || b.MaBan,
+            name: b.tenBan || b.TenBan,
+            capacity: Number(b.sucChua || b.SucChua) || 0,
+            status: mapTableStatus(b.tenTrangThai || b.TenTrangThai),
+            maTang: b.maTang || b.MaTang || "",
+            orderId: null,
+          }));
+          setTables(mapped);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // 3. Load Categories
+  useEffect(() => {
+    (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
+      try {
+        const data = await dishService.getCategories();
+        if (Array.isArray(data)) {
+          const mapped: Category[] = data
+            .map((cat: any) => ({
+              id: cat.maDanhMuc || cat.MaDanhMuc || "",
+              name: cat.tenDanhMuc || cat.TenDanhMuc || "",
+>>>>>>> Stashed changes:src/contexts/AppContext.tsx
             }))
         };
 
@@ -414,6 +548,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
         }
     };
 
+<<<<<<< Updated upstream:src/core/context/AppContext.tsx
     // Load tables from API on mount (best-effort)
     useEffect(() => {
         (async () => {
@@ -479,6 +614,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
                             recipe: { id: '', name: '', ingredients: [] }
                         }));
                         // -------------------------
+=======
+  // 4. Load Menu Items
+  useEffect(() => {
+    (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
+      try {
+        const data = await dishService.getDishes();
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped: MenuItem[] = data.map((m: any) => {
+            const imgs: string[] = (
+              m.hinhAnhMonAns ||
+              m.HinhAnhMonAns ||
+              []
+            ).map((h: any) => {
+              const url = h.urlHinhAnh || h.URLHinhAnh;
+              return url?.startsWith("http") ? url : `${BASE_URL}/${url}`;
+            });
+            const tenDanhMuc =
+              m.maDanhMucNavigation?.tenDanhMuc ||
+              m.MaDanhMucNavigation?.TenDanhMuc ||
+              "";
+
+            const sizes = (m.phienBanMonAns || m.PhienBanMonAns || []).map(
+              (p: any) => ({
+                id: p.maPhienBan || p.MaPhienBan,
+                name: p.tenPhienBan || p.TenPhienBan,
+                price: Number(p.gia || p.Gia) || 0,
+                recipe: { id: "", name: "", ingredients: [] },
+              })
+            );
+>>>>>>> Stashed changes:src/contexts/AppContext.tsx
 
                         return {
                             id: m.maMonAn || m.MaMonAn,
@@ -499,29 +667,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
         })();
     }, []);
 
-  // Load ingredients from API on mount (best-effort)
-  // Clear any old localStorage data first
+  // 5. Load Ingredients
   useEffect(() => {
-    // Clear old hardcoded data from localStorage
-    localStorage.removeItem("restaurant_ingredients");
-
     (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
       try {
         const data = await inventoryApi.getIngredients();
         if (Array.isArray(data)) {
           const mapped: Ingredient[] = data
             .map((ing: any) => {
-              // Lấy đơn vị tính trực tiếp từ API, không map với enum
               const unitStr = ing.donViTinh || ing.DonViTinh;
-              if (!unitStr) {
-                // Nếu không có đơn vị tính từ API, bỏ qua nguyên liệu này
-                return null;
-              }
+              if (!unitStr) return null;
 
               const ingredient: Ingredient = {
                 id: ing.maNguyenLieu || ing.MaNguyenLieu || "",
                 name: ing.tenNguyenLieu || ing.TenNguyenLieu || "",
-                unit: unitStr.toString().trim(), // Lấy trực tiếp từ API
+                unit: unitStr.toString().trim(),
                 stock: Number(
                   ing.stock ||
                     ing.Stock ||
@@ -544,38 +707,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
         }
       } catch (error) {
         console.warn("Không thể tải nguyên liệu từ API", error);
-        // Keep empty array if API fails, no fallback hardcoded data
         setIngredients([]);
       }
     })();
   }, []);
 
-  React.useEffect(() => {
-    saveToStorage("restaurant_kdsQueue", kdsQueue);
-  }, [kdsQueue]);
-
-  React.useEffect(() => {
-    saveToStorage("restaurant_inventoryTransactions", inventoryTransactions);
-  }, [inventoryTransactions]);
-
-  const normalizeRoleFromApi = (roleName?: string): Role => {
-    if (!roleName) return "Waiter";
-    const value = roleName.toLowerCase();
-    if (value.includes("admin")) return "Admin";
-    if (value.includes("quản") || value.includes("manager")) return "Manager";
-    if (value.includes("thu")) return "Cashier";
-    if (value.includes("bếp") || value.includes("kitchen")) return "Kitchen";
-    return "Waiter";
-  };
-
-  const isActiveFromStatus = (status?: string) => {
-    if (!status) return true;
-    return !status.toLowerCase().includes("nghỉ");
-  };
-
-  // Load suppliers from API
+  // 6. Load Suppliers
   useEffect(() => {
     (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
       try {
         const data = await suppliersApi.getSuppliers();
         if (Array.isArray(data)) {
@@ -601,11 +743,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     })();
   }, []);
 
-  // Load staff from API
+  // 7. Load Staff
   useEffect(() => {
     (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
       try {
-        const data = await employeesApi.getEmployees();
+        const data = await employeeService.getEmployees();
         if (Array.isArray(data)) {
           const mapped: Staff[] = data
             .map((emp: any) => {
@@ -629,6 +774,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       }
     })();
   }, []);
+
+  // --- HELPER FUNCTIONS (Logic Frontend) ---
 
   const calculateTotals = (items: OrderItem[], discount: number = 0) => {
     const subtotal = items.reduce((acc, item) => {
@@ -692,6 +839,63 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     return orders.find((o) => o.id === table.orderId && !o.closedAt);
   };
 
+  const addItemsToTableOrder = async (tableId: string, items: OrderItem[]) => {
+    const currentOrder = getOrderForTable(tableId);
+    if (!currentOrder) {
+      console.error(
+        `Bàn ${tableId} chưa có đơn hàng. Vui lòng tạo đơn/Check-in trước.`
+      );
+      return;
+    }
+
+    const payload = {
+      maDonHang: currentOrder.id,
+      maBan: tableId,
+      items: items.map((i) => ({
+        maMonAn: i.menuItem.id,
+        maPhienBan: i.menuItem.sizes.find((s) => s.name === i.size)?.id || "",
+        soLuong: i.quantity,
+        ghiChu: i.notes || "",
+      })),
+    };
+
+    try {
+      await orderService.addItemsToTable(payload);
+      console.log("Đã thêm món thành công vào đơn:", currentOrder.id);
+
+      // Gọi lại API để cập nhật UI
+      const latestData = await orderService.getActiveOrders();
+      if (Array.isArray(latestData)) {
+        const mappedOrders: Order[] = latestData.map((d: any) => ({
+          id: d.maDonHang,
+          tableId: d.listMaBan && d.listMaBan.length > 0 ? d.listMaBan[0] : "",
+          items: [], 
+          subtotal: d.tongTien || 0,
+          total: d.tongTien || 0,
+          discount: 0,
+          createdAt: new Date(d.thoiGianNhanBan).getTime(),
+          status: "active",
+        }));
+        setOrders(mappedOrders);
+        setTables((prevTables) =>
+          prevTables.map((t) => {
+            const orderOfTable = mappedOrders.find((o) => o.tableId === t.id);
+            if (orderOfTable) {
+              return {
+                ...t,
+                status: TableStatus.Occupied,
+                orderId: orderOfTable.id,
+              };
+            }
+            return t;
+          })
+        );
+      }
+    } catch (error) {
+      console.error("Lỗi khi gọi API thêm món:", error);
+    }
+  };
+
   const sendOrderToKDS = (orderId: string) => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) return;
@@ -750,11 +954,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       status?: Reservation["status"];
     }
   ) => {
-    // Map dữ liệu sang DTO backend
     if (!data.time || !data.partySize) return;
     const thoiGian = new Date(data.time).toISOString();
 
-    // Xử lý danh sách bàn: ưu tiên tableIds (array), fallback tableId (string)
     const danhSachMaBan: string[] = [];
     if (data.tableIds && data.tableIds.length > 0) {
       danhSachMaBan.push(...data.tableIds);
@@ -776,11 +978,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       GhiChu: data.notes || undefined,
       MaNhanVien: undefined,
       TienDatCoc: undefined,
-      MaKhachHang: undefined, // Có thể lấy từ user context nếu có
-      Email: undefined, // Có thể lấy từ user context nếu có
+      MaKhachHang: undefined,
+      Email: undefined,
     };
     const res = await reservationsApi.createReservation(payload);
-    // Cập nhật UI tạm thời (optimistic)
     const newId = generateDailyId(reservations.map((r) => r.id));
     const newRes: Reservation = {
       id: newId,
@@ -813,6 +1014,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     setReservations((prev) => prev.map((r) => (r.id === res.id ? res : r)));
   };
 
+<<<<<<< Updated upstream:src/core/context/AppContext.tsx
     const cancelReservation = async (id: string) => {
         const res = reservations.find(r => r.id === id);
         // cập nhật trạng thái backend nếu có mapping
@@ -830,6 +1032,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
             }
         }
     };
+=======
+  const cancelReservation = async (id: string) => {
+    const res = reservations.find((r) => r.id === id);
+    const maDon = reservationToOrderMap[id];
+    if (maDon) {
+      try {
+        await orderService.updateOrderStatus(maDon, "DA_HUY");
+      } catch {}
+    }
+    setReservations((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, status: "Cancelled" } : r))
+    );
+    if (res) {
+      if (res.tableIds && res.tableIds.length > 0) {
+        setTables((prev) =>
+          prev.map((t) =>
+            res.tableIds!.includes(t.id)
+              ? { ...t, status: TableStatus.Empty }
+              : t
+          )
+        );
+      } else if (res.tableId) {
+        setTables((prev) =>
+          prev.map((t) =>
+            t.id === res.tableId ? { ...t, status: TableStatus.Empty } : t
+          )
+        );
+      }
+    }
+  };
+>>>>>>> Stashed changes:src/contexts/AppContext.tsx
 
   const confirmArrival = async (id: string) => {
     const res = reservations.find((r) => r.id === id);
@@ -843,7 +1076,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     setReservations((prev) =>
       prev.map((r) => (r.id === id ? { ...r, status: "Seated" } : r))
     );
-    // 支持多张桌子
     if (res.tableIds && res.tableIds.length > 0) {
       setTables((prev) =>
         prev.map((t) =>
@@ -861,6 +1093,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
+<<<<<<< Updated upstream:src/core/context/AppContext.tsx
     const markNoShow = async (id: string) => {
         const res = reservations.find(r => r.id === id);
         if (!res) return;
@@ -875,12 +1108,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
             setTables(prev => prev.map(t => t.id === res.tableId ? { ...t, status: TableStatus.Empty } : t));
         }
     };
+=======
+  const markNoShow = async (id: string) => {
+    const res = reservations.find((r) => r.id === id);
+    if (!res) return;
+    const maDon = reservationToOrderMap[id];
+    if (maDon) {
+      try {
+        await orderService.updateOrderStatus(maDon, "NO_SHOW");
+      } catch {}
+    }
+    setReservations((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, status: "NoShow" } : r))
+    );
+    if (res.tableIds && res.tableIds.length > 0) {
+      setTables((prev) =>
+        prev.map((t) =>
+          res.tableIds!.includes(t.id) ? { ...t, status: TableStatus.Empty } : t
+        )
+      );
+    } else if (res.tableId) {
+      setTables((prev) =>
+        prev.map((t) =>
+          t.id === res.tableId ? { ...t, status: TableStatus.Empty } : t
+        )
+      );
+    }
+  };
+>>>>>>> Stashed changes:src/contexts/AppContext.tsx
 
   const getAvailableTables = async (dateTime: number, partySize: number) => {
     try {
       const iso = new Date(dateTime).toISOString();
-      const data = await tablesApi.getTablesByTime(iso, partySize);
-      console.log("API getTablesByTime response:", data);
+      const data = await tableService.getTablesByTime(iso, partySize);
       const mapped = (data || []).map((x: any) => {
         const result = {
           id: x.maBan || x.MaBan,
@@ -890,15 +1150,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
           maTang: x.maTang || x.MaTang || null,
           tenTang: x.tenTang || x.TenTang || null,
         };
-        if (!result.maTang) {
-          console.warn(
-            `Table ${result.name} (${result.id}) has no maTang. Raw data:`,
-            x
-          );
-        }
         return result;
       });
-      console.log("Mapped tables with tầng:", mapped.slice(0, 5));
       return mapped;
     } catch (error) {
       console.error("Error in getAvailableTables:", error);
@@ -906,7 +1159,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
-  // Inventory helpers
   const lowStockIds = () =>
     ingredients
       .filter(
@@ -954,7 +1206,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     setIngredients((prev) =>
       prev.map((ing) => {
         const line = items.find((it) => it.ingredientId === ing.id);
-        return line ? { ...ing, stock: ing.stock + line.quantity } : ing; // quantity may be negative
+        return line ? { ...ing, stock: ing.stock + line.quantity } : ing;
       })
     );
   };
@@ -964,7 +1216,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     items.forEach((oi) => {
       const size = oi.menuItem.sizes.find((s) => s.name === oi.size);
       if (!size || !size.recipe) return;
-      size.recipe.ingredients.forEach((ri) => {
+      size.recipe.ingredients.forEach((ri: any) => {
         const qty =
           (consumption[ri.ingredient.id] || 0) + ri.quantity * oi.quantity;
         consumption[ri.ingredient.id] = qty;
@@ -992,7 +1244,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     );
   };
 
-  // Suppliers CRUD
   const addSupplier = (s: Omit<Supplier, "id">) => {
     const newId = generateDailyId(suppliers.map((sp) => sp.id));
     const sup: Supplier = { id: newId, ...s } as Supplier;
@@ -1005,6 +1256,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     setSuppliers((prev) => prev.filter((x) => x.id !== id));
   };
 
+<<<<<<< Updated upstream:src/core/context/AppContext.tsx
     // Tables CRUD
     const addTable = (t: Omit<Table, 'id' | 'status' | 'orderId'>) => {
         const newId = generateDailyId(tables.map(tb => tb.id));
@@ -1023,9 +1275,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     };
     const deleteTable = (id: string) => {
         setTables(prev => prev.filter(x => x.id !== id));
+=======
+  const addTable = (t: Omit<Table, "id" | "status" | "orderId">) => {
+    const newId = generateDailyId(tables.map((tb) => tb.id));
+    const table: Table = {
+      id: newId,
+      name: t.name,
+      capacity: t.capacity,
+      status: TableStatus.Empty,
+      orderId: null,
+      maTang: t.maTang,
+>>>>>>> Stashed changes:src/contexts/AppContext.tsx
     };
 
-  // Staff CRUD
   const addStaff = (s: Omit<Staff, "id" | "active"> & { active?: boolean }) => {
     const newId = generateDailyId(staff.map((u) => u.id));
     const user: Staff = { id: newId, active: s.active ?? true, ...s } as Staff;
@@ -1108,4 +1370,8 @@ export const useAppContext = () => {
     throw new Error("useAppContext must be used within an AppProvider");
   }
   return context;
+<<<<<<< Updated upstream:src/core/context/AppContext.tsx
 };
+=======
+};
+>>>>>>> Stashed changes:src/contexts/AppContext.tsx

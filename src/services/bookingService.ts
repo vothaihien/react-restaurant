@@ -1,4 +1,8 @@
+<<<<<<< Updated upstream
 import axiosClient from "src/api/axiosClient";
+=======
+import axiosClient from "@/api/axiosClient"; // Đảm bảo đường dẫn đúng
+>>>>>>> Stashed changes
 
 interface StaffBookingResponse {
     Success: boolean;
@@ -9,12 +13,14 @@ interface StaffBookingResponse {
 
 export const bookingService = {
     // 1. Đặt bàn thường
-    createReservation: (data: any) => {
-        return axiosClient.post<any>('/api/DatBanAPI/TaoDatBan', data);
+    createReservation: async (data: any) => {
+        const rawResponse = await axiosClient.post('/DatBanAPI/TaoDatBan', data);
+        // Ép kiểu để tránh lỗi TS
+        return rawResponse as unknown as any; 
     },
 
     // 2. API MỚI (Dành cho Nhân viên Lễ tân)
-    createReservationByStaff: (data: {
+    createReservationByStaff: async (data: {
         DanhSachMaBan: string[];
         HoTenKhach: string;
         SoDienThoaiKhach: string;
@@ -23,9 +29,12 @@ export const bookingService = {
         SoLuongNguoi: number;
         MaNhanVien: string;
     }) => {
-        return axiosClient.post<StaffBookingResponse>('/api/DatBanAPI/staff/create', data);
+        const rawResponse = await axiosClient.post('/DatBanAPI/staff/create', data);
+        // Ép kiểu Double Casting
+        return rawResponse as unknown as StaffBookingResponse;
     },
 
+<<<<<<< Updated upstream
     // 3. Lấy lịch sử đặt bàn (Cần Token)
     getMyBookings: (token: string) => {
         return axiosClient.get<any[]>('/api/BookingHistory/me', {
@@ -33,18 +42,24 @@ export const bookingService = {
                 Authorization: `Bearer ${token}`
             }
         }).then(res => res.data); // <--- THÊM ĐOẠN NÀY VÀO (Lấy ruột data ra)
+=======
+    // 3. Lấy lịch sử đặt bàn 
+    // KHÔNG CẦN TRUYỀN TOKEN (axiosClient tự lo)
+    getMyBookings: async () => {
+        const rawResponse = await axiosClient.get('/BookingHistory/me');
+        // Ép kiểu về mảng
+        return rawResponse as unknown as any[];
+>>>>>>> Stashed changes
     },
 
-    // 4. Hủy đặt bàn (Cần Token)
-    cancelBooking: (maDonHang: string, token: string) => {
-        return axiosClient.post<{ message: string }>(
-            `/api/BookingHistory/cancel/${encodeURIComponent(maDonHang)}`,
-            {}, 
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            }
+    // 4. Hủy đặt bàn
+    // KHÔNG CẦN TRUYỀN TOKEN
+    cancelBooking: async (maDonHang: string) => {
+        const rawResponse = await axiosClient.post(
+            `/BookingHistory/cancel/${encodeURIComponent(maDonHang)}`,
+            {} // Body rỗng
         );
+        // Ép kiểu
+        return rawResponse as unknown as { message: string };
     },
 };

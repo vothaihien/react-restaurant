@@ -1,5 +1,5 @@
 // src/services/donHangService.ts
-import { request } from './apiClient';
+import axiosClient from '@/api/axiosClient'; // Đảm bảo đường dẫn import đúng
 
 // Interface này dùng cho component DatBanView mới
 export interface DonHangActive {
@@ -13,20 +13,40 @@ export interface DonHangActive {
 }
 
 export const donHangService = {
-   getActiveBookings: (ngay: string) => // 1. Cho phép nhận 1 tham số 'ngay'
-        request<DonHangActive[]>(`/api/DonHangsAPI/GetActiveBookings?ngay=${ngay}`),
-
-    // API đã có trong DonHangsAPIController
-    getMyBookingDetail: (params: { maDonHang?: string; maBan?: string; dateTime?: string }) => {
-        const qs = new URLSearchParams();
-        if (params.maDonHang) qs.set('maDonHang', params.maDonHang);
-        if (params.maBan) qs.set('maBan', params.maBan);
-        if (params.dateTime) qs.set('dateTime', params.dateTime);
+    // 1. Lấy danh sách đơn hàng active theo ngày
+    getActiveBookings: async (ngay: string) => {
+        // Axios tự động chuyển object params thành ?ngay=...
+        // Lưu ý: Đã bỏ '/api' ở đầu path vì baseURL đã có sẵn
+        const rawResponse = await axiosClient.get('/DonHangsAPI/GetActiveBookings', {
+            params: { ngay }
+        });
         
-        return request<any>(`/api/DonHangsAPI/GetMyBookingDetail?${qs.toString()}`);
+        // Ép kiểu Double Casting để tránh lỗi TypeScript
+        return rawResponse as unknown as DonHangActive[];
+    },
+
+    // 2. Lấy chi tiết đơn hàng (Dùng cho cả việc click vào bàn để xem)
+    getMyBookingDetail: async (params: { maDonHang?: string; maBan?: string; dateTime?: string }) => {
+        // Không cần new URLSearchParams() nữa, Axios lo hết
+        const rawResponse = await axiosClient.get('/DonHangsAPI/GetMyBookingDetail', {
+            params: params 
+        });
+
+        // Ép kiểu (dùng any vì bạn đang để any, nếu có interface chi tiết thì thay vào)
+        return rawResponse as unknown as any;
     },
     
+<<<<<<< Updated upstream
     // API đã có trong DonHangsAPIController
     getCustomersToCall: () => 
         request<any[]>('/api/DonHangsAPI/get-customers-to-call'),
+=======
+    // 3. Lấy danh sách khách hàng cần gọi điện nhắc nhở
+    getCustomersToCall: async () => {
+        const rawResponse = await axiosClient.get('/DonHangsAPI/get-customers-to-call');
+        
+        // Ép kiểu về mảng
+        return rawResponse as unknown as any[];
+    },
+>>>>>>> Stashed changes
 };

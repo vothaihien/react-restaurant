@@ -1,4 +1,9 @@
+<<<<<<< Updated upstream
 import axiosClient from '../api/axiosClient'; 
+=======
+import axiosClient from '@/api/axiosClient'; 
+
+>>>>>>> Stashed changes
 export interface CustomerSearchResult {
   found: boolean;
   maKhachHang?: string;
@@ -12,14 +17,23 @@ export interface CustomerSearchResult {
 export const khachHangService = {
   searchByPhone: async (phone: string): Promise<CustomerSearchResult> => {
     const url = `/DatBanAPI/TimKiemKhachHang/${phone}`;
-    const response = await axiosClient.get<CustomerSearchResult>(url);
-    return response.data;
+    // Gọi API
+    const rawResponse = await axiosClient.get(url);
+    
+    // Ép kiểu "Double Casting" và return trực tiếp (không dùng .data)
+    return rawResponse as unknown as CustomerSearchResult;
   },
   
   createCustomer: async (data: any) => {
       const url = '/DatBanAPI/TaoKhachHang'; 
-      const response = await axiosClient.post(url, data);
-      return response.data;
+      // Gọi API
+      const rawResponse = await axiosClient.post(url, data);
+      
+      // Ép kiểu và return trực tiếp (không dùng .data)
+      return rawResponse as unknown as any;
   }
+<<<<<<< Updated upstream
   
+=======
+>>>>>>> Stashed changes
 };

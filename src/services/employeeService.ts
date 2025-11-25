@@ -1,14 +1,46 @@
 // src/services/employeeService.ts
-import { request } from './apiClient';
+import axiosClient from '@/api/axiosClient'; // Đảm bảo đường dẫn import đúng
+
+// ------------------------------------------------------------------
+// ĐỊNH NGHĨA INTERFACE (Để code sạch hơn thay vì dùng any)
+// ------------------------------------------------------------------
+
+export interface Employee {
+    maNhanVien: string;
+    hoTen: string;
+    tenDangNhap: string;
+    email?: string;
+    soDienThoai?: string;
+    maVaiTro: string;
+    tenVaiTro?: string; // Thường join bảng sẽ có tên vai trò
+    maTrangThai?: string;
+}
+
+export interface Role {
+    maVaiTro: string;
+    tenVaiTro: string;
+}
+
+// ------------------------------------------------------------------
+// SERVICE
+// ------------------------------------------------------------------
 
 export const employeeService = {
-    getEmployees: () => 
-        request<any[]>('/api/EmployeesAPI'),
+    // 1. Lấy danh sách nhân viên
+    getEmployees: async () => {
+        // Đã bỏ '/api' ở đầu
+        const rawResponse = await axiosClient.get('/EmployeesAPI');
+        return rawResponse as unknown as Employee[];
+    },
 
-    getEmployee: (maNhanVien: string) => 
-        request<any>(`/api/EmployeesAPI/${encodeURIComponent(maNhanVien)}`),
+    // 2. Lấy chi tiết nhân viên
+    getEmployee: async (maNhanVien: string) => {
+        const rawResponse = await axiosClient.get(`/EmployeesAPI/${encodeURIComponent(maNhanVien)}`);
+        return rawResponse as unknown as Employee;
+    },
 
-    createEmployee: (data: {
+    // 3. Tạo nhân viên mới
+    createEmployee: async (data: {
         HoTen: string;
         TenDangNhap: string;
         MatKhau: string;
@@ -16,27 +48,43 @@ export const employeeService = {
         SoDienThoai?: string;
         MaVaiTro: string;
         MaTrangThai?: string;
-    }) => request<{ message: string; nhanVien: any }>('/api/EmployeesAPI', {
-        method: 'POST',
-        body: data
-    }),
+    }) => {
+        // Dùng axiosClient.post, tự động xử lý body JSON
+        const rawResponse = await axiosClient.post('/EmployeesAPI', data);
+        
+        return rawResponse as unknown as { message: string; nhanVien: Employee };
+    },
 
-    updateEmployee: (maNhanVien: string, data: {
+    // 4. Cập nhật nhân viên
+    updateEmployee: async (maNhanVien: string, data: {
         HoTen?: string;
         Email?: string;
         SoDienThoai?: string;
         MaVaiTro?: string;
         MaTrangThai?: string;
-    }) => request<{ message: string; nhanVien: any }>(`/api/EmployeesAPI/${encodeURIComponent(maNhanVien)}`, {
-        method: 'PUT',
-        body: data
-    }),
+    }) => {
+        // Dùng axiosClient.put
+        const rawResponse = await axiosClient.put(`/EmployeesAPI/${encodeURIComponent(maNhanVien)}`, data);
+        
+        return rawResponse as unknown as { message: string; nhanVien: Employee };
+    },
 
-    deleteEmployee: (maNhanVien: string) =>
-        request<{ message: string }>(`/api/EmployeesAPI/${encodeURIComponent(maNhanVien)}`, {
-            method: 'DELETE'
-        }),
+    // 5. Xóa nhân viên
+    deleteEmployee: async (maNhanVien: string) => {
+        // Dùng axiosClient.delete
+        const rawResponse = await axiosClient.delete(`/EmployeesAPI/${encodeURIComponent(maNhanVien)}`);
+        
+        return rawResponse as unknown as { message: string };
+    },
 
+<<<<<<< Updated upstream
     getRoles: () => 
         request<any[]>('/api/EmployeesAPI/roles'),
+=======
+    // 6. Lấy danh sách vai trò (Roles) để fill dropdown
+    getRoles: async () => {
+        const rawResponse = await axiosClient.get('/EmployeesAPI/roles');
+        return rawResponse as unknown as Role[];
+    },
+>>>>>>> Stashed changes
 };

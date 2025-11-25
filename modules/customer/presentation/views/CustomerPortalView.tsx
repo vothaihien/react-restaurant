@@ -391,13 +391,13 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       typeof statusValue === "string" ? statusValue.toLowerCase().trim() : "";
 
     // Check if it's the enum value
-    if (statusValue === TableStatus.Available) {
+    if (statusValue === TableStatus.Empty ){
       return `${base} border-emerald-400/70 bg-emerald-50/70 hover:bg-emerald-50`;
     }
     if (
       statusValue === TableStatus.Occupied ||
       statusValue === TableStatus.Reserved ||
-      statusValue === TableStatus.CleaningNeeded
+      statusValue === TableStatus.Maintenance
     ) {
       return `${base} border-slate-200 bg-slate-50/80 opacity-80 cursor-not-allowed`;
     }
@@ -633,7 +633,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                             const isAvailable =
                               t.status === "Đang trống" ||
                               t.status === "Available" ||
-                              t.status === TableStatus.Available;
+                              t.status === TableStatus.Empty;
                             const disabled = !isAvailable;
                             const selected = selectedTableIds.includes(t.id);
                             const isReserved =
@@ -695,7 +695,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                                       className={
                                         t.status === "Đang trống" ||
                                         t.status === "Available" ||
-                                        t.status === TableStatus.Available
+                                        t.status === TableStatus.Empty
                                           ? "text-emerald-600"
                                           : t.status === "Đã đặt" ||
                                             t.status === "Reserved" ||
@@ -714,7 +714,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                                     >
                                       {t.status === "Đang trống" ||
                                       t.status === "Available" ||
-                                      t.status === TableStatus.Available
+                                      t.status === TableStatus.Empty
                                         ? "Trống"
                                         : t.status === "Đã đặt" ||
                                           t.status === "Reserved" ||
@@ -1333,7 +1333,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                       <span className="font-semibold">{user?.name}</span>
                     </div>
                     <div className="text-gray-700 text-sm">
-                      Mã KH: {user?.customerId}
+                      Mã KH: {user && 'customerId' in user ? user.customerId : ''}
                     </div>
                     <Button variant="outline" onClick={logout}>
                       Đăng xuất
