@@ -13,13 +13,14 @@ import {
 import CustomerPortalView, {
   CustomerTab,
 } from "@/pages/customer/CustomerPortalView";
+import InventoryScreen from "@/pages/admin/InventoryScreen";
 const AppRoutes: React.FC = () => {
   return (
     <Routes>
       <Route path="/" element={<DashboardView />} />
       <Route path="/menu" element={<MenuView />} />
       <Route path="/reservations" element={<ReservationsView />} />
-      <Route path="/inventory" element={<InventoryView />} />
+      <Route path="/inventory" element={<InventoryScreen />} />
       <Route path="/masterdata" element={<MasterDataView />} />
       <Route path="/kds" element={<KDSView />} />
       <Route
@@ -41,5 +42,3 @@ const AppRoutes: React.FC = () => {
 };
 
 export default AppRoutes;
-
-

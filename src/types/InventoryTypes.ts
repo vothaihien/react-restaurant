@@ -42,8 +42,8 @@ export interface NhapKhoPayload {
     maNhaCungCap: string;
     maTrangThai: string;
     chiTiet: {
-        maCungUng: string;
-        soLuong: number;
-        giaNhap: number;
+        MaCungUng: string;
+        SoLuong: number;
+        GiaNhap: number;
     }[];
 }

@@ -19,6 +19,7 @@ export interface Recipe {
 }
 
 export interface MenuItemSize {
+  id: string;
   name: string; // e.g., 'S', 'M', 'L'
   price: number;
   recipe: Recipe;

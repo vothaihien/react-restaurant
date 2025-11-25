@@ -22,14 +22,19 @@ import type {
 } from "@/types";
 import { TableStatus, PaymentMethod } from "@/types";
 import { BASE_URL } from "@/utils/api";
-import { tablesApi } from "@/api/tables";
-import { menuApi } from "@/api/menu";
+// Import Services đã sửa đổi (dùng axiosClient)
 import { inventoryApi } from "@/api/inventory";
 import { suppliersApi } from "@/api/other";
 import { employeesApi } from "@/api/employees";
 import { reservationsApi } from "@/api/reservations";
 import { orderService } from "@/services/orderService";
+import { employeeService } from "@/services/employeeService";
+import { tableService } from "@/services/tableService";
+import dishService from "@/services/dishService";
+// Import StorageKeys để check token
+import { StorageKeys } from "@/constants/StorageKeys";
 
+// Helper để tạo ID tạm (nếu cần cho optimistic update)
 const generateDailyId = (existingIds: string[]): string => {
   const today = new Date();
   const day = String(today.getDate()).padStart(2, "0");
@@ -115,89 +120,26 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Helper functions for localStorage
-const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
-  try {
-    const item = localStorage.getItem(key);
-    if (item) {
-      return JSON.parse(item);
-    }
-  } catch (error) {
-    console.error(`Error loading ${key} from localStorage:`, error);
-  }
-  return defaultValue;
-};
-
-const saveToStorage = <T,>(key: string, value: T): void => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    console.error(`Error saving ${key} to localStorage:`, error);
-  }
-};
-
 export const AppProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  // Load from localStorage or use empty arrays (no mock data)
-  const [tables, setTables] = useState<Table[]>(() =>
-    loadFromStorage("restaurant_tables", [])
-  );
-  const [orders, setOrders] = useState<Order[]>(() =>
-    loadFromStorage("restaurant_orders", [])
-  );
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(() =>
-    loadFromStorage("restaurant_menuItems", [])
-  );
-  const [categories, setCategories] = useState<Category[]>(() =>
-    loadFromStorage("restaurant_categories", [])
-  );
-  // Ingredients are loaded from API only, no hardcoded data
+  // --- KHỞI TẠO STATE RỖNG (Không load từ LocalStorage nữa) ---
+  const [tables, setTables] = useState<Table[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [reservations, setReservations] = useState<Reservation[]>(() =>
-    loadFromStorage("restaurant_reservations", [])
-  );
+  const [reservations, setReservations] = useState<Reservation[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [kdsQueue, setKdsQueue] = useState<KDSItem[]>(() =>
-    loadFromStorage("restaurant_kdsQueue", [])
-  );
+  const [kdsQueue, setKdsQueue] = useState<KDSItem[]>([]);
   const [inventoryTransactions, setInventoryTransactions] = useState<
     InventoryTransaction[]
-  >(() => loadFromStorage("restaurant_inventoryTransactions", []));
+  >([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [reservationToOrderMap, setReservationToOrderMap] = useState<
     Record<string, string>
-  >(() =>
-    loadFromStorage("restaurant_res_to_order", {} as Record<string, string>)
-  );
+  >({});
 
-  // Save to localStorage whenever state changes
-  React.useEffect(() => {
-    saveToStorage("restaurant_tables", tables);
-  }, [tables]);
-
-  React.useEffect(() => {
-    saveToStorage("restaurant_orders", orders);
-  }, [orders]);
-
-  React.useEffect(() => {
-    saveToStorage("restaurant_menuItems", menuItems);
-  }, [menuItems]);
-  React.useEffect(() => {
-    saveToStorage("restaurant_categories", categories);
-  }, [categories]);
-
-  // Don't save ingredients to localStorage - always load from API
-  // React.useEffect(() => {
-  //     saveToStorage('restaurant_ingredients', ingredients);
-  // }, [ingredients]);
-
-  React.useEffect(() => {
-    saveToStorage("restaurant_reservations", reservations);
-  }, [reservations]);
-  React.useEffect(() => {
-    saveToStorage("restaurant_res_to_order", reservationToOrderMap);
-  }, [reservationToOrderMap]);
   // Helper function to map Vietnamese status strings to TableStatus enum
   const mapTableStatus = (tenTrangThai: string | undefined): TableStatus => {
     if (!tenTrangThai) return TableStatus.Empty;
@@ -233,81 +175,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     return TableStatus.Empty; // Default
   };
 
-  // useEffect(() => {
-  //     (async () => {
-  //         try {
-  //             // 1. Gọi API lấy dữ liệu thô
-  //             const data = await orderService.getActiveOrders();
+  const normalizeRoleFromApi = (roleName?: string): Role => {
+    if (!roleName) return "Waiter";
+    const value = roleName.toLowerCase();
+    if (value.includes("admin")) return "Admin";
+    if (value.includes("quản") || value.includes("manager")) return "Manager";
+    if (value.includes("thu")) return "Cashier";
+    if (value.includes("bếp") || value.includes("kitchen")) return "Kitchen";
+    return "Waiter";
+  };
 
-  //             if (Array.isArray(data) && data.length > 0) {
+  const isActiveFromStatus = (status?: string) => {
+    if (!status) return true;
+    return !status.toLowerCase().includes("nghỉ");
+  };
 
-  //                 // 2. Map sang Order Frontend
-  //                 const mappedOrders: Order[] = data.map((d: any) => ({
-  //                     id: d.maDonHang,
-  //                     // Vẫn giữ bàn chính để hiển thị đại diện
-  //                     tableId: (d.listMaBan && d.listMaBan.length > 0) ? d.listMaBan[0] : '',
-  //                     items: [],
-  //                     subtotal: 0,
-  //                     total: 0,
-  //                     discount: 0,
-  //                     createdAt: new Date(d.thoiGianNhanBan).getTime(),
-  //                     status: 'active'
-  //                 }));
+  // --- USE EFFECT LOAD DỮ LIỆU (Đã thêm Token Check) ---
 
-  //                 setOrders(mappedOrders);
-
-  //                 // 3. QUAN TRỌNG: CẬP NHẬT TRẠNG THÁI CHO TẤT CẢ CÁC BÀN LIÊN QUAN
-  //                 setTables(prevTables => prevTables.map(t => {
-  //                     // Tìm trong dữ liệu thô (data) xem bàn này (t.id) có nằm trong listMaBan của đơn nào không?
-  //                     // Logic cũ chỉ tìm theo mappedOrders nên bị sót bàn phụ
-  //                     const rawOrderData = data.find((d: any) =>
-  //                         d.listMaBan && d.listMaBan.includes(t.id)
-  //                     );
-
-  //                     if (rawOrderData) {
-  //                         // Nếu tìm thấy bàn này trong 1 đơn hàng nào đó
-  //                         return {
-  //                             ...t,
-  //                             status: TableStatus.Occupied, // Đánh dấu có khách
-  //                             orderId: rawOrderData.maDonHang // <--- GẮN ĐÚNG ORDER ID CHO CẢ BÀN CHÍNH LẪN BÀN PHỤ
-  //                         };
-  //                     }
-  //                     return t;
-  //                 }));
-  //             }
-  //         } catch (error) {
-  //             console.warn('Lỗi tải đơn hàng:', error);
-  //         }
-  //     })();
-  // }, []);
-
+  // 1. Load Active Orders & Tables Status
   useEffect(() => {
     (async () => {
+      // CHỐT CHẶN: Không có token thì dừng, tránh vòng lặp Login
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
       try {
         const data = await orderService.getActiveOrders();
 
         if (Array.isArray(data) && data.length > 0) {
-          // --- MAP ĐƠN HÀNG ---
+          // Map Order
           const mappedOrders: Order[] = data.map((d: any) => {
-            // 1. Xử lý món ăn (quan trọng: khai báo const bên trong để tạo mảng mới mỗi lần lặp)
             let localItems: any[] = [];
-
             if (Array.isArray(d.chiTietDonHang)) {
               localItems = d.chiTietDonHang.map((ct: any) => ({
-                id: ct.maMonAn, // Nên dùng ID duy nhất của dòng chi tiết nếu có (ví dụ: ct.id)
+                id: ct.maMonAn,
                 menuItemId: ct.maMonAn,
                 quantity: ct.soLuong,
                 notes: ct.ghiChu || "",
-                price: ct.donGia || 0, // Map thêm giá nếu cần
+                price: ct.donGia || 0,
               }));
             }
-
-            // 2. Trả về object Order
             return {
               id: d.maDonHang,
               tableId:
                 d.listMaBan && d.listMaBan.length > 0 ? d.listMaBan[0] : "",
-              // Dùng [...localItems] để copy ra một mảng hoàn toàn mới -> TRÁNH LỖI DÙNG CHUNG
               items: [...localItems],
               subtotal: d.tongTien || 0,
               total: d.tongTien || 0,
@@ -319,26 +230,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
 
           setOrders(mappedOrders);
 
-          // --- CẬP NHẬT TRẠNG THÁI BÀN ---
+          // Cập nhật trạng thái bàn dựa trên đơn hàng
           setTables((prevTables) =>
             prevTables.map((t) => {
-              // Logic cũ: Tìm xem bàn này có nằm trong đơn hàng nào không
               const rawOrderData = data.find(
                 (d: any) => d.listMaBan && d.listMaBan.includes(t.id)
               );
-
               if (rawOrderData) {
-                // Kiểm tra kỹ: Nếu bàn này thuộc đơn hàng này -> Gán Order ID
                 return {
                   ...t,
                   status: TableStatus.Occupied,
                   orderId: rawOrderData.maDonHang,
                 };
               }
-
-              // Nếu không tìm thấy đơn cho bàn này -> Reset về trạng thái cũ hoặc Trống
-              // Quan trọng: Phải clear orderId đi nếu nó không còn active
-              // return { ...t, orderId: undefined }; // (Bỏ comment dòng này nếu muốn strict mode)
               return t;
             })
           );
@@ -349,105 +253,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     })();
   }, []);
 
-  const addItemsToTableOrder = async (tableId: string, items: OrderItem[]) => {
-    // 1. Tìm đơn hàng hiện tại của bàn này
-    const currentOrder = getOrderForTable(tableId);
-
-    console.error(currentOrder);
-
-    // NẾU KHÔNG TÌM THẤY ĐƠN -> DỪNG LUÔN (Bàn trống không cho thêm món)
-    if (!currentOrder) {
-      console.error(
-        `Bàn ${tableId} chưa có đơn hàng (Trạng thái trống). Vui lòng tạo đơn/Check-in trước.`
-      );
-      // Bạn có thể thêm thông báo UI ở đây: notify("Bàn này chưa có khách!", "error");
-      return;
-    }
-
-    // 2. Chuẩn bị dữ liệu gửi về Server
-    // Map từ OrderItem (Frontend) sang cấu trúc Backend yêu cầu
-    const payload = {
-      maDonHang: currentOrder.id,
-      maBan: tableId,
-      items: items.map((i) => ({
-        maMonAn: i.menuItem.id,
-        // Lấy ID của phiên bản (Size). Nếu không có thì để chuỗi rỗng (cần đảm bảo data đầu vào chuẩn)
-        maPhienBan: i.menuItem.sizes.find((s) => s.name === i.size)?.id || "",
-        soLuong: i.quantity,
-        ghiChu: i.notes || "",
-      })),
-    };
-
-    try {
-      // 3. Gọi API thêm món
-      await orderService.addItemsToTable(payload);
-      console.log("Đã thêm món thành công vào đơn:", currentOrder.id);
-
-      // 4. CẬP NHẬT LẠI DỮ LIỆU (Reload từ Server để đồng bộ)
-      // Gọi lại API lấy danh sách Active Orders để đảm bảo dữ liệu mới nhất
-      const latestData = await orderService.getActiveOrders();
-
-      if (Array.isArray(latestData)) {
-        // Map dữ liệu từ Backend -> Frontend Order
-        const mappedOrders: Order[] = latestData.map((d: any) => ({
-          id: d.maDonHang,
-          // Lấy mã bàn đầu tiên trong danh sách bàn của đơn
-          tableId: d.listMaBan && d.listMaBan.length > 0 ? d.listMaBan[0] : "",
-
-          // Lưu ý: API GetActiveBookings thường chỉ trả về tóm tắt.
-          // Nếu muốn hiển thị chi tiết món ngay lập tức, bạn cần logic gọi API chi tiết (GetMyBookingDetail)
-          // hoặc chấp nhận items rỗng cho đến khi bấm vào xem chi tiết.
-          items: [],
-
-          subtotal: 0, // Có thể tính toán nếu Backend trả về tổng tiền
-          total: 0,
-          discount: 0,
-          createdAt: new Date(d.thoiGianNhanBan).getTime(),
-          status: "active",
-        }));
-
-        // Cập nhật State Orders
-        setOrders(mappedOrders);
-
-        // Cập nhật State Tables (Đánh dấu bàn có khách)
-        setTables((prevTables) =>
-          prevTables.map((t) => {
-            // Tìm xem bàn này có nằm trong danh sách đơn hàng mới tải về không
-            const orderOfTable = mappedOrders.find((o) => o.tableId === t.id);
-
-            if (orderOfTable) {
-              return {
-                ...t,
-                status: TableStatus.Occupied, // Đánh dấu đang phục vụ
-                orderId: orderOfTable.id, // Gắn ID đơn hàng vào bàn
-              };
-            }
-            // Nếu không tìm thấy đơn cho bàn này -> Giữ nguyên hoặc set về Available (tùy logic)
-            return t;
-          })
-        );
-      }
-    } catch (error) {
-      console.error("Lỗi khi gọi API thêm món:", error);
-      // notify("Thêm món thất bại!", "error");
-    }
-  };
-
-  // Load tables from API on mount (best-effort)
+  // 2. Load Tables
   useEffect(() => {
     (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
       try {
-        const data = await Api.getTables();
+        const data = await tableService.getTables();
         if (Array.isArray(data) && data.length > 0) {
           const mapped: Table[] = data.map((b: any) => ({
             id: b.maBan || b.MaBan,
             name: b.tenBan || b.TenBan,
             capacity: Number(b.sucChua || b.SucChua) || 0,
             status: mapTableStatus(b.tenTrangThai || b.TenTrangThai),
-
-            // 👇 THÊM DÒNG NÀY VÀO
             maTang: b.maTang || b.MaTang || "",
-
             orderId: null,
           }));
           setTables(mapped);
@@ -455,11 +275,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       } catch {}
     })();
   }, []);
-  // Load categories from API on mount (best-effort)
+
+  // 3. Load Categories
   useEffect(() => {
     (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
       try {
-        const data = await Api.getCategories();
+        const data = await dishService.getCategories();
         if (Array.isArray(data)) {
           const mapped: Category[] = data
             .map((cat: any) => ({
@@ -477,11 +301,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     })();
   }, []);
 
-  // Load menu items from API on mount (best-effort)
+  // 4. Load Menu Items
   useEffect(() => {
     (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
       try {
-        const data = await Api.getDishes();
+        const data = await dishService.getDishes();
         if (Array.isArray(data) && data.length > 0) {
           const mapped: MenuItem[] = data.map((m: any) => {
             const imgs: string[] = (
@@ -497,16 +324,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
               m.MaDanhMucNavigation?.TenDanhMuc ||
               "";
 
-            // --- ĐOẠN ĐÃ SỬA Ở ĐÂY ---
             const sizes = (m.phienBanMonAns || m.PhienBanMonAns || []).map(
               (p: any) => ({
-                id: p.maPhienBan || p.MaPhienBan, // <--- ĐÃ THÊM DÒNG NÀY
+                id: p.maPhienBan || p.MaPhienBan,
                 name: p.tenPhienBan || p.TenPhienBan,
                 price: Number(p.gia || p.Gia) || 0,
                 recipe: { id: "", name: "", ingredients: [] },
               })
             );
-            // -------------------------
 
             return {
               id: m.maMonAn || m.MaMonAn,
@@ -527,29 +352,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     })();
   }, []);
 
-  // Load ingredients from API on mount (best-effort)
-  // Clear any old localStorage data first
+  // 5. Load Ingredients
   useEffect(() => {
-    // Clear old hardcoded data from localStorage
-    localStorage.removeItem("restaurant_ingredients");
-
     (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
       try {
         const data = await inventoryApi.getIngredients();
         if (Array.isArray(data)) {
           const mapped: Ingredient[] = data
             .map((ing: any) => {
-              // Lấy đơn vị tính trực tiếp từ API, không map với enum
               const unitStr = ing.donViTinh || ing.DonViTinh;
-              if (!unitStr) {
-                // Nếu không có đơn vị tính từ API, bỏ qua nguyên liệu này
-                return null;
-              }
+              if (!unitStr) return null;
 
               const ingredient: Ingredient = {
                 id: ing.maNguyenLieu || ing.MaNguyenLieu || "",
                 name: ing.tenNguyenLieu || ing.TenNguyenLieu || "",
-                unit: unitStr.toString().trim(), // Lấy trực tiếp từ API
+                unit: unitStr.toString().trim(),
                 stock: Number(
                   ing.stock ||
                     ing.Stock ||
@@ -572,38 +392,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
         }
       } catch (error) {
         console.warn("Không thể tải nguyên liệu từ API", error);
-        // Keep empty array if API fails, no fallback hardcoded data
         setIngredients([]);
       }
     })();
   }, []);
 
-  React.useEffect(() => {
-    saveToStorage("restaurant_kdsQueue", kdsQueue);
-  }, [kdsQueue]);
-
-  React.useEffect(() => {
-    saveToStorage("restaurant_inventoryTransactions", inventoryTransactions);
-  }, [inventoryTransactions]);
-
-  const normalizeRoleFromApi = (roleName?: string): Role => {
-    if (!roleName) return "Waiter";
-    const value = roleName.toLowerCase();
-    if (value.includes("admin")) return "Admin";
-    if (value.includes("quản") || value.includes("manager")) return "Manager";
-    if (value.includes("thu")) return "Cashier";
-    if (value.includes("bếp") || value.includes("kitchen")) return "Kitchen";
-    return "Waiter";
-  };
-
-  const isActiveFromStatus = (status?: string) => {
-    if (!status) return true;
-    return !status.toLowerCase().includes("nghỉ");
-  };
-
-  // Load suppliers from API
+  // 6. Load Suppliers
   useEffect(() => {
     (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
       try {
         const data = await suppliersApi.getSuppliers();
         if (Array.isArray(data)) {
@@ -629,11 +428,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     })();
   }, []);
 
-  // Load staff from API
+  // 7. Load Staff
   useEffect(() => {
     (async () => {
+      const token = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+      if (!token) return;
+
       try {
-        const data = await employeesApi.getEmployees();
+        const data = await employeeService.getEmployees();
         if (Array.isArray(data)) {
           const mapped: Staff[] = data
             .map((emp: any) => {
@@ -657,6 +459,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       }
     })();
   }, []);
+
+  // --- HELPER FUNCTIONS (Logic Frontend) ---
 
   const calculateTotals = (items: OrderItem[], discount: number = 0) => {
     const subtotal = items.reduce((acc, item) => {
@@ -740,6 +544,63 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     return orders.find((o) => o.id === table.orderId && !o.closedAt);
   };
 
+  const addItemsToTableOrder = async (tableId: string, items: OrderItem[]) => {
+    const currentOrder = getOrderForTable(tableId);
+    if (!currentOrder) {
+      console.error(
+        `Bàn ${tableId} chưa có đơn hàng. Vui lòng tạo đơn/Check-in trước.`
+      );
+      return;
+    }
+
+    const payload = {
+      maDonHang: currentOrder.id,
+      maBan: tableId,
+      items: items.map((i) => ({
+        maMonAn: i.menuItem.id,
+        maPhienBan: i.menuItem.sizes.find((s) => s.name === i.size)?.id || "",
+        soLuong: i.quantity,
+        ghiChu: i.notes || "",
+      })),
+    };
+
+    try {
+      await orderService.addItemsToTable(payload);
+      console.log("Đã thêm món thành công vào đơn:", currentOrder.id);
+
+      // Gọi lại API để cập nhật UI
+      const latestData = await orderService.getActiveOrders();
+      if (Array.isArray(latestData)) {
+        const mappedOrders: Order[] = latestData.map((d: any) => ({
+          id: d.maDonHang,
+          tableId: d.listMaBan && d.listMaBan.length > 0 ? d.listMaBan[0] : "",
+          items: [], 
+          subtotal: d.tongTien || 0,
+          total: d.tongTien || 0,
+          discount: 0,
+          createdAt: new Date(d.thoiGianNhanBan).getTime(),
+          status: "active",
+        }));
+        setOrders(mappedOrders);
+        setTables((prevTables) =>
+          prevTables.map((t) => {
+            const orderOfTable = mappedOrders.find((o) => o.tableId === t.id);
+            if (orderOfTable) {
+              return {
+                ...t,
+                status: TableStatus.Occupied,
+                orderId: orderOfTable.id,
+              };
+            }
+            return t;
+          })
+        );
+      }
+    } catch (error) {
+      console.error("Lỗi khi gọi API thêm món:", error);
+    }
+  };
+
   const sendOrderToKDS = (orderId: string) => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) return;
@@ -798,11 +659,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       status?: Reservation["status"];
     }
   ) => {
-    // Map dữ liệu sang DTO backend
     if (!data.time || !data.partySize) return;
     const thoiGian = new Date(data.time).toISOString();
 
-    // Xử lý danh sách bàn: ưu tiên tableIds (array), fallback tableId (string)
     const danhSachMaBan: string[] = [];
     if (data.tableIds && data.tableIds.length > 0) {
       danhSachMaBan.push(...data.tableIds);
@@ -824,11 +683,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       GhiChu: data.notes || undefined,
       MaNhanVien: undefined,
       TienDatCoc: undefined,
-      MaKhachHang: undefined, // Có thể lấy từ user context nếu có
-      Email: undefined, // Có thể lấy từ user context nếu có
+      MaKhachHang: undefined,
+      Email: undefined,
     };
     const res = await reservationsApi.createReservation(payload);
-    // Cập nhật UI tạm thời (optimistic)
     const newId = generateDailyId(reservations.map((r) => r.id));
     const newRes: Reservation = {
       id: newId,
@@ -863,17 +721,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
 
   const cancelReservation = async (id: string) => {
     const res = reservations.find((r) => r.id === id);
-    // cập nhật trạng thái backend nếu có mapping
     const maDon = reservationToOrderMap[id];
     if (maDon) {
       try {
-        await Api.updateOrderStatus(maDon, "DA_HUY");
+        await orderService.updateOrderStatus(maDon, "DA_HUY");
       } catch {}
     }
     setReservations((prev) =>
       prev.map((r) => (r.id === id ? { ...r, status: "Cancelled" } : r))
     );
-    // 支持多张桌子：取消预订时将桌子状态改回 Available
     if (res) {
       if (res.tableIds && res.tableIds.length > 0) {
         setTables((prev) =>
@@ -905,7 +761,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     setReservations((prev) =>
       prev.map((r) => (r.id === id ? { ...r, status: "Seated" } : r))
     );
-    // 支持多张桌子
     if (res.tableIds && res.tableIds.length > 0) {
       setTables((prev) =>
         prev.map((t) =>
@@ -929,7 +784,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     const maDon = reservationToOrderMap[id];
     if (maDon) {
       try {
-        await Api.updateOrderStatus(maDon, "NO_SHOW");
+        await orderService.updateOrderStatus(maDon, "NO_SHOW");
       } catch {}
     }
     setReservations((prev) =>
@@ -953,8 +808,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
   const getAvailableTables = async (dateTime: number, partySize: number) => {
     try {
       const iso = new Date(dateTime).toISOString();
-      const data = await tablesApi.getTablesByTime(iso, partySize);
-      console.log("API getTablesByTime response:", data);
+      const data = await tableService.getTablesByTime(iso, partySize);
       const mapped = (data || []).map((x: any) => {
         const result = {
           id: x.maBan || x.MaBan,
@@ -964,15 +818,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
           maTang: x.maTang || x.MaTang || null,
           tenTang: x.tenTang || x.TenTang || null,
         };
-        if (!result.maTang) {
-          console.warn(
-            `Table ${result.name} (${result.id}) has no maTang. Raw data:`,
-            x
-          );
-        }
         return result;
       });
-      console.log("Mapped tables with tầng:", mapped.slice(0, 5));
       return mapped;
     } catch (error) {
       console.error("Error in getAvailableTables:", error);
@@ -980,7 +827,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
-  // Inventory helpers
   const lowStockIds = () =>
     ingredients
       .filter(
@@ -1028,7 +874,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     setIngredients((prev) =>
       prev.map((ing) => {
         const line = items.find((it) => it.ingredientId === ing.id);
-        return line ? { ...ing, stock: ing.stock + line.quantity } : ing; // quantity may be negative
+        return line ? { ...ing, stock: ing.stock + line.quantity } : ing;
       })
     );
   };
@@ -1038,7 +884,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     items.forEach((oi) => {
       const size = oi.menuItem.sizes.find((s) => s.name === oi.size);
       if (!size || !size.recipe) return;
-      size.recipe.ingredients.forEach((ri) => {
+      size.recipe.ingredients.forEach((ri: any) => {
         const qty =
           (consumption[ri.ingredient.id] || 0) + ri.quantity * oi.quantity;
         consumption[ri.ingredient.id] = qty;
@@ -1066,7 +912,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     );
   };
 
-  // Suppliers CRUD
   const addSupplier = (s: Omit<Supplier, "id">) => {
     const newId = generateDailyId(suppliers.map((sp) => sp.id));
     const sup: Supplier = { id: newId, ...s } as Supplier;
@@ -1079,7 +924,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     setSuppliers((prev) => prev.filter((x) => x.id !== id));
   };
 
-  // Tables CRUD
   const addTable = (t: Omit<Table, "id" | "status" | "orderId">) => {
     const newId = generateDailyId(tables.map((tb) => tb.id));
     const table: Table = {
@@ -1088,7 +932,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       capacity: t.capacity,
       status: TableStatus.Empty,
       orderId: null,
-      maTang: t.maTang, // <--- THÊM CÁI NÀY VÀO
+      maTang: t.maTang,
     };
     setTables((prev) => [...prev, table]);
   };
@@ -1099,7 +943,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     setTables((prev) => prev.filter((x) => x.id !== id));
   };
 
-  // Staff CRUD
   const addStaff = (s: Omit<Staff, "id" | "active"> & { active?: boolean }) => {
     const newId = generateDailyId(staff.map((u) => u.id));
     const user: Staff = { id: newId, active: s.active ?? true, ...s } as Staff;
@@ -1170,6 +1013,3 @@ export const useAppContext = () => {
   }
   return context;
 };
-
-
-

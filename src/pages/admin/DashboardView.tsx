@@ -252,26 +252,6 @@ const DashboardView: React.FC = () => {
   };
 
   // -----------------------------------------------------------
-  // 4. THÊM FETCH ACTIVE ORDERS RIÊNG CHO DASHBOARD (ĐỂ CHẮC CHẮN)
-  // -----------------------------------------------------------
-  // useEffect(() => {
-  //     const fetchActiveOrders = async () => {
-  //         try {
-  //             const activeOrders = await orderService.getActiveOrders();
-
-  //             // Bây giờ đã có setOrders, dòng này sẽ hết lỗi đỏ
-  //             if (setOrders) {
-  //                 setOrders(activeOrders);
-  //                 // console.log("Đã đồng bộ đơn hàng vào Context:", activeOrders);
-  //             }
-  //         } catch (error) {
-  //             console.error("Lỗi tải danh sách đơn hàng:", error);
-  //         }
-  //     };
-  //     fetchActiveOrders();
-  // }, [setOrders]); // Thêm dependency cho chuẩn React
-
-  // -----------------------------------------------------------
   // 5. GIAO DIỆN (RENDER)
   // -----------------------------------------------------------
   return (
@@ -436,7 +416,3 @@ const DashboardView: React.FC = () => {
 };
 
 export default DashboardView;
-
-
-
-

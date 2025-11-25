@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useReactToPrint } from 'react-to-print'; // Nhớ npm install react-to-print
-// import InventoryService from '../services/InventoryService';
-// import { MauInPhieuNhap } from './MauInPhieuNhap'; // Import mẫu in vừa tạo
+import { useReactToPrint } from 'react-to-print';
 
-// --- IMPORT TYPES ---
+// --- IMPORT TYPES & SERVICES ---
 import { 
     NhaCungCap, 
     NguyenLieuNCC, 
@@ -13,8 +11,11 @@ import {
 } from '@/types/InventoryTypes';
 import InventoryService from '@/services/inventoryService';
 import { MauInPhieuNhap } from '@/components/printing/MauInPhieuNhap';
+import { useAuth } from '@/contexts';
 
 const InventoryScreen = () => {
+
+    const { user } = useAuth();
     // --- 1. STATE QUẢN LÝ ---
     const [activeTab, setActiveTab] = useState<1 | 2>(1);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -22,7 +23,8 @@ const InventoryScreen = () => {
     // Dữ liệu
     const [suppliers, setSuppliers] = useState<NhaCungCap[]>([]);
     const [ingredients, setIngredients] = useState<NguyenLieuNCC[]>([]);
-    const [historyList, setHistoryList] = useState<PhieuNhapHistory[]>([]);
+    // Khởi tạo mảng rỗng để tránh lỗi map
+    const [historyList, setHistoryList] = useState<PhieuNhapHistory[]>([]); 
 
     // Form nhập liệu
     const [selectedSupplier, setSelectedSupplier] = useState<NhaCungCap | null>(null);
@@ -33,12 +35,12 @@ const InventoryScreen = () => {
 
     // Bộ lọc & In ấn
     const [filterStatus, setFilterStatus] = useState<string | null>(null);
-    const [printData, setPrintData] = useState<any>(null); // Dữ liệu để in
+    const [printData, setPrintData] = useState<any>(null); 
 
     // Ref cho chức năng in
     const componentRef = useRef<HTMLDivElement>(null);
 
-    // --- 2. INIT DATA ---
+    // --- 2. INIT DATA (Đã bỏ check token thủ công) ---
     useEffect(() => {
         fetchSuppliers();
         fetchHistory();
@@ -48,32 +50,35 @@ const InventoryScreen = () => {
         fetchHistory();
     }, [filterStatus]);
 
-    // --- 3. HÀM GỌI LỆNH IN (useReactToPrint) ---
+    // --- 3. HÀM GỌI LỆNH IN ---
     const handlePrintTrigger = useReactToPrint({
         contentRef: componentRef, 
         documentTitle: `PhieuNhap_${printData?.maNhapHang || 'Temp'}`,
     });
 
-    // --- 4. GỌI SERVICE ---
+    // --- 4. GỌI SERVICE (ĐÃ SỬA: BỎ .data) ---
     const fetchSuppliers = async () => {
         try {
-            const res = await InventoryService.getSuppliers();
-            setSuppliers(res.data);
+            // Sửa: Kết quả trả về là data luôn, không cần .data
+            const data = await InventoryService.getSuppliers();
+            setSuppliers(Array.isArray(data) ? data : []);
         } catch (err) { console.error(err); }
     };
 
     const fetchIngredientsBySupplier = async (maNCC: string) => {
         try {
-            const res = await InventoryService.getIngredientsBySupplier(maNCC);
-            setIngredients(res.data);
+            // Sửa: Bỏ .data
+            const data = await InventoryService.getIngredientsBySupplier(maNCC);
+            setIngredients(Array.isArray(data) ? data : []);
         } catch (err) { console.error(err); setIngredients([]); }
     };
 
     const fetchHistory = async () => {
         try {
-            const res = await InventoryService.getHistory(filterStatus);
-            setHistoryList(res.data);
-        } catch (err) { console.error(err); }
+            // Sửa: Bỏ .data và kiểm tra mảng
+            const data = await InventoryService.getHistory(filterStatus);
+            setHistoryList(Array.isArray(data) ? data : []);
+        } catch (err) { console.error(err); setHistoryList([]); }
     };
 
     // --- 5. XỬ LÝ LOGIC FORM ---
@@ -132,11 +137,10 @@ const InventoryScreen = () => {
 
     // --- 6. XỬ LÝ EDIT & IN ẤN ---
     
-    // Sửa phiếu
     const handleEditClick = async (maPhieu: string) => {
         try {
-            const res = await InventoryService.getReceiptDetail(maPhieu);
-            const data = res.data;
+            // Sửa: Bỏ .data
+            const data: any = await InventoryService.getReceiptDetail(maPhieu);
             setEditingId(maPhieu);
 
             const ncc = suppliers.find(s => s.maNhaCungCap === data.maNhaCungCap) || null;
@@ -155,32 +159,28 @@ const InventoryScreen = () => {
         } catch (err) { alert("Lỗi tải phiếu"); }
     };
 
-    
     const handlePrintClick = async (maPhieu: string) => {
         try {
-            // 1. Lấy chi tiết phiếu
-            const res = await InventoryService.getReceiptDetail(maPhieu);
-            const data = res.data;
+            // Sửa: Bỏ .data
+            const data: any = await InventoryService.getReceiptDetail(maPhieu);
 
-            // 2. Lấy thêm thông tin phụ để in cho đẹp
             const ncc = suppliers.find(s => s.maNhaCungCap === data.maNhaCungCap);
             
-            // 3. Tạo object dữ liệu đầy đủ cho mẫu in
             const fullData = {
                 ...data,
-                maNhapHang: maPhieu, // Đảm bảo có mã
+                maNhapHang: maPhieu, 
                 ngayLap: data.ngayLapPhieu || new Date().toISOString(),
                 tenNhaCungCap: ncc?.tenNhaCungCap || "---",
                 diaChiNCC: ncc?.diaChi,
                 sdtNCC: ncc?.soDienThoai,
-                tenNhanVien: "NV001 - Admin", // Lấy từ Auth context nếu có
+                tenNhanVien: (user && user.type === 'admin') 
+        ? `${user.employeeId} - ${user.name}` 
+        : (user?.name || "Admin"),
                 tenTrangThai: data.trangThai === 'DA_HOAN_TAT' ? 'Đã nhập kho' : 'Phiếu tạm'
             };
 
-            // 4. Set dữ liệu vào State
             setPrintData(fullData);
 
-            // 5. Đợi 1 xíu cho State cập nhật rồi gọi lệnh in
             setTimeout(() => {
                 handlePrintTrigger();
             }, 200);
@@ -200,12 +200,25 @@ const InventoryScreen = () => {
     const handleSubmit = async (trangThaiStr: string) => {
         if (!selectedSupplier || cart.length === 0) return alert("Thiếu thông tin!");
 
+        const maNhanVienCurrent = (user && user.type === 'admin') ? user.employeeId : '';
+
+        if (!maNhanVienCurrent) {
+            return alert("Lỗi: Không xác định được nhân viên đang đăng nhập! Vui lòng đăng nhập lại.");
+        }
+
         const payload: NhapKhoPayload = {
-            maNhanVien: "NV001",
-            maNhaCungCap: selectedSupplier.maNhaCungCap,
-            maTrangThai: trangThaiStr,
-            chiTiet: cart.map(c => ({ maCungUng: c.maCungUng, soLuong: c.soLuong, giaNhap: c.giaNhap }))
-        };
+        // Lưu ý: Các trường cấp 1 thường tự map được, nhưng chi tiết bên trong mảng thì nên cẩn thận
+        maNhanVien: maNhanVienCurrent,
+        maNhaCungCap: selectedSupplier.maNhaCungCap,
+        maTrangThai: trangThaiStr,
+        
+        // SỬA CHỖ NÀY: Viết hoa chữ cái đầu cho khớp DTO C#
+        chiTiet: cart.map(c => ({ 
+            MaCungUng: c.maCungUng,  // maCungUng -> MaCungUng
+            SoLuong: c.soLuong,      // soLuong -> SoLuong
+            GiaNhap: c.giaNhap       // giaNhap -> GiaNhap
+        }))
+    };
 
         try {
             if (editingId) {
@@ -225,7 +238,7 @@ const InventoryScreen = () => {
     return (
         <div className="p-4 bg-gray-50 min-h-screen font-sans">
             
-            {/* --- COMPONENT ẨN ĐỂ IN (QUAN TRỌNG) --- */}
+            {/* COMPONENT ẨN ĐỂ IN */}
             <div style={{ display: "none" }}>
                 <MauInPhieuNhap ref={componentRef} data={printData} />
             </div>
@@ -316,7 +329,8 @@ const InventoryScreen = () => {
                                 <tr><th className="p-3">Mã</th><th className="p-3">Ngày Lập</th><th className="p-3">NCC</th><th className="p-3 text-right">Tổng Tiền</th><th className="p-3 text-center">Trạng Thái</th><th className="p-3 text-center">Thao Tác</th></tr>
                             </thead>
                             <tbody>
-                                {historyList.map(item => (
+                                {/* Sửa: Thêm ? để tránh lỗi nếu historyList bị undefined */}
+                                {historyList?.length > 0 ? historyList.map(item => (
                                     <tr key={item.maNhapHang} className="border-b hover:bg-gray-50">
                                         <td className="p-3 font-bold text-blue-600">{item.maNhapHang}</td>
                                         <td className="p-3">{new Date(item.ngayLap).toLocaleString('vi-VN')}</td>
@@ -328,11 +342,9 @@ const InventoryScreen = () => {
                                             </span>
                                         </td>
                                         <td className="p-3 text-center flex justify-center gap-2">
-                                            {/* Nút Sửa */}
                                             {item.maTrangThai !== 'DA_HOAN_TAT' && (
                                                 <button onClick={() => handleEditClick(item.maNhapHang)} className="bg-yellow-500 text-white px-2 py-1 rounded text-xs hover:bg-yellow-600">✏️ Sửa</button>
                                             )}
-                                            {/* Nút IN (Luôn hiện) */}
                                             <button 
                                                 onClick={() => handlePrintClick(item.maNhapHang)} 
                                                 className="bg-gray-700 text-white px-2 py-1 rounded text-xs hover:bg-gray-800"
@@ -341,7 +353,9 @@ const InventoryScreen = () => {
                                             </button>
                                         </td>
                                     </tr>
-                                ))}
+                                )) : (
+                                    <tr><td colSpan={6} className="p-8 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                                )}
                             </tbody>
                         </table>
                     </div>

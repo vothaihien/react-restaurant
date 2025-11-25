@@ -1,51 +1,138 @@
-import axiosClient from '@/api/axiosClient';
+import axiosClient from "@/api/axiosClient";
 
-// Nếu có interface MonAn thì thay 'any' bằng MonAn nhé
+// =============================================================================
+// 1. ĐỊNH NGHĨA INTERFACE (Map theo MonAnDetailDTO.cs)
+// =============================================================================
+
+// Map với: CongThucNauAnDetailDTO
+export interface CongThucNauAn {
+  maCongThuc: string;
+  maNguyenLieu: string;
+  tenNguyenLieu: string;
+  donViTinh?: string;
+  soLuongCanDung: number;
+}
+
+// Map với: PhienBanMonAnDetailDTO
+export interface PhienBanMonAn {
+  maPhienBan: string;
+  tenPhienBan: string;
+  gia: number;
+  maTrangThai: string;
+  tenTrangThai: string;
+  isShow: boolean;
+  thuTu?: number;
+  congThucNauAns: CongThucNauAn[];
+}
+
+// Map với: HinhAnhDTO
+export interface HinhAnh {
+  id: number;
+  urlHinhAnh: string; // Backend viết hoa URLHinhAnh, nhưng JSON thường trả về camelCase (urlHinhAnh) tùy cấu hình
+}
+
+// Map với: MonAnDetailDTO (Dùng cho Get/Detail)
+export interface MonAn {
+  maMonAn: string;
+  tenMonAn: string;
+  maDanhMuc?: string;
+  tenDanhMuc?: string;
+  isShow: boolean;
+  hinhAnhMonAns: HinhAnh[];
+  phienBanMonAns: PhienBanMonAn[];
+}
+
+// Map với: CreateMonAnDTO (Dựa trên logic xử lý trong Controller của bạn)
+export interface CreateMonAnRequest {
+  tenMonAn: string;
+  maDanhMuc: string;
+  isShow: boolean;
+  hinhAnhUrls: string[]; // List các URL ảnh đã upload
+  phienBanMonAns: {
+    maPhienBan?: string; // Nếu tạo mới thì null/empty
+    tenPhienBan: string;
+    maTrangThai: string;
+    thuTu: number;
+    gia: number; // Giá này sẽ lưu vào CongThucNauAn
+    congThucNauAns: {
+      maNguyenLieu: string;
+      soLuongCanDung: number;
+    }[];
+  }[];
+}
+
+// =============================================================================
+// 2. SERVICE IMPLEMENTATION
+// =============================================================================
+
 export const dishService = {
-    // 1. Lấy danh sách món ăn (có lọc)
-    getDishes: async (params?: { maDanhMuc?: string; searchString?: string }) => {
-        // Axios tự động xử lý query string từ object params, không cần URLSearchParams nữa
-        const response = await axiosClient.get<any[]>('/api/MonAnsAPI', { 
-            params: params 
-        });
-        return response.data;
-    },
+  // 1. Lấy danh sách món ăn
+  // Controller: [HttpGet] public async Task<ActionResult<IEnumerable<MonAnDetailDTO>>> GetMonAns(...)
+  getDishes: async (params?: { maDanhMuc?: string; searchString?: string }) => {
+    const rawResponse = await axiosClient.get("/MonAnsAPI", {
+      params: params,
+    });
 
-    // 2. Lấy chi tiết món ăn
-    getDish: async (id: string) => {
-        const response = await axiosClient.get<any>(`/api/MonAnsAPI/${encodeURIComponent(id)}`);
-        return response.data;
-    },
+    // Ép kiểu về mảng MonAn[]
+    return rawResponse as unknown as MonAn[];
+  },
 
-    // 3. Tạo món ăn mới
-    createDish: async (data: any) => { // Thay 'any' bằng interface nếu có
-        const response = await axiosClient.post<any>('/api/MonAnsAPI', data);
-        return response.data;
-    },
+  // 2. Lấy chi tiết món ăn
+  // Controller: [HttpGet("{id}")] public async Task<ActionResult<MonAnDetailDTO>> GetMonAn(string id)
+  getDish: async (id: string) => {
+    const rawResponse = await axiosClient.get(
+      `/MonAnsAPI/${encodeURIComponent(id)}`
+    );
 
-    // 4. Upload ảnh (Thay thế hàm uploadImageFile cũ)
-    uploadImage: async (file: File, maMonAn?: string) => {
-        const formData = new FormData();
-        formData.append('file', file); // Lưu ý: Check lại bên Backend API nhận key là 'file' hay 'image' nhé
-        
-        if (maMonAn) {
-            formData.append('maMonAn', maMonAn);
-        }
+    // Ép kiểu về object MonAn
+    return rawResponse as unknown as MonAn;
+  },
 
-        // LƯU Ý: Ông nhớ thay đường dẫn '/api/Upload/Image' này bằng đúng đường dẫn API upload của ông nha
-        const response = await axiosClient.post('/api/Upload/Image', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
-        return response.data;
-    },
+  // 3. Tạo món ăn mới
+  // Controller: [HttpPost] public async Task<ActionResult<MonAn>> CreateMonAn([FromBody] CreateMonAnDTO dto)
+  createDish: async (data: CreateMonAnRequest) => {
+    const rawResponse = await axiosClient.post("/MonAnsAPI", data);
 
-    // 5. Lấy danh mục
-    getCategories: async () => {
-        const response = await axiosClient.get<any[]>('/api/DanhMucAPI');
-        return response.data;
-    },
+    // Controller trả về CreatedAtAction (object MonAnDetailDTO)
+    return rawResponse as unknown as MonAn;
+  },
+
+  // 4. Upload ảnh
+  // Controller: [HttpPost("upload-image")] public async Task<IActionResult> UploadImage(IFormFile file, [FromQuery] string? maMonAn = null)
+  uploadImage: async (file: File, maMonAn?: string) => {
+    const formData = new FormData();
+    // Controller nhận param tên là "file" (IFormFile file)
+    formData.append("file", file);
+
+    // Controller nhận maMonAn qua Query String ([FromQuery]), KHÔNG phải Body
+    const config = {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+      params: maMonAn ? { maMonAn: maMonAn } : {},
+    };
+
+    const rawResponse = await axiosClient.post(
+      "/MonAnsAPI/upload-image",
+      formData,
+      config
+    );
+
+    // Backend trả về: { message: string, url: string }
+    return rawResponse as unknown as { message: string; url: string };
+  },
+
+  // 5. Lấy danh mục (Giả định bạn có API này để fill dropdown)
+  getCategories: async () => {
+    // Bạn cần đảm bảo endpoint này đúng
+    const rawResponse = await axiosClient.get("/DanhMucAPI");
+
+    // Ép kiểu mảng danh mục
+    return rawResponse as unknown as {
+      maDanhMuc: string;
+      tenDanhMuc: string;
+    }[];
+  },
 };
 
 export default dishService;

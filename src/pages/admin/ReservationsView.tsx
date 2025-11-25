@@ -34,6 +34,7 @@ import { bookingService } from "@/services/bookingService";
 import { orderService } from "@/services/orderService";
 import { donHangService, DonHangActive } from "@/services/donHangService";
 import { khachHangService } from "@/services/khachHangService"; // <--- SERVICE MỚI
+import { useAuth } from "@/contexts";
 
 // --- ĐỊNH NGHĨA TYPE ---
 interface BanAn {
@@ -49,6 +50,8 @@ interface BanAn {
 const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
   onBookingSuccess,
 }) => {
+
+  const { user } = useAuth();
   // State Form Data
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -143,6 +146,13 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
       return;
     }
 
+    const maNhanVienCurrent = (user && user.type === 'admin') ? user.employeeId : '';
+
+    if (!maNhanVienCurrent) {
+        alert("Lỗi: Không xác định được nhân viên thực hiện! Vui lòng đăng nhập lại.");
+        return;
+    }
+
     setSubmitting(true);
     try {
       const data = {
@@ -153,7 +163,7 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
         ThoiGianDatHang: bookingTime!.toISOString(),
         SoLuongNguoi: partySize,
         // TODO: Lấy MaNhanVien từ Context đăng nhập. Tạm thời hardcode NV001
-        MaNhanVien: "NV001", 
+        MaNhanVien: maNhanVienCurrent, 
       };
       
       // GỌI HÀM DÀNH CHO NHÂN VIÊN (staff/create)
