@@ -725,7 +725,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       GhiChu: data.notes || undefined,
       MaNhanVien: undefined,
       TienDatCoc: undefined,
-      MaKhachHang: undefined,
+      MaKhachHang: data.customerId || undefined,
       Email: data.email || undefined,
     };
     const res = await reservationsApi.createReservation(payload);

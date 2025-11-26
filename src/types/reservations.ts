@@ -5,6 +5,7 @@ export interface Reservation {
     customerName: string;
     phone?: string;
     email?: string;
+    customerId?: string;
     partySize: number;
     time: number; // timestamp
     status: ReservationStatus;

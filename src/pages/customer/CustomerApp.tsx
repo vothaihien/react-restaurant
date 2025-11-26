@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import CustomerPortalView, {
   CustomerTab,
+  AuthBox,
 } from "@/pages/customer/CustomerPortalView";
 
 const SiteHeader: React.FC<{
-  onBook?: () => void;
   onNavigate?: (tab: CustomerTab) => void;
-}> = ({ onBook, onNavigate }) => (
+  onQuickRegister?: () => void;
+}> = ({ onNavigate, onQuickRegister }) => (
   <header className="sticky top-0 z-50 border-b border-primary/20 bg-white/80 backdrop-blur-sm">
     <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-10 lg:px-20 py-3">
       <div className="flex items-center gap-3 text-slate-900">
@@ -42,6 +43,12 @@ const SiteHeader: React.FC<{
             Thực Đơn
           </button>
           <button
+            onClick={() => onNavigate?.("booking")}
+            className="hover:text-primary transition-colors"
+          >
+            Đặt Bàn
+          </button>
+          <button
             onClick={() => onNavigate?.("loyalty")}
             className="hover:text-primary transition-colors"
           >
@@ -55,10 +62,10 @@ const SiteHeader: React.FC<{
           </button>
         </nav>
         <button
-          onClick={onBook}
+          onClick={onQuickRegister}
           className="ml-4 inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
         >
-          Đặt Bàn
+          Đăng ký nhanh
         </button>
       </div>
     </div>
@@ -141,14 +148,44 @@ const SiteFooter: React.FC = () => (
 
 const CustomerApp: React.FC = () => {
   const [tab, setTab] = useState<CustomerTab>("home");
+  const [showQuickRegister, setShowQuickRegister] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
-      <SiteHeader onBook={() => setTab("booking")} onNavigate={setTab} />
+      <SiteHeader
+        onNavigate={setTab}
+        onQuickRegister={() => setShowQuickRegister(true)}
+      />
       <main className="flex-1 max-w-6xl lg:max-w-7xl mx-auto w-full px-4 sm:px-6 md:px-8 py-6">
         <CustomerPortalView tab={tab} onTabChange={setTab} />
       </main>
       <SiteFooter />
+
+      {showQuickRegister && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div
+            className="absolute inset-0"
+            onClick={() => setShowQuickRegister(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Đăng nhập / Đăng ký nhanh
+              </h2>
+              <button
+                className="text-gray-400 hover:text-gray-600"
+                onClick={() => setShowQuickRegister(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Sử dụng Email để nhận OTP
+            </p>
+            <AuthBox />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
