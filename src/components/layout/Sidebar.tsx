@@ -31,6 +31,7 @@ const Sidebar: React.FC<SidebarProps> = ({currentPath}) => {
         { path: '/', label: 'Sơ đồ bàn', icon: GridIcon },
         { path: '/menu', label: 'Thực đơn', icon: MenuIcon },
         { path: '/reservations', label: 'Đặt bàn', icon: GridIcon },
+        {path: '/orders-management', label: 'Quản lý đơn hàng', icon: Package },
         ...(isManager ? [
             { path: '/orders-management', label: 'Quản lý đơn hàng', icon: Package }, // Thêm mục Quản lý đơn hàng nếu là quản lý, xem trạng thái đơn hàng
         ] : []),
