@@ -1,4 +1,5 @@
 import React from "react";
+import OrderManagement from 'src/pages/admin/OrdersManagement';
 import { Routes, Route } from "react-router-dom";
 import {
   DashboardView,
@@ -22,6 +23,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/reservations" element={<ReservationsView />} />
       <Route path="/inventory" element={<InventoryScreen />} />
       <Route path="/masterdata" element={<MasterDataView />} />
+      <Route path="/orders-management" element={<OrderManagement />} />
       <Route path="/kds" element={<KDSView />} />
       <Route
         path="/customer"
