@@ -52,6 +52,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   // Booking form
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [party, setParty] = useState(2);
   const [dateTime, setDateTime] = useState<Date | undefined>(undefined);
   const [notes, setNotes] = useState("");
@@ -180,11 +181,11 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
 
   const submitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !dateTime) {
+    if (!name || !phone || !email || !dateTime) {
       notify({
         tone: "warning",
         title: "Thiếu thông tin đặt bàn",
-        description: "Vui lòng nhập họ tên và chọn ngày giờ mong muốn.",
+        description: "Vui lòng nhập Họ tên, Điện thoại, Email và chọn ngày giờ mong muốn.",
       });
       return;
     }
@@ -202,6 +203,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       const reservationData: any = {
         customerName: name,
         phone,
+        email,
         partySize: party,
         time: ts,
         source: "App",
@@ -214,6 +216,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       // Reset form
       setName("");
       setPhone("");
+      setEmail("");
       setParty(2);
       setDateTime(undefined);
       setNotes("");
@@ -799,8 +802,21 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                           placeholder="Nhập số điện thoại"
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
+                          required
                         />
                       </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Email
+                      </label>
+                      <Input
+                        type="email"
+                        placeholder="Nhập email (tuỳ chọn)"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
