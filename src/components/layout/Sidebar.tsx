@@ -17,19 +17,18 @@ import { NavLink } from 'react-router-dom';
 
 import { ChefHatIcon, GridIcon, MenuIcon, ChartIcon, SettingsIcon } from '@/components/icons';
 import { UserIcon } from 'lucide-react';
+import path from 'path';
 
 interface SidebarProps { 
-    currentPath: string; // Chấp nhận prop mới
+    currentPath: string; 
 }
 
-// Component Sidebar không cần nhận props điều hướng nữa
 const Sidebar: React.FC<SidebarProps> = ({currentPath}) => { 
-    // Thay đổi id thành path (đường dẫn URL)
     const { user } = useAuth();
     const isManager = user?.type === "admin" && user?.maVaiTro === "VT001";
 
     const navItems = [
-        { path: '/', label: 'Sơ đồ bàn', icon: GridIcon }, // / sẽ khớp với DashboardView
+        { path: '/', label: 'Sơ đồ bàn', icon: GridIcon },
         { path: '/menu', label: 'Thực đơn', icon: MenuIcon },
         { path: '/reservations', label: 'Đặt bàn', icon: GridIcon },
         ...(isManager ? [
@@ -41,8 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({currentPath}) => {
         { path: '/reports', label: 'Báo cáo', icon: ChartIcon },
         { path: '/settings', label: 'Cài đặt', icon: SettingsIcon },
         { path: '/customer', label: 'Cổng Khách hàng', icon: UserIcon }, 
-
-
+        {path: '/employees', label: 'Nhân viên', icon: Users }, 
     ];
 
     // Hàm để tạo CSS class dựa trên trạng thái active của NavLink
@@ -62,13 +60,10 @@ const Sidebar: React.FC<SidebarProps> = ({currentPath}) => {
             </div>
             <nav className="flex-1 px-2 py-4 space-y-2">
                 {navItems.map((item) => (
-                    // 💡 Thay thế thẻ <a> bằng NavLink
                     <NavLink
                         key={item.path}
-                        to={item.path} // Định nghĩa đường dẫn đích
-                        // Sử dụng hàm getNavLinkClass để tự động kiểm tra isActive
+                        to={item.path}                     
                         className={getNavLinkClass} 
-                        // Dùng end cho đường dẫn gốc ("/") để nó không highlight luôn các route khác (như /menu)
                         end={item.path === "/"} 
                     >
                         <item.icon className="w-6 h-6" />

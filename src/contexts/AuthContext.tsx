@@ -9,17 +9,21 @@ import React, {
 import { authApi } from "@/api/auth";
 import { StorageKeys } from "@/constants/StorageKeys"; // <-- 1. Import thêm cái này
 
+
+  type EmployeeUser = {
+    token: string;
+    name: string;
+    employeeId: string;
+    maVaiTro: string;
+    tenVaiTro: string;
+    // Thêm 'staff' vào đây
+    type: "admin" | "staff"; 
+}
+
 type AuthUser =
-  | { token: string; name: string; customerId: string; type: "customer" }
-  | {
-      token: string;
-      name: string;
-      employeeId: string;
-      maVaiTro: string;
-      tenVaiTro: string;
-      type: "admin";
-    }
-  | null;
+  | { token: string; name: string; customerId: string; type: "customer" }
+  | EmployeeUser // Sử dụng kiểu đã định nghĩa
+  | null;
 
 interface AuthContextType {
   user: AuthUser;
@@ -88,13 +92,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
       adminLogin: async (tenDangNhap: string, matKhau: string) => {
         const res = await authApi.adminLogin({ tenDangNhap, matKhau });
+        const userType = res.maVaiTro === 'VT001' ? 'admin' : 'staff'
         setUser({
           token: res.token,
           name: res.hoTen,
           employeeId: res.maNhanVien,
           maVaiTro: res.maVaiTro,
           tenVaiTro: res.tenVaiTro,
-          type: "admin",
+          type: userType,
         });
       },
 
