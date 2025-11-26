@@ -235,9 +235,9 @@ const DashboardView: React.FC = () => {
     if (isOccupied) {
       setOrderModalOpen(true);
     } else {
-    
-      alert(`Bàn ${table.name} đang trống. Vui lòng tạo đơn mới (Check-in) trước khi gọi món!`);
-      
+      alert(
+        `${table.name} đang trống. Vui lòng tạo đơn mới (Check-in) trước khi gọi món!`
+      );
     }
   };
 
@@ -327,7 +327,6 @@ const DashboardView: React.FC = () => {
 
       <hr className="border-gray-300" />
 
-      
       {/* === KHỐI 4: CÁC MODAL === */}
       {selectedTable && isOrderModalOpen && (
         <OrderModal

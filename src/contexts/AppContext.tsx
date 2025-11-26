@@ -726,7 +726,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       MaNhanVien: undefined,
       TienDatCoc: undefined,
       MaKhachHang: undefined,
-      Email: undefined,
+      Email: data.email || undefined,
     };
     const res = await reservationsApi.createReservation(payload);
     const newId = generateDailyId(reservations.map((r) => r.id));

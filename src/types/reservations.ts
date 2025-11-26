@@ -4,6 +4,7 @@ export interface Reservation {
     id: string; // Auto-generated: DDMMYYYYNNN
     customerName: string;
     phone?: string;
+    email?: string;
     partySize: number;
     time: number; // timestamp
     status: ReservationStatus;
