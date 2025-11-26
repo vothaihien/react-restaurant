@@ -67,4 +67,31 @@
         display: none;
         /* Chrome, Safari and Opera */
     }
+
+    /* Thêm vào file CSS global (index.css, globals.css, hoặc tailwind.css) */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Custom scrollbar cho danh sách size */
+.max-h-60::-webkit-scrollbar {
+  width: 4px;
+}
+
+.max-h-60::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 2px;
+}
+
+.max-h-60::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 2px;
+}
+
+.max-h-60::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
 }

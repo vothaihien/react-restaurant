@@ -1,4 +1,5 @@
 import React from "react";
+import OrderManagement from 'src/pages/admin/OrdersManagement';
 import { Routes, Route } from "react-router-dom";
 import {
   DashboardView,
