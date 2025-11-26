@@ -6,7 +6,7 @@ import React, {
   ReactNode,
   useEffect,
 } from "react";
-import { authApi } from "@/api/auth";
+import { authService } from "@/services/authService";
 import { StorageKeys } from "@/constants/StorageKeys"; // <-- 1. Import thêm cái này
 
 
@@ -66,11 +66,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       isAdmin: user?.type === "admin",
 
       checkUser: async (identifier: string) => {
-        return await authApi.checkUser(identifier);
+        return await authService.checkUser(identifier);
       },
 
       login: async (identifier: string, otp: string) => {
-        const res = await authApi.login({ identifier, otp });
+        const res = await authService.login({ identifier, otp });
         // Mapping dữ liệu: maKhachHang -> customerId (Để khớp với giao diện của bạn)
         setUser({
           token: res.token,
@@ -81,7 +81,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       },
 
       register: async (identifier: string, name: string, otp: string) => {
-        const res = await authApi.register({ identifier, hoTen: name, otp });
+        const res = await authService.register({ identifier, hoTen: name, otp });
         setUser({
           token: res.token,
           name: res.hoTen,
@@ -91,7 +91,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       },
 
       adminLogin: async (tenDangNhap: string, matKhau: string) => {
-        const res = await authApi.adminLogin({ tenDangNhap, matKhau });
+        const res = await authService.adminLogin({ tenDangNhap, matKhau });
         const userType = res.maVaiTro === 'VT001' ? 'admin' : 'staff'
         setUser({
           token: res.token,

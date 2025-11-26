@@ -1,20 +1,10 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useAppContext } from "@/contexts/AppContext";
 import { TableStatus } from "@/types/tables";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { formatVND } from "@/utils";
 import { useFeedback } from "@/contexts/FeedbackContext";
@@ -52,10 +42,12 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   // Booking form
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [party, setParty] = useState(2);
   const [dateTime, setDateTime] = useState<Date | undefined>(undefined);
   const [notes, setNotes] = useState("");
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
+  const [showAuthForBooking, setShowAuthForBooking] = useState(false);
 
   // Available tables for selected date/time
   const [availableTables, setAvailableTables] = useState<
@@ -180,12 +172,24 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
 
   const submitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !dateTime) {
+    if (!name || !phone || !email || !dateTime) {
       notify({
         tone: "warning",
         title: "Thiếu thông tin đặt bàn",
-        description: "Vui lòng nhập họ tên và chọn ngày giờ mong muốn.",
+        description:
+          "Vui lòng nhập Họ tên, Điện thoại, Email và chọn ngày giờ mong muốn.",
       });
+      return;
+    }
+
+    if (!isAuthenticated) {
+      notify({
+        tone: "warning",
+        title: "Cần đăng nhập để đặt bàn",
+        description:
+          "Vui lòng đăng nhập hoặc đăng ký bằng Email/SĐT để quản lý lịch sử và hủy đặt bàn của bạn.",
+      });
+      setShowAuthForBooking(true);
       return;
     }
 
@@ -196,17 +200,22 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
     //     : '';
 
     try {
-      // Get selected table (only one table is allowed)
-      const tableId = selectedTableIds.length > 0 ? selectedTableIds[0] : null;
+      // Get selected tables (multiple tables allowed)
+      const tableIds = selectedTableIds.length > 0 ? selectedTableIds : [];
 
       const reservationData: any = {
         customerName: name,
         phone,
+        email,
+        customerId:
+          user && "customerId" in user && user.type === "customer"
+            ? user.customerId
+            : undefined,
         partySize: party,
         time: ts,
         source: "App",
         notes: notes || "", // Đã bỏ preorder
-        tableId: tableId,
+        tableIds: tableIds.length > 0 ? tableIds : undefined,
       };
 
       await createReservation(reservationData);
@@ -214,6 +223,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       // Reset form
       setName("");
       setPhone("");
+      setEmail("");
       setParty(2);
       setDateTime(undefined);
       setNotes("");
@@ -221,14 +231,17 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       setCart([]);
       setAvailableTables([]);
 
+      const selectedTablesNames = selectedTableIds
+        .map((id) => availableTables.find((t) => t.id === id)?.name || id)
+        .join(", ");
+
       notify({
         tone: "success",
         title: "Đã gửi yêu cầu",
-        description: tableId
-          ? `Đã gửi yêu cầu đặt bàn ${
-              availableTables.find((t) => t.id === tableId)?.name || tableId
-            }. Nhà hàng sẽ liên hệ lại để xác nhận.`
-          : "Đã gửi yêu cầu đặt bàn. Nhà hàng sẽ liên hệ lại để xác nhận.",
+        description:
+          selectedTableIds.length > 0
+            ? `Đã gửi yêu cầu đặt ${selectedTableIds.length} bàn (${selectedTablesNames}). Nhà hàng sẽ liên hệ lại để xác nhận.`
+            : "Đã gửi yêu cầu đặt bàn. Nhà hàng sẽ liên hệ lại để xác nhận.",
       });
     } catch (error: any) {
       notify({
@@ -239,6 +252,12 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       });
     }
   };
+
+  useEffect(() => {
+    if (isAuthenticated && showAuthForBooking) {
+      setShowAuthForBooking(false);
+    }
+  }, [isAuthenticated, showAuthForBooking]);
 
   // Menu - only show items in stock (default to true if undefined)
   // Also map category name from categoriesFromApi if category is missing
@@ -391,7 +410,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       typeof statusValue === "string" ? statusValue.toLowerCase().trim() : "";
 
     // Check if it's the enum value
-    if (statusValue === TableStatus.Empty ){
+    if (statusValue === TableStatus.Empty) {
       return `${base} border-emerald-400/70 bg-emerald-50/70 hover:bg-emerald-50`;
     }
     if (
@@ -537,6 +556,29 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
         </TabsContent>
 
         <TabsContent value="booking" className="space-y-4">
+          {/* Banner gợi ý đăng nhập trước khi đặt bàn */}
+          {!isAuthenticated && (
+            <div className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="text-sm text-gray-800">
+                <div className="font-semibold text-indigo-900">
+                  Đăng nhập bằng Email / SĐT để quản lý lịch sử & hủy đặt bàn
+                  của bạn
+                </div>
+                <div className="text-xs sm:text-sm text-gray-700 mt-1">
+                  Khi đăng nhập, mỗi lần đặt bàn sẽ được lưu lại, bạn có thể xem
+                  lại và chủ động hủy trên mục Lịch sử.
+                </div>
+              </div>
+              <Button
+                variant="default"
+                className="sm:flex-shrink-0"
+                onClick={() => setShowAuthForBooking(true)}
+              >
+                Đăng nhập / Đăng ký nhanh
+              </Button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-[1.7fr,1.3fr] gap-4">
             {/* Cột trái: thời gian + chọn bàn */}
             <div className="space-y-4">
@@ -659,10 +701,18 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                                 disabled={disabled}
                                 onClick={() => {
                                   if (selected) {
-                                    setSelectedTableIds([]);
+                                    // Bỏ chọn bàn này
+                                    setSelectedTableIds(
+                                      selectedTableIds.filter(
+                                        (id) => id !== t.id
+                                      )
+                                    );
                                   } else {
-                                    // Only allow selecting one table
-                                    setSelectedTableIds([t.id]);
+                                    // Thêm bàn này vào danh sách đã chọn
+                                    setSelectedTableIds([
+                                      ...selectedTableIds,
+                                      t.id,
+                                    ]);
                                   }
                                 }}
                                 className={statusClass(t.status, selected)}
@@ -739,31 +789,6 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                             );
                           })}
                         </div>
-                        {selectedTableIds.length > 0 && (
-                          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                            <p className="text-sm text-green-800">
-                              Đã chọn bàn:{" "}
-                              <strong>
-                                {availableTables.find(
-                                  (t: any) => t.id === selectedTableIds[0]
-                                )?.name || selectedTableIds[0]}
-                              </strong>
-                              {availableTables.find(
-                                (t: any) => t.id === selectedTableIds[0]
-                              )?.tenTang && (
-                                <span>
-                                  {" "}
-                                  -{" "}
-                                  {
-                                    availableTables.find(
-                                      (t: any) => t.id === selectedTableIds[0]
-                                    )?.tenTang
-                                  }
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                        )}
                       </>
                     )}
                   </CardContent>
@@ -799,8 +824,21 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                           placeholder="Nhập số điện thoại"
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
+                          required
                         />
                       </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Email
+                      </label>
+                      <Input
+                        type="email"
+                        placeholder="Nhập email (tuỳ chọn)"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -812,33 +850,84 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                         onChange={(e) => setNotes(e.target.value)}
                       />
                     </div>
-                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                      <div className="text-sm text-muted-foreground">
+                    <div className="pt-4 border-t border-gray-200">
+                      <div className="text-sm text-muted-foreground mb-3">
                         {selectedTableIds.length > 0
-                          ? `Đã chọn bàn: ${
-                              availableTables.find(
-                                (t: any) => t.id === selectedTableIds[0]
-                              )?.name || selectedTableIds[0]
-                            }${
-                              availableTables.find(
-                                (t: any) => t.id === selectedTableIds[0]
-                              )?.tenTang
-                                ? ` - ${
-                                    availableTables.find(
-                                      (t: any) => t.id === selectedTableIds[0]
-                                    )?.tenTang
-                                  }`
-                                : ""
-                            }`
+                          ? `Đã chọn ${selectedTableIds.length} bàn`
                           : "Chưa chọn bàn (tuỳ chọn)"}
                       </div>
-                      <Button type="submit" disabled={!name || !dateTime}>
-                        Gửi yêu cầu đặt bàn
-                      </Button>
+
+                      {/* Danh sách bàn đã chọn - dưới text "Đã chọn n bàn" */}
+                      {selectedTableIds.length > 0 && (
+                        <div className="mb-4 space-y-2">
+                          {selectedTableIds.map((tableId) => {
+                            const table = availableTables.find(
+                              (t: any) => t.id === tableId
+                            );
+                            return (
+                              <div
+                                key={tableId}
+                                className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold text-gray-900">
+                                    {table?.name || tableId}
+                                  </span>
+                                  {table?.tenTang && (
+                                    <span className="text-xs text-gray-600">
+                                      ({table.tenTang})
+                                    </span>
+                                  )}
+                                  <span className="text-xs text-gray-500">
+                                    - {table?.capacity || "?"} khách
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedTableIds(
+                                      selectedTableIds.filter(
+                                        (id) => id !== tableId
+                                      )
+                                    );
+                                  }}
+                                  className="text-red-600 hover:text-red-800 font-bold text-lg leading-none px-2 py-1 hover:bg-red-50 rounded"
+                                  title="Bỏ chọn bàn này"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-end">
+                        <Button type="submit" disabled={!name || !dateTime}>
+                          Gửi yêu cầu đặt bàn
+                        </Button>
+                      </div>
                     </div>
                   </form>
                 </CardContent>
               </Card>
+
+              {showAuthForBooking && !isAuthenticated && (
+                <Card className="border border-dashed border-indigo-300 bg-indigo-50/40">
+                  <CardHeader>
+                    <CardTitle>
+                      Đăng nhập / Đăng ký để hoàn tất đặt bàn
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-700 mb-3">
+                      Vui lòng xác thực Email hoặc Số điện thoại để có thể xem
+                      lại lịch sử và chủ động hủy đặt bàn sau này.
+                    </p>
+                    <AuthBox />
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
 
@@ -1333,7 +1422,8 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                       <span className="font-semibold">{user?.name}</span>
                     </div>
                     <div className="text-gray-700 text-sm">
-                      Mã KH: {user && 'customerId' in user ? user.customerId : ''}
+                      Mã KH:{" "}
+                      {user && "customerId" in user ? user.customerId : ""}
                     </div>
                     <Button variant="outline" onClick={logout}>
                       Đăng xuất
@@ -1480,7 +1570,7 @@ const BookingHistorySection: React.FC<{ token: string }> = ({ token }) => {
   );
 };
 
-const AuthBox: React.FC = () => {
+export const AuthBox: React.FC = () => {
   const { notify } = useFeedback();
   const { checkUser, login, register } = useAuth();
   const [step, setStep] = useState<"identify" | "otp">("identify");
@@ -1567,8 +1657,3 @@ const AuthBox: React.FC = () => {
     </div>
   );
 };
-
-
-
-
-

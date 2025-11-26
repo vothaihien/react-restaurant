@@ -25,6 +25,7 @@ const AppRoutes: React.FC = () => {
       {/* Public Routes (Ai cũng vào được) */}
       <Route path="/login" element={<LoginView />} />
       <Route path="/unauthorized" element={<UnauthorizedView />} />
+      
       <Route path="*" element={<div>404: Page Not Found</div>} />
 
       {/* --- NHÓM 1: ADMIN & STAFF (Cả 2 đều vào được) --- */}
@@ -34,15 +35,6 @@ const AppRoutes: React.FC = () => {
         <Route path="/reservations" element={<ReservationsView />} />
         <Route path="/orders-management" element={<OrderManagement />} />
         <Route path="/kds" element={<KDSView />} />
-        <Route
-            path="/customer"
-            element={
-              <CustomerPortalView
-                tab={"home"}
-                onTabChange={() => {}}
-              />
-            }
-          />
       </Route>
 
       {/* --- NHÓM 2: CHỈ ADMIN MỚI ĐƯỢC VÀO --- */}
