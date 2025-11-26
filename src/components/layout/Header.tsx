@@ -31,7 +31,7 @@ const Header: React.FC = () => {
                     </p>
                 </div>
                 
-                {user && user.type === 'admin' && (
+                {user  && (
                     <div className="relative">
                         <button
                             onClick={() => setShowDropdown(!showDropdown)}
@@ -42,7 +42,12 @@ const Header: React.FC = () => {
                             </div>
                             <div className="text-left">
                                 <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                                <p className="text-xs text-gray-500">{user.tenVaiTro || 'Nhân viên'}</p>
+                                <p className="text-xs text-gray-500">
+                                {(user.type === 'admin' || user.type === 'staff') 
+                                    ? user.tenVaiTro  // Nếu là admin/staff -> Có tenVaiTro
+                                    : 'Khách hàng'    // Nếu là customer -> Không có
+                                }
+                            </p>
                             </div>
                         </button>
                         

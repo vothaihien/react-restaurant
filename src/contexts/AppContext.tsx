@@ -545,61 +545,103 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   const addItemsToTableOrder = async (tableId: string, items: OrderItem[]) => {
-    const currentOrder = getOrderForTable(tableId);
-    if (!currentOrder) {
-      console.error(
-        `Bàn ${tableId} chưa có đơn hàng. Vui lòng tạo đơn/Check-in trước.`
-      );
-      return;
+    // BƯỚC 1: Thử lấy ID đơn hàng từ State hiện tại (như cũ)
+    let currentOrderId = getOrderForTable(tableId)?.id;
+
+    // BƯỚC 2: [FIX MỚI] Nếu State chưa có, gọi API kiểm tra "nóng" từ Server
+    if (!currentOrderId) {
+        try {
+            console.log(`State chưa đồng bộ, đang tìm đơn hàng active cho bàn ${tableId} từ Server...`);
+            // Gọi lại API lấy danh sách đơn đang active
+            const latestOrdersData = await orderService.getActiveOrders();
+            
+            // Tìm xem có đơn nào đang chứa tableId này không
+            const foundOrder = latestOrdersData.find((d: any) => d.listMaBan && d.listMaBan.includes(tableId));
+            
+            if (foundOrder) {
+                currentOrderId = foundOrder.maDonHang;
+                console.log("--> Đã tìm thấy đơn hàng từ Server:", currentOrderId);
+            }
+        } catch (err) {
+            console.error("Lỗi khi cố gắng đồng bộ lại đơn hàng:", err);
+        }
     }
 
-    const payload = {
-      maDonHang: currentOrder.id,
-      maBan: tableId,
-      items: items.map((i) => ({
-        maMonAn: i.menuItem.id,
-        maPhienBan: i.menuItem.sizes.find((s) => s.name === i.size)?.id || "",
-        soLuong: i.quantity,
-        ghiChu: i.notes || "",
-      })),
+    // BƯỚC 3: Nếu sau khi tìm server vẫn không thấy thì mới báo lỗi
+    if (!currentOrderId) {
+      console.error(
+        `Bàn ${tableId} chưa có đơn hàng (Check-in). Vui lòng tạo đơn trước.`
+      );
+      // Có thể thêm alert("Bàn chưa check-in!") ở đây nếu muốn
+      return;
+    }
+
+    const payload = {
+      // Sửa maDonHang -> MaDonHang
+      MaDonHang: currentOrderId, 
+      
+      // Sửa maBan -> MaBan
+      MaBan: tableId,
+      
+      // Sửa items -> Items
+      Items: items.map((i) => {
+        // Logic tìm sizeId
+        const sizeId = i.menuItem.sizes.find((s) => s.name === i.size)?.id;
+
+        return {
+          // Sửa maMonAn -> MaMonAn
+          MaMonAn: i.menuItem.id,
+          
+          // Sửa maPhienBan -> MaPhienBan & Xử lý Null
+          // Backend C# sẽ lỗi nếu nhận chuỗi rỗng "", phải gửi null
+          MaPhienBan: sizeId || null, 
+          
+          // Sửa soLuong -> SoLuong
+          SoLuong: i.quantity,
+          
+          // Sửa ghiChu -> GhiChu
+          GhiChu: i.notes || "",
+        };
+      }),
     };
 
-    try {
-      await orderService.addItemsToTable(payload);
-      console.log("Đã thêm món thành công vào đơn:", currentOrder.id);
+    try {
+      console.log("Payload gửi đi:", payload);
+      await orderService.addItemsToTable(payload);
+      console.log("Đã thêm món thành công vào đơn:", currentOrderId);
 
-      // Gọi lại API để cập nhật UI
-      const latestData = await orderService.getActiveOrders();
-      if (Array.isArray(latestData)) {
-        const mappedOrders: Order[] = latestData.map((d: any) => ({
-          id: d.maDonHang,
-          tableId: d.listMaBan && d.listMaBan.length > 0 ? d.listMaBan[0] : "",
-          items: [], 
-          subtotal: d.tongTien || 0,
-          total: d.tongTien || 0,
-          discount: 0,
-          createdAt: new Date(d.thoiGianNhanBan).getTime(),
-          status: "active",
-        }));
-        setOrders(mappedOrders);
-        setTables((prevTables) =>
-          prevTables.map((t) => {
-            const orderOfTable = mappedOrders.find((o) => o.tableId === t.id);
-            if (orderOfTable) {
-              return {
-                ...t,
-                status: TableStatus.Occupied,
-                orderId: orderOfTable.id,
-              };
-            }
-            return t;
-          })
-        );
-      }
-    } catch (error) {
-      console.error("Lỗi khi gọi API thêm món:", error);
-    }
-  };
+      // Gọi lại API để cập nhật UI (Giữ nguyên logic cũ của bạn để refresh lại giao diện)
+      const latestData = await orderService.getActiveOrders();
+      if (Array.isArray(latestData)) {
+        const mappedOrders: Order[] = latestData.map((d: any) => ({
+          id: d.maDonHang,
+          tableId: d.listMaBan && d.listMaBan.length > 0 ? d.listMaBan[0] : "",
+          items: [], 
+          subtotal: d.tongTien || 0,
+          total: d.tongTien || 0,
+          discount: 0,
+          createdAt: new Date(d.thoiGianNhanBan).getTime(),
+          status: "active",
+        }));
+        setOrders(mappedOrders);
+        setTables((prevTables) =>
+          prevTables.map((t) => {
+            const orderOfTable = mappedOrders.find((o) => o.tableId === t.id);
+            if (orderOfTable) {
+              return {
+                ...t,
+                status: TableStatus.Occupied,
+                orderId: orderOfTable.id,
+              };
+            }
+            return t;
+          })
+        );
+      }
+    } catch (error) {
+      console.error("Lỗi khi gọi API thêm món:", error);
+    }
+  };
 
   const sendOrderToKDS = (orderId: string) => {
     const order = orders.find((o) => o.id === orderId);

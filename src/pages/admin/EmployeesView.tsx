@@ -1,23 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { employeesApi } from "@/api/employees";
+// Sửa 1: Import đúng Service và Type
+import { employeeService, Employee, Role } from "@/services/employeeService";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFeedback } from "@/contexts/FeedbackContext";
 import { EditIcon, TrashIcon, PlusCircleIcon } from "@/components/icons";
-
-interface Employee {
-  maNhanVien: string;
-  hoTen: string;
-  tenDangNhap: string;
-  email?: string;
-  soDienThoai?: string;
-  vaiTro?: string;
-  maVaiTro?: string;
-}
-
-interface Role {
-  maVaiTro: string;
-  tenVaiTro: string;
-}
 
 const EmployeesView: React.FC = () => {
   const { user } = useAuth();
@@ -39,24 +25,27 @@ const EmployeesView: React.FC = () => {
   });
 
   // Kiểm tra quyền quản lý
-  const isManager = user?.type === "admin" && user?.maVaiTro === "VT001";
+  // Lưu ý: user.type là từ AuthContext (admin/customer).
+  // Nếu backend trả về type='admin' cho nhân viên, thì logic này OK.
+  const isManager = user?.type === "admin"; 
 
+  // Sửa 2: Thêm dependency [user] và kiểm tra user trước khi gọi API
   useEffect(() => {
-    loadEmployees();
-    loadRoles();
-  }, []);
+    if (user && isManager) {
+        loadEmployees();
+        loadRoles();
+    }
+  }, [user]);
 
   const loadEmployees = async () => {
     setLoading(true);
     try {
-      const data = await employeesApi.getEmployees();
-      setEmployees(data || []);
+      // Sửa 3: Dùng employeeService
+      const data = await employeeService.getEmployees();
+      setEmployees(Array.isArray(data) ? data : []);
     } catch (error: any) {
-      notify({
-        tone: "error",
-        title: "Lỗi tải danh sách nhân viên",
-        description: error?.message || "Không thể tải danh sách nhân viên.",
-      });
+      console.error(error);
+      // Không notify lỗi 401 ở đây nữa vì axiosClient đã lo rồi
     } finally {
       setLoading(false);
     }
@@ -64,17 +53,15 @@ const EmployeesView: React.FC = () => {
 
   const loadRoles = async () => {
     try {
-      const data = await employeesApi.getRoles();
-      setRoles(data || []);
+      const data = await employeeService.getRoles();
+      setRoles(Array.isArray(data) ? data : []);
+      
+      // Set default role cho form nếu chưa có
       if (data && data.length > 0 && !formData.maVaiTro) {
         setFormData((prev) => ({ ...prev, maVaiTro: data[0].maVaiTro }));
       }
     } catch (error: any) {
-      notify({
-        tone: "error",
-        title: "Lỗi tải danh sách vai trò",
-        description: error?.message || "Không thể tải danh sách vai trò.",
-      });
+      console.error(error);
     }
   };
 
@@ -96,7 +83,7 @@ const EmployeesView: React.FC = () => {
     setFormData({
       hoTen: employee.hoTen || "",
       tenDangNhap: employee.tenDangNhap || "",
-      matKhau: "", // Không hiển thị mật khẩu
+      matKhau: "", 
       email: employee.email || "",
       soDienThoai: employee.soDienThoai || "",
       maVaiTro: employee.maVaiTro || roles[0]?.maVaiTro || "",
@@ -141,12 +128,12 @@ const EmployeesView: React.FC = () => {
     setLoading(true);
     try {
       if (editingEmployee) {
-        // Cập nhật nhân viên
-        await employeesApi.updateEmployee(editingEmployee.maNhanVien, {
+        await employeeService.updateEmployee(editingEmployee.maNhanVien, {
           HoTen: formData.hoTen.trim(),
           Email: formData.email.trim() || undefined,
           SoDienThoai: formData.soDienThoai.trim() || undefined,
           MaVaiTro: formData.maVaiTro,
+          // Không gửi mật khẩu khi update ở đây
         });
         notify({
           tone: "success",
@@ -154,8 +141,7 @@ const EmployeesView: React.FC = () => {
           description: "Thông tin nhân viên đã được cập nhật.",
         });
       } else {
-        // Tạo nhân viên mới
-        await employeesApi.createEmployee({
+        await employeeService.createEmployee({
           HoTen: formData.hoTen.trim(),
           TenDangNhap: formData.tenDangNhap.trim(),
           MatKhau: formData.matKhau,
@@ -175,7 +161,7 @@ const EmployeesView: React.FC = () => {
       notify({
         tone: "error",
         title: editingEmployee ? "Cập nhật thất bại" : "Tạo thất bại",
-        description: error?.message || "Đã xảy ra lỗi. Vui lòng thử lại.",
+        description: error?.response?.data?.message || "Đã xảy ra lỗi. Vui lòng thử lại.",
       });
     } finally {
       setLoading(false);
@@ -194,7 +180,7 @@ const EmployeesView: React.FC = () => {
     if (shouldDelete) {
       setLoading(true);
       try {
-        await employeesApi.deleteEmployee(employee.maNhanVien);
+        await employeeService.deleteEmployee(employee.maNhanVien);
         notify({
           tone: "success",
           title: "Xóa thành công",
@@ -293,7 +279,8 @@ const EmployeesView: React.FC = () => {
                       {employee.soDienThoai || "-"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {employee.vaiTro || "-"}
+                      {/* Sửa 4: Dùng tenVaiTro thay vì vaiTro */}
+                      {employee.tenVaiTro || "-"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-3">
@@ -318,7 +305,7 @@ const EmployeesView: React.FC = () => {
               ) : (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">
-                    Chưa có nhân viên nào
+                    {loading ? "Đang tải..." : "Chưa có nhân viên nào"}
                   </td>
                 </tr>
               )}
@@ -327,7 +314,7 @@ const EmployeesView: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Modal giữ nguyên phần render như cũ, chỉ lưu ý phần value select box */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
@@ -336,6 +323,7 @@ const EmployeesView: React.FC = () => {
                 {editingEmployee ? "Chỉnh sửa Nhân viên" : "Thêm Nhân viên Mới"}
               </h2>
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* ... Các input khác giữ nguyên ... */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Họ tên <span className="text-red-500">*</span>
@@ -462,7 +450,3 @@ const EmployeesView: React.FC = () => {
 };
 
 export default EmployeesView;
-
-
-
-

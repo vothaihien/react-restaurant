@@ -2,13 +2,13 @@
 import axiosClient from '@/api/axiosClient'; // Đảm bảo đường dẫn đúng
 
 export interface AddItemsToTablePayload {
-    maDonHang: string;
-    maBan: string;
-    items: {
-        maMonAn: string;
-        maPhienBan: string; // ID của Size (ví dụ: PB001)
-        soLuong: number;
-        ghiChu: string;
+    MaDonHang: string;
+    MaBan: string;
+    Items: {
+        MaMonAn: string;
+        MaPhienBan: string; // ID của Size (ví dụ: PB001)
+        SoLuong: number;
+        GhiChu: string;
     }[];
 }
 

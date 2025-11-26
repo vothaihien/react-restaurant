@@ -4,13 +4,11 @@ import App from "@/../App";
 import LoginView from "@/pages/admin/LoginView";
 
 const AdminApp: React.FC = () => {
-  const { isAuthenticated, isAdmin } = useAuth();
+  const { isAuthenticated } = useAuth(); 
 
-  // Nếu chưa đăng nhập hoặc không phải admin, hiển thị màn hình đăng nhập
-  if (!isAuthenticated || !isAdmin) {
+  if (!isAuthenticated) {
     return <LoginView />;
   }
-
   return <App />;
 };
 
