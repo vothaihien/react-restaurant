@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import CustomerPortalView, {
   CustomerTab,
   AuthBox,
@@ -147,17 +148,51 @@ const SiteFooter: React.FC = () => (
 );
 
 const CustomerApp: React.FC = () => {
+  const { tab: tabParam } = useParams<{ tab?: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<CustomerTab>("home");
   const [showQuickRegister, setShowQuickRegister] = useState(false);
+
+  // Đồng bộ tab với URL và xử lý redirect
+  useEffect(() => {
+    // Nếu đang ở /customer (không có tab), redirect đến /customer/home
+    if (location.pathname === "/customer") {
+      navigate("/customer/home", { replace: true });
+      return;
+    }
+    
+    // Lấy tab từ URL params hoặc từ pathname
+    const pathTab = tabParam || location.pathname.split("/").pop() || "home";
+    const validTabs: CustomerTab[] = [
+      "home",
+      "booking",
+      "menu",
+      "order",
+      "loyalty",
+      "promotions",
+      "feedback",
+    ];
+    if (validTabs.includes(pathTab as CustomerTab)) {
+      setTab(pathTab as CustomerTab);
+    } else {
+      setTab("home");
+    }
+  }, [location.pathname, tabParam, navigate]);
+
+  const handleTabChange = (newTab: CustomerTab) => {
+    setTab(newTab);
+    navigate(`/customer/${newTab}`);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
       <SiteHeader
-        onNavigate={setTab}
+        onNavigate={handleTabChange}
         onQuickRegister={() => setShowQuickRegister(true)}
       />
       <main className="flex-1 max-w-6xl lg:max-w-7xl mx-auto w-full px-4 sm:px-6 md:px-8 py-6">
-        <CustomerPortalView tab={tab} onTabChange={setTab} />
+        <CustomerPortalView tab={tab} onTabChange={handleTabChange} />
       </main>
       <SiteFooter />
 

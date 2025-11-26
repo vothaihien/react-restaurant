@@ -1,14 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import AdminApp from "@/pages/admin/AdminApp";
-import CustomerApp from "@/pages/customer/CustomerApp";
+import App from "./App";
 import { AppProvider } from "@/contexts/AppContext";
 import { FeedbackProvider } from "@/contexts/FeedbackContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useUISettings } from "@/hooks/useUISettings";
 import "./index.css";
 
-// Component wrapper d? �p d?ng UI settings
+// Component wrapper d? �p d?ng UI settings
 const AppWithUISettings: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   useUISettings();
   return <>{children}</>;
@@ -20,15 +19,16 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
-const path = window.location.pathname;
-const isCustomer = path.startsWith("/customer");
 
+// Render App component (đã có BrowserRouter bên trong)
 root.render(
   <React.StrictMode>
     <AppWithUISettings>
       <FeedbackProvider>
         <AuthProvider>
-          <AppProvider>{isCustomer ? <CustomerApp /> : <AdminApp />}</AppProvider>
+          <AppProvider>
+            <App />
+          </AppProvider>
         </AuthProvider>
       </FeedbackProvider>
     </AppWithUISettings>
