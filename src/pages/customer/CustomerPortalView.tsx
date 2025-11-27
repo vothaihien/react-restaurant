@@ -237,9 +237,8 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
 
   const remainingGuests =
     party > 0 ? Math.max(party - totalSelectedCapacity, 0) : 0;
-
   const hasEnoughCapacity =
-    selectedTableIds.length === 0 || totalSelectedCapacity >= party;
+    selectedTableIds.length > 0 && totalSelectedCapacity >= party;
 
   const submitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -750,23 +749,23 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                             </div>
                           )}
                         </div>
-                        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
+                        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700 space-y-1">
                           <div className="font-semibold text-slate-900">
                             Tổng sức chứa đã chọn: {totalSelectedCapacity} /{" "}
                             {party} khách
                           </div>
                           {selectedTableIds.length === 0 ? (
-                            <p className="mt-1">
-                              Chưa chọn bàn. Bạn có thể bỏ trống để nhà hàng tự
-                              sắp xếp hoặc chọn nhiều bàn nhỏ theo nhu cầu.
+                            <p className="text-amber-700">
+                              Vui lòng chọn ít nhất một bàn để gửi yêu cầu đặt
+                              chỗ.
                             </p>
                           ) : remainingGuests > 0 ? (
-                            <p className="mt-1 text-amber-700">
+                            <p className="text-amber-700">
                               Còn thiếu {remainingGuests} chỗ. Vui lòng chọn
                               thêm bàn hoặc giảm số khách.
                             </p>
                           ) : (
-                            <p className="mt-1 text-emerald-700">
+                            <p className="text-emerald-700">
                               Đã đủ chỗ cho {party} khách. Bạn vẫn có thể ghi
                               chú thêm yêu cầu đặc biệt phía dưới.
                             </p>
@@ -1031,11 +1030,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                       <div className="flex items-center justify-end">
                         <Button
                           type="submit"
-                          disabled={
-                            !name ||
-                            !dateTime ||
-                            (selectedTableIds.length > 0 && !hasEnoughCapacity)
-                          }
+                          disabled={!name || !dateTime || !hasEnoughCapacity}
                         >
                           Gửi yêu cầu đặt bàn
                         </Button>
