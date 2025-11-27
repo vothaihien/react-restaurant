@@ -65,6 +65,7 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
     const [email, setEmail] = useState("");
+    const [isUserInteracted, setIsUserInteracted] = useState(false);
     const [partySize, setPartySize] = useState(2);
     const [bookingTime, setBookingTime] = useState<Dayjs | null>(dayjs());
     const [selectedTables, setSelectedTables] = useState<BanAn[]>([]);
@@ -107,28 +108,66 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
             setSnackbar({ open: true, message: "Vui lòng nhập SĐT để tìm!", severity: 'warning' });
             return;
         }
+        
+        // Hiển thị loading nhẹ (nếu muốn) hoặc disable nút tìm kiếm
+        // setSearchingCustomer(true); 
+
         try {
+            console.log("Đang tìm khách hàng với SĐT:", phone);
             const data = await khachHangService.searchByPhone(phone);
-            if (data.found) {
+            console.log("Kết quả tìm kiếm:", data);
+
+            if (data && data.found) { // Kiểm tra kỹ data.found
+                // 1. Tự động điền tên và email
                 setName(data.tenKhach || ""); 
                 setEmail(data.email || "");
+                
+                // 2. Cập nhật trạng thái
                 setIsCustomerFound(true);
-                setLoyaltyMessage(data.message || null);
+                setLoyaltyMessage(data.message || "Khách hàng thân thiết");
                 setIsVipEligible(data.duocGiamGia || false);
-                setSnackbar({ open: true, message: "Tìm thấy khách hàng thân thiết!", severity: 'success' });
+                
+                // 3. Thông báo
+                setSnackbar({ open: true, message: `Đã tìm thấy: ${data.tenKhach}`, severity: 'success' });
             } else {
+                // Không tìm thấy
                 setIsCustomerFound(false);
-                setName("");
-                setEmail("");
-                setLoyaltyMessage("Khách hàng mới (Chưa có lịch sử tích lũy)");
+                // Giữ nguyên tên/email nếu người dùng đã nhập, hoặc reset nếu muốn
+                // setName(""); 
+                // setEmail("");
+                
+                setLoyaltyMessage("Khách hàng mới (Chưa có trong hệ thống)");
                 setIsVipEligible(false);
-                setSnackbar({ open: true, message: "Không tìm thấy thông tin. Có thể tạo mới.", severity: 'info' });
+                
+                setSnackbar({ open: true, message: "SĐT chưa tồn tại. Vui lòng nhập tên để tạo mới.", severity: 'info' });
             }
-        } catch (err) {
-            console.error("Lỗi tìm kiếm:", err);
-            setSnackbar({ open: true, message: "Không tìm thấy khách hàng hoặc lỗi kết nối.", severity: 'error' });
+        } catch (err: any) {
+            console.error("Lỗi API tìm kiếm:", err);
+            setSnackbar({ open: true, message: "Lỗi kết nối khi tìm khách hàng.", severity: 'error' });
+        } finally {
+            // setSearchingCustomer(false);
         }
     };
+
+
+    useEffect(() => {
+    // Chỉ chạy khi user chưa chọn giờ thủ công
+    if (!isUserInteracted) {
+        const timer = setInterval(() => {
+            // Cập nhật lại thời gian bằng hiện tại
+            setBookingTime(dayjs());
+        }, 1000 * 30); // Cập nhật mỗi 30 giây
+
+        // Dọn dẹp timer khi component unmount
+        return () => clearInterval(timer);
+    }
+}, [isUserInteracted]);
+
+// Hàm xử lý khi user chọn giờ
+const handleTimeChange = (newValue: Dayjs | null) => {
+    setIsUserInteracted(true); // Đánh dấu là user đã can thiệp -> Ngừng tự chạy
+    setBookingTime(newValue);
+};
 
     // --- HÀM BẬT/TẮT CHẾ ĐỘ KHÁCH LẺ (ĐÃ SỬA) ---
     const handleToggleWalkInGuest = () => {
@@ -333,10 +372,23 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({
                     <Box sx={{ p: 1.5, width: { xs: "100%", sm: "50%" } }}>
                         <LocalizationProvider dateAdapter={AdapterDayjs}>
                             <DateTimePicker
-                                label="Thời gian nhận bàn" value={bookingTime}
-                                onChange={(newValue) => setBookingTime(newValue)}
-                                slotProps={{ textField: { fullWidth: true, required: true } }}
-                            />
+    label="Thời gian nhận bàn"
+    value={bookingTime}
+    onChange={handleTimeChange} // Dùng hàm mới này thay vì viết inline
+    // Trừ đi 1 phút để tránh lỗi lệch giây (ví dụ 8:50:00 vs 8:50:05)
+    minDateTime={dayjs().subtract(1, 'minute')} 
+    slotProps={{ 
+        textField: { 
+            fullWidth: true, 
+            required: true,
+            // XÓA DÒNG helperText CŨ ĐI NHÉ
+        },
+        // Thêm cái này để hiển thị thông báo lỗi chuẩn của MUI nếu user cố tình chọn quá khứ
+        actionBar: {
+            actions: ['clear', 'today', 'accept'],
+        }
+    }}
+/>
                         </LocalizationProvider>
                     </Box>
 
@@ -417,9 +469,21 @@ const ReservationsView: React.FC = () => {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
+            // Format này OK, nhưng hãy chắc chắn Back-end nhận đúng format này
             const dateParam = selectedDate ? selectedDate.format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD");
+            
+            console.log("Đang gọi API getActiveBookings với ngày:", dateParam); // Log 1
+
             const ordersData = await donHangService.getActiveBookings(dateParam);
-            setOrders(ordersData as DonHangActive[]);
+            
+            console.log("Dữ liệu API trả về:", ordersData); // Log 2: Xem nó trả về mảng rỗng [] hay có dữ liệu?
+
+            if (Array.isArray(ordersData)) {
+                 setOrders(ordersData as DonHangActive[]);
+            } else {
+                 console.warn("API không trả về mảng!", ordersData);
+                 setOrders([]);
+            }
         } catch (error) {
             console.error("Lỗi tải đơn hàng:", error);
             setOrders([]);
@@ -427,10 +491,6 @@ const ReservationsView: React.FC = () => {
             setLoading(false);
         }
     }, [selectedDate]);
-
-    useEffect(() => {
-        fetchData();
-    }, [selectedDate, fetchData]); 
 
     // --- CÁC HÀM XỬ LÝ HÀNH ĐỘNG ---
     const handleOrderClick = (event: React.MouseEvent<HTMLElement>, order: DonHangActive) => {

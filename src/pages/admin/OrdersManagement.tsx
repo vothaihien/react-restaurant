@@ -1,10 +1,10 @@
 // components/OrderManagement.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { donHangService } from '@/services/donHangService'; 
-import { ordersApi, Order, OrderStats } from '@/api/donhang'; 
-import { useReactToPrint } from 'react-to-print'; // Import thư viện in
+import { donHangService } from '@/services/donHangService';
+import { ordersApi, Order, OrderStats } from '@/api/donhang';
+import { orderService } from '@/services/orderService'; // Đảm bảo import service này
+import { useReactToPrint } from 'react-to-print';
 import { InvoiceTemplate } from '@/components/invoice/InvoiceTemplate';
-
 
 type TabType = 'all' | 'pending' | 'active' | 'completed' | 'cancelled';
 
@@ -28,7 +28,7 @@ const OrderManagement: React.FC = () => {
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [rawOrderDetails, setRawOrderDetails] = useState<any[]>([]); 
+  const [rawOrderDetails, setRawOrderDetails] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -85,7 +85,7 @@ const OrderManagement: React.FC = () => {
     } catch (error: any) { alert('Lỗi tải chi tiết'); } finally { setDetailLoading(false); }
   };
 
-  // --- Gom nhóm món ăn (Fix hiển thị trùng món) ---
+  // --- Gom nhóm món ăn ---
   const groupedDetails: TableGroup[] = useMemo(() => {
     if (!rawOrderDetails.length) return [];
     const groups: { [key: string]: TableGroup } = {};
@@ -117,7 +117,7 @@ const OrderManagement: React.FC = () => {
     return Object.values(groups).sort((a, b) => a.tenBan.localeCompare(b.tenBan));
   }, [rawOrderDetails]);
 
-  // --- [FIX] Tự tính tổng tiền từ chi tiết món (Không tin tưởng API list) ---
+  // --- Tổng tiền ---
   const calculatedTotal = useMemo(() => {
     return groupedDetails.reduce((sum, group) => sum + group.totalAmount, 0);
   }, [groupedDetails]);
@@ -127,8 +127,91 @@ const OrderManagement: React.FC = () => {
     fetchOrderDetails(order.maDonHang);
   };
 
-  const handleUpdateStatus = async (id: string, status: string) => { if(confirm('Cập nhật?')) { await ordersApi.updateOrderStatus(id, status); fetchOrders(); fetchStats(); }};
-  const handleDeleteOrder = async (id: string) => { if(confirm('Xóa?')) { await ordersApi.deleteOrder(id); fetchOrders(); fetchStats(); }};
+  // --- HÀM CẬP NHẬT TRẠNG THÁI (ĐÃ NÂNG CẤP) ---
+  const handleUpdateStatus = async (id: string, status: string) => {
+    let message = 'Bạn có chắc chắn muốn cập nhật trạng thái?';
+    
+    // Tùy chỉnh thông báo
+    if (status === 'DA_XAC_NHAN') message = 'Duyệt đơn này và giữ chỗ cho khách?';
+    if (status === 'CHO_THANH_TOAN') message = 'Xác nhận khách đã đến và bắt đầu phục vụ (Vào bàn)?';
+    if (status === 'DA_HUY') message = 'CẢNH BÁO: Bạn có chắc chắn muốn HỦY đơn hàng này không?';
+
+    if (window.confirm(message)) {
+      try {
+        await orderService.updateOrderStatus(id, status);
+        // Đóng modal nếu đang xem đúng đơn đó
+        if (selectedOrder?.maDonHang === id) {
+          setSelectedOrder(null);
+        }
+        await fetchOrders();
+        await fetchStats();
+      } catch (error) {
+        alert('Có lỗi xảy ra khi cập nhật trạng thái!');
+        console.error(error);
+      }
+    }
+  };
+
+  // --- HÀM RENDER CÁC NÚT THAO TÁC ---
+  const renderActionButtons = (order: Order, size: 'small' | 'large' = 'small') => {
+    const btnClass = size === 'small' ? 'px-2 py-1 text-xs' : 'px-4 py-2 font-medium';
+    
+    return (
+      <div className="flex gap-2">
+        {/* 1. Nút DUYỆT: Chỉ hiện khi Chờ xác nhận */}
+        {order.maTrangThaiDonHang === 'CHO_XAC_NHAN' && (
+          <>
+            <button 
+              onClick={() => handleUpdateStatus(order.maDonHang, 'DA_XAC_NHAN')} 
+              className={`${btnClass} bg-green-500 text-white rounded hover:bg-green-600`}
+              title="Duyệt đơn"
+            >
+              Duyệt
+            </button>
+            <button 
+              onClick={() => handleUpdateStatus(order.maDonHang, 'DA_HUY')} 
+              className={`${btnClass} bg-red-500 text-white rounded hover:bg-red-600`}
+              title="Hủy đơn"
+            >
+              Hủy
+            </button>
+          </>
+        )}
+
+        {/* 2. Nút VÀO BÀN: Chỉ hiện khi Đã xác nhận (Khách đến check-in) */}
+        {['DA_XAC_NHAN'].includes(order.maTrangThaiDonHang) && (
+          <>
+            <button 
+              onClick={() => handleUpdateStatus(order.maDonHang, 'CHO_THANH_TOAN')} 
+              className={`${btnClass} bg-blue-500 text-white rounded hover:bg-blue-600`}
+              title="Khách vào bàn"
+            >
+              Vào bàn
+            </button>
+            <button 
+              onClick={() => handleUpdateStatus(order.maDonHang, 'DA_HUY')} 
+              className={`${btnClass} bg-red-500 text-white rounded hover:bg-red-600`}
+              title="Hủy đơn"
+            >
+              Hủy
+            </button>
+          </>
+        )}
+
+        {/* 3. Nút HỦY ĐƠN: Hiện khi Đang phục vụ (nếu cần xử lý sự cố) */}
+        {['CHO_THANH_TOAN'].includes(order.maTrangThaiDonHang) && (
+           <button 
+              onClick={() => handleUpdateStatus(order.maDonHang, 'DA_HUY')} 
+              className={`${btnClass} bg-gray-500 text-white rounded hover:bg-gray-600`}
+              title="Hủy đơn đang phục vụ"
+            >
+              Hủy
+            </button>
+        )}
+      </div>
+    );
+  };
+
   const formatCurrency = (val: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
   const formatDate = (date: string) => date ? new Date(date).toLocaleString('vi-VN') : '-';
   
@@ -195,9 +278,10 @@ const OrderManagement: React.FC = () => {
                    <td className="px-4 py-3 text-sm">{formatDate(order.thoiGianDatHang)}</td>
                    <td className="px-4 py-3 font-bold text-green-600">{formatCurrency(order.tongTien)}</td>
                    <td className="px-4 py-3"><span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.maTrangThaiDonHang)}`}>{order.tenTrangThai}</span></td>
-                   <td className="px-4 py-3 flex gap-2">
-                     <button onClick={() => handleViewDetails(order)} className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600">Chi tiết</button>
-                     {order.maTrangThaiDonHang === 'CHO_XAC_NHAN' && <button onClick={() => handleUpdateStatus(order.maDonHang, 'DA_XAC_NHAN')} className="bg-green-500 text-white px-2 py-1 rounded text-sm hover:bg-green-600">Duyệt</button>}
+                   <td className="px-4 py-3 flex gap-2 items-center">
+                     <button onClick={() => handleViewDetails(order)} className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-200 border border-gray-300">Chi tiết</button>
+                     {/* Hiển thị nút thao tác */}
+                     {renderActionButtons(order, 'small')}
                    </td>
                  </tr>
                ))}
@@ -220,7 +304,7 @@ const OrderManagement: React.FC = () => {
           <div className="bg-white rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto flex flex-col shadow-2xl">
             <div className="flex justify-between items-center p-4 border-b bg-gray-50">
               <h2 className="text-lg font-bold">Chi tiết đơn: {selectedOrder.maDonHang}</h2>
-              <button onClick={() => setSelectedOrder(null)} className="text-3xl">&times;</button>
+              <button onClick={() => setSelectedOrder(null)} className="text-3xl hover:text-red-500">&times;</button>
             </div>
 
             <div className="p-6 space-y-6">
@@ -234,6 +318,7 @@ const OrderManagement: React.FC = () => {
                    <p className="text-gray-500">Thời gian đặt</p>
                    <p className="font-semibold text-gray-900">{formatDate(selectedOrder.thoiGianDatHang)}</p>
                    <p>Số người: {selectedOrder.soLuongNguoiDK}</p>
+                   <p className={`inline-block px-2 py-1 rounded text-xs font-bold mt-1 ${getStatusColor(selectedOrder.maTrangThaiDonHang)}`}>{selectedOrder.tenTrangThai}</p>
                  </div>
               </div>
 
@@ -255,7 +340,6 @@ const OrderManagement: React.FC = () => {
 
               <div className="flex justify-end text-right">
                 <div className="w-1/2 space-y-2">
-                  {/* Sử dụng calculatedTotal để hiển thị đúng tổng tiền */}
                   <div className="flex justify-between text-gray-600"><span>Tổng tiền hàng:</span><span>{formatCurrency(calculatedTotal)}</span></div>
                   <div className="flex justify-between text-gray-600"><span>Đã đặt cọc:</span><span>-{formatCurrency(selectedOrder.tienDatCoc || 0)}</span></div>
                   <div className="flex justify-between text-xl font-bold text-green-600 border-t pt-2">
@@ -265,15 +349,23 @@ const OrderManagement: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-4 bg-gray-50 border-t flex justify-end gap-3">
-              <button onClick={() => setSelectedOrder(null)} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 font-medium">Đóng lại</button>
-              {/* Nút in hóa đơn */}
-              {selectedOrder.maTrangThaiDonHang === 'DA_HOAN_THANH' && (
-                <button onClick={handlePrint} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-                  In hóa đơn
-                </button>
-              )}
+            <div className="p-4 bg-gray-50 border-t flex justify-between items-center gap-3">
+              {/* Nút thao tác bên trái */}
+              <div>
+                {renderActionButtons(selectedOrder, 'large')}
+              </div>
+
+              {/* Nút đóng & in bên phải */}
+              <div className="flex gap-3">
+                <button onClick={() => setSelectedOrder(null)} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 font-medium">Đóng lại</button>
+                {/* Nút in hóa đơn */}
+                {(selectedOrder.maTrangThaiDonHang === 'DA_HOAN_THANH' || selectedOrder.maTrangThaiDonHang === 'CHO_THANH_TOAN') && (
+                  <button onClick={handlePrint} className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-medium flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                    {selectedOrder.maTrangThaiDonHang === 'DA_HOAN_THANH' ? 'In hóa đơn' : 'In tạm tính'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -285,7 +377,7 @@ const OrderManagement: React.FC = () => {
           ref={invoiceRef} 
           order={selectedOrder} 
           groupedItems={groupedDetails} 
-          totalAmount={calculatedTotal} // Truyền tổng tiền đã tính chính xác vào
+          totalAmount={calculatedTotal} 
         />
       </div>
     </div>
