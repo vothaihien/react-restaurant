@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { employeeService, Employee, Role } from "@/services/employeeService";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFeedback } from "@/contexts/FeedbackContext";
@@ -12,6 +12,8 @@ const EmployeesView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -205,6 +207,23 @@ const EmployeesView: React.FC = () => {
     }
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(employees.length / itemsPerPage);
+  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
+
+  const paginatedItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return employees.slice(startIndex, endIndex);
+  }, [employees, currentPage, itemsPerPage]);
+
+  // Reset về trang 1 khi dữ liệu thay đổi
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
   if (!isManager) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -245,10 +264,12 @@ const EmployeesView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {employees.length > 0 ? (
-                employees.map((employee: any, index) => (
+              {paginatedItems.length > 0 ? (
+                paginatedItems.map((employee: any, index) => {
+                  const orderNumber = (currentPage - 1) * itemsPerPage + index + 1;
+                  return (
                   <tr key={employee.maNhanVien || employee.MaNhanVien} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{index + 1}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{orderNumber}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{employee.hoTen || employee.HoTen}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{employee.tenDangNhap || employee.TenDangNhap}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{employee.email || employee.Email || "-"}</td>
@@ -268,7 +289,8 @@ const EmployeesView: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">
@@ -279,6 +301,45 @@ const EmployeesView: React.FC = () => {
             </tbody>
           </table>
         </div>
+        {employees.length > 0 && (
+          <div className="p-4 border-t border-gray-200 flex justify-between items-center bg-gray-50">
+            <div className="flex items-center gap-4">
+              <label className="text-sm text-gray-700">Hiển thị:</label>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              >
+                <option value={5}>5 nhân viên</option>
+                <option value={10}>10 nhân viên</option>
+                <option value={20}>20 nhân viên</option>
+                <option value={50}>50 nhân viên</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => paginate(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1 border rounded bg-white disabled:opacity-50 hover:bg-gray-50 transition"
+              >
+                Trước
+              </button>
+              <span className="text-sm text-gray-700">
+                Trang {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={() => paginate(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 border rounded bg-white disabled:opacity-50 hover:bg-gray-50 transition"
+              >
+                Sau
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {isModalOpen && (
