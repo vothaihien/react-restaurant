@@ -4,7 +4,7 @@ import { useFeedback } from "@/contexts/FeedbackContext";
 import { tablesApi } from "@/api/tables";
 import { employeesApi } from "@/api/employees";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Building2, Info, Palette, Type, Monitor } from "lucide-react";
+import { Users, Building2, Info, Palette, Type } from "lucide-react";
 
 interface TableData {
   maBan: string;
@@ -323,38 +323,6 @@ const SettingsView: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Theme */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Monitor className="w-4 h-4 inline mr-1" />
-                Chế độ hiển thị
-              </label>
-              <div className="flex gap-2">
-                {(["light", "dark", "auto"] as const).map((theme) => (
-                  <button
-                    key={theme}
-                    onClick={() => handleUISettingChange("theme", theme)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      uiSettings.theme === theme
-                        ? "text-white"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                    style={
-                      uiSettings.theme === theme
-                        ? { backgroundColor: "hsl(var(--primary))" }
-                        : {}
-                    }
-                  >
-                    {theme === "light"
-                      ? "Sáng"
-                      : theme === "dark"
-                      ? "Tối"
-                      : "Tự động"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Primary Color */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
