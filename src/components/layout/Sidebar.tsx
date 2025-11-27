@@ -1,5 +1,6 @@
 import React from 'react';
 import type { View } from '@/types';
+import { Tag } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   LayoutGrid,
@@ -35,6 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({currentPath}) => {
         ...(isManager ? [
             { path: '/orders-management', label: 'Quản lý đơn hàng', icon: Package }, // Thêm mục Quản lý đơn hàng nếu là quản lý, xem trạng thái đơn hàng
         ] : []),
+        { path: '/promotions', label: 'Khuyến mãi', icon: Tag },
         { path: '/inventory', label: 'Kho', icon: MenuIcon },
         { path: '/masterdata', label: 'Danh mục', icon: SettingsIcon },
         { path: '/kds', label: 'Màn hình bếp', icon: ChefHatIcon },

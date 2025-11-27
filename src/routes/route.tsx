@@ -1,5 +1,6 @@
 import React from "react";
 import OrderManagement from 'src/pages/admin/OrdersManagement';
+import PromotionManagement from 'src/pages/admin/PromoteManagement';
 import { Routes, Route } from "react-router-dom";
 import {
   DashboardView,
@@ -24,6 +25,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/inventory" element={<InventoryScreen />} />
       <Route path="/masterdata" element={<MasterDataView />} />
       <Route path="/orders-management" element={<OrderManagement />} />
+      <Route path="/promotions" element={<PromotionManagement />} />
       <Route path="/kds" element={<KDSView />} />
       <Route
         path="/customer"
