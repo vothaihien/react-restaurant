@@ -89,10 +89,9 @@ export const promotionsApi = {
       token: getToken(),
     }),
 
-  // Lấy danh sách công thức nấu ăn (thay vì món ăn trực tiếp)
   getRecipes: () => 
-    request<any[]>("/api/CongThucNauAn", { token: getToken() }),
+    request<any[]>("/api/KhuyenMai/CongThucVaDanhMuc", { token: getToken() }),
 
   getCategories: () =>
-    request<any[]>("/api/DanhMucMonAn", { token: getToken() }),
+    request<any[]>("/api/KhuyenMai/DanhMuc", { token: getToken() }),
 };
