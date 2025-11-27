@@ -178,6 +178,15 @@ const BookingTab: React.FC = () => {
       return;
     }
 
+    if (dateTime.getTime() < Date.now()) {
+      notify({
+        tone: "warning",
+        title: "Thời gian không hợp lệ",
+        description: "Vui lòng chọn thời điểm trong tương lai để đặt bàn.",
+      });
+      return;
+    }
+
     const ts = dateTime.getTime();
     try {
       const tableIds = selectedTableIds.length > 0 ? selectedTableIds : [];
