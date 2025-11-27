@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { tablesApi } from "@/api/tables";
 import { TableStatus } from "@/types/tables";
 import AuthBox from "@/pages/customer/components/AuthBox";
+import { formatVND } from "@/utils";
 import {
   CONTACT_EMAIL_KEY,
   CONTACT_NAME_KEY,
@@ -27,6 +28,29 @@ const BookingTab: React.FC = () => {
   const [notes, setNotes] = useState("");
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
   const [showAuthForBooking, setShowAuthForBooking] = useState(false);
+  const [wantDeposit, setWantDeposit] = useState(false);
+  const [depositAmount, setDepositAmount] = useState<number>(0);
+
+  // Tính tiền cọc tự động dựa trên số người (theo logic backend)
+  const calculateDeposit = useMemo(() => {
+    if (party >= 6) {
+      const donGiaCoc = 50000;
+      let tienCoc = party * donGiaCoc;
+      if (tienCoc < 200000) {
+        tienCoc = 200000;
+      }
+      return tienCoc;
+    }
+    return 0;
+  }, [party]);
+
+  // Tự động set tiền cọc khi số người >= 6
+  useEffect(() => {
+    if (party >= 6) {
+      setWantDeposit(true);
+      setDepositAmount(calculateDeposit);
+    }
+  }, [party, calculateDeposit]);
 
   const [availableTables, setAvailableTables] = useState<
     Array<{
@@ -40,7 +64,9 @@ const BookingTab: React.FC = () => {
   >([]);
   const [loadingTables, setLoadingTables] = useState(false);
   const [selectedTang, setSelectedTang] = useState<string>("");
-  const [tangs, setTangs] = useState<Array<{ maTang: string; tenTang: string }>>([]);
+  const [tangs, setTangs] = useState<
+    Array<{ maTang: string; tenTang: string }>
+  >([]);
 
   useEffect(() => {
     const loadTangs = async () => {
@@ -203,9 +229,24 @@ const BookingTab: React.FC = () => {
         source: "App",
         notes: notes || "",
         tableIds: tableIds.length > 0 ? tableIds : undefined,
+        tienDatCoc: wantDeposit && depositAmount > 0 ? depositAmount : 0,
       };
 
-      await createReservation(reservationData);
+      const result = await createReservation(reservationData);
+
+      // Xử lý payment URL nếu backend yêu cầu thanh toán
+      if (result?.requiresPayment && result?.paymentUrl) {
+        notify({
+          tone: "info",
+          title: "Yêu cầu đặt cọc",
+          description: `Vui lòng thanh toán đặt cọc ${formatVND(
+            result.depositAmount || depositAmount
+          )} để hoàn tất đặt bàn.`,
+        });
+        // Redirect đến payment URL
+        window.location.href = result.paymentUrl;
+        return;
+      }
 
       setName("");
       setPhone("");
@@ -215,18 +256,28 @@ const BookingTab: React.FC = () => {
       setNotes("");
       setSelectedTableIds([]);
       setAvailableTables([]);
+      setWantDeposit(false);
+      setDepositAmount(0);
 
       const selectedTablesNames = selectedTableIds
         .map((id) => availableTables.find((t) => t.id === id)?.name || id)
         .join(", ");
 
+      let description = "";
+      if (selectedTableIds.length > 0) {
+        description = `Đã gửi yêu cầu đặt ${selectedTableIds.length} bàn (${selectedTablesNames}).`;
+      } else {
+        description = "Đã gửi yêu cầu đặt bàn.";
+      }
+      if (wantDeposit && depositAmount > 0) {
+        description += ` Đã đặt cọc ${formatVND(depositAmount)}.`;
+      }
+      description += " Nhà hàng sẽ liên hệ lại để xác nhận.";
+
       notify({
         tone: "success",
         title: "Đã gửi yêu cầu",
-        description:
-          selectedTableIds.length > 0
-            ? `Đã gửi yêu cầu đặt ${selectedTableIds.length} bàn (${selectedTablesNames}). Nhà hàng sẽ liên hệ lại để xác nhận.`
-            : "Đã gửi yêu cầu đặt bàn. Nhà hàng sẽ liên hệ lại để xác nhận.",
+        description,
       });
     } catch (error: any) {
       notify({
@@ -250,7 +301,8 @@ const BookingTab: React.FC = () => {
         <div className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="text-sm text-gray-800">
             <div className="font-semibold text-indigo-900">
-              Đăng nhập bằng Email / SĐT để quản lý lịch sử & hủy đặt bàn của bạn
+              Đăng nhập bằng Email / SĐT để quản lý lịch sử & hủy đặt bàn của
+              bạn
             </div>
             <div className="text-xs sm:text-sm text-gray-700 mt-1">
               Khi đăng nhập, mỗi lần đặt bàn sẽ được lưu lại, bạn có thể xem lại
@@ -298,7 +350,9 @@ const BookingTab: React.FC = () => {
                 <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-800">
                     Đã chọn:{" "}
-                    <strong>{new Date(dateTime).toLocaleString("vi-VN")}</strong>{" "}
+                    <strong>
+                      {new Date(dateTime).toLocaleString("vi-VN")}
+                    </strong>{" "}
                     cho <strong>{party}</strong> khách
                   </p>
                 </div>
@@ -307,159 +361,178 @@ const BookingTab: React.FC = () => {
           </Card>
 
           {dateTime && party >= 1 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Chọn bàn có sẵn</CardTitle>
-                <p className="text-sm text-gray-500 mt-1">
-                  Bạn có thể chọn nhiều bàn nhỏ để đủ chỗ cho {party} khách. Tổng
-                  sức chứa đã chọn sẽ hiển thị ngay bên dưới.
-                </p>
-              </CardHeader>
-              <CardContent>
-                {loadingTables ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>Đang tải danh sách bàn có sẵn...</p>
+            <>
+              {availableTables.length > 0 && (
+                <>
+                  <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700 space-y-1">
+                    <div className="font-semibold text-slate-900">
+                      Tổng sức chứa đã chọn: {totalSelectedCapacity} / {party}{" "}
+                      khách
+                    </div>
+                    {selectedTableIds.length === 0 ? (
+                      <p className="text-amber-700">
+                        Vui lòng chọn ít nhất một bàn để gửi yêu cầu đặt chỗ.
+                      </p>
+                    ) : remainingGuests > 0 ? (
+                      <p className="text-amber-700">
+                        Còn thiếu {remainingGuests} chỗ. Vui lòng chọn thêm bàn
+                        hoặc giảm số khách.
+                      </p>
+                    ) : (
+                      <p className="text-emerald-700">
+                        Đã đủ chỗ cho {party} khách. Bạn vẫn có thể ghi chú thêm
+                        yêu cầu đặc biệt phía dưới.
+                      </p>
+                    )}
                   </div>
-                ) : availableTables.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>Không có bàn nào trống trong khung giờ này.</p>
-                    <p className="text-sm mt-2">
-                      Vui lòng chọn thời gian khác hoặc liên hệ nhà hàng.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
-                      <div className="text-sm text-gray-600">
-                        Tìm thấy <strong>{filteredTables.length}</strong> bàn có
-                        sẵn cho {party} khách vào{" "}
-                        {new Date(dateTime).toLocaleString("vi-VN")}
+                  <div className="mb-4 rounded-lg border border-gray-200 bg-white px-4 py-3 text-xs text-gray-600">
+                    <div className="font-semibold text-gray-900 mb-2">
+                      Chú thích trạng thái bàn:
+                    </div>
+                    <div className="flex flex-wrap gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                        <span>Bàn trống - có thể đặt ngay</span>
                       </div>
-                      {tangs.length > 0 && (
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm font-medium text-gray-700">
-                            Lọc theo tầng:
-                          </label>
-                          <select
-                            value={selectedTang}
-                            onChange={(e) => setSelectedTang(e.target.value)}
-                            className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                          >
-                            <option value="">Tất cả tầng</option>
-                            {tangs.map((tang) => (
-                              <option key={tang.maTang} value={tang.maTang}>
-                                {tang.tenTang}
-                              </option>
-                            ))}
-                          </select>
+                      <div className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                        <span>Bàn nhỏ - có thể chọn nhiều bàn</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full bg-slate-400"></span>
+                        <span>Bàn đã được đặt</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Chọn bàn có sẵn</CardTitle>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Bạn có thể chọn nhiều bàn nhỏ để đủ chỗ cho {party} khách.
+                    Tổng sức chứa đã chọn sẽ hiển thị ngay bên dưới.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {loadingTables ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>Đang tải danh sách bàn có sẵn...</p>
+                    </div>
+                  ) : availableTables.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>Không có bàn nào trống trong khung giờ này.</p>
+                      <p className="text-sm mt-2">
+                        Vui lòng chọn thời gian khác hoặc liên hệ nhà hàng.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
+                        <div className="text-sm text-gray-600">
+                          Tìm thấy <strong>{filteredTables.length}</strong> bàn
+                          có sẵn cho {party} khách vào{" "}
+                          {new Date(dateTime).toLocaleString("vi-VN")}
                         </div>
-                      )}
-                    </div>
-
-                    <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700 space-y-1">
-                      <div className="font-semibold text-slate-900">
-                        Tổng sức chứa đã chọn: {totalSelectedCapacity} / {party}{" "}
-                        khách
+                        {tangs.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <label className="text-sm font-medium text-gray-700">
+                              Lọc theo tầng:
+                            </label>
+                            <select
+                              value={selectedTang}
+                              onChange={(e) => setSelectedTang(e.target.value)}
+                              className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                            >
+                              <option value="">Tất cả tầng</option>
+                              {tangs.map((tang) => (
+                                <option key={tang.maTang} value={tang.maTang}>
+                                  {tang.tenTang}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
-                      {selectedTableIds.length === 0 ? (
-                        <p className="text-amber-700">
-                          Vui lòng chọn ít nhất một bàn để gửi yêu cầu đặt chỗ.
-                        </p>
-                      ) : remainingGuests > 0 ? (
-                        <p className="text-amber-700">
-                          Còn thiếu {remainingGuests} chỗ. Vui lòng chọn thêm bàn
-                          hoặc giảm số khách.
-                        </p>
-                      ) : (
-                        <p className="text-emerald-700">
-                          Đã đủ chỗ cho {party} khách. Bạn vẫn có thể ghi chú thêm
-                          yêu cầu đặc biệt phía dưới.
-                        </p>
-                      )}
-                    </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
-                      {filteredTables.map((t: any) => {
-                        const isAvailable =
-                          t.status === "Đang trống" ||
-                          t.status === "Available" ||
-                          t.status === TableStatus.Empty;
-                        const isCapacityLimited =
-                          t.status === "Không đủ sức chứa" ||
-                          t.status === "Không đủ chỗ" ||
-                          t.status === "Suc chua nho" ||
-                          t.status === "Sức chứa nhỏ";
-                        const disabled = !(isAvailable || isCapacityLimited);
-                        const selected = selectedTableIds.includes(t.id);
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                        {filteredTables.map((t: any) => {
+                          const isAvailable =
+                            t.status === "Đang trống" ||
+                            t.status === "Available" ||
+                            t.status === TableStatus.Empty;
+                          const isCapacityLimited =
+                            t.status === "Không đủ sức chứa" ||
+                            t.status === "Không đủ chỗ" ||
+                            t.status === "Suc chua nho" ||
+                            t.status === "Sức chứa nhỏ";
+                          const disabled = !(isAvailable || isCapacityLimited);
+                          const selected = selectedTableIds.includes(t.id);
 
-                        const statusDotClass = isAvailable
-                          ? "bg-emerald-500"
-                          : isCapacityLimited
-                          ? "bg-amber-500"
-                          : "bg-slate-400";
+                          const statusDotClass = isAvailable
+                            ? "bg-emerald-500"
+                            : isCapacityLimited
+                            ? "bg-amber-500"
+                            : "bg-slate-400";
 
-                        return (
-                          <button
-                            key={t.id}
-                            disabled={disabled}
-                            onClick={() => {
-                              if (selected) {
-                                setSelectedTableIds(
-                                  selectedTableIds.filter((id) => id !== t.id)
-                                );
-                              } else {
-                                setSelectedTableIds([
-                                  ...selectedTableIds,
-                                  t.id,
-                                ]);
+                          return (
+                            <button
+                              key={t.id}
+                              disabled={disabled}
+                              onClick={() => {
+                                if (selected) {
+                                  setSelectedTableIds(
+                                    selectedTableIds.filter((id) => id !== t.id)
+                                  );
+                                } else {
+                                  setSelectedTableIds([
+                                    ...selectedTableIds,
+                                    t.id,
+                                  ]);
+                                }
+                              }}
+                              className={`relative p-4 rounded-2xl border transition cursor-pointer bg-white/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col gap-2 overflow-hidden ${
+                                selected ? "border-indigo-600 bg-indigo-50" : ""
+                              }`}
+                              title={
+                                disabled
+                                  ? "Bàn không khả dụng"
+                                  : selected
+                                  ? "Bỏ chọn bàn này"
+                                  : isCapacityLimited
+                                  ? "Bàn nhỏ - bạn có thể chọn nhiều bàn để đủ chỗ"
+                                  : "Chọn bàn này"
                               }
-                            }}
-                            className={`relative p-4 rounded-2xl border transition cursor-pointer bg-white/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col gap-2 overflow-hidden ${
-                              selected ? "border-indigo-600 bg-indigo-50" : ""
-                            }`}
-                            title={
-                              disabled
-                                ? "Bàn không khả dụng"
-                                : selected
-                                ? "Bỏ chọn bàn này"
-                                : isCapacityLimited
-                                ? "Bàn nhỏ - bạn có thể chọn nhiều bàn để đủ chỗ"
-                                : "Chọn bàn này"
-                            }
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex flex-col">
-                                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900">
-                                  <span
-                                    className={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}
-                                  />
-                                  {t.name}
-                                </span>
-                                {t.tenTang && (
-                                  <span className="mt-0.5 text-[11px] uppercase tracking-wide text-gray-500">
-                                    {t.tenTang}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex flex-col">
+                                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                                    <span
+                                      className={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}
+                                    />
+                                    {t.name}
                                   </span>
-                                )}
+                                  {t.tenTang && (
+                                    <span className="mt-0.5 text-[11px] uppercase tracking-wide text-gray-500">
+                                      {t.tenTang}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                            <div className="mt-2 flex items-center justify-between text-xs font-medium">
-                              <div className="flex items-center gap-2">
+                              <div className="mt-2 flex items-center justify-between text-xs font-medium">
                                 <span className="text-emerald-600">
                                   {t.capacity} khách
                                 </span>
-                                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-600">
-                                  {t.status}
-                                </span>
                               </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </>
           )}
         </div>
 
@@ -517,6 +590,94 @@ const BookingTab: React.FC = () => {
                   />
                 </div>
                 <div className="pt-4 border-t border-gray-200">
+                  {party >= 6 && (
+                    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                      <p className="text-sm font-semibold text-amber-900 mb-1">
+                        ⚠️ Yêu cầu đặt cọc
+                      </p>
+                      <p className="text-xs text-amber-800">
+                        Với {party} khách, nhà hàng yêu cầu đặt cọc để giữ chỗ.
+                        Số tiền đặt cọc:{" "}
+                        <span className="font-bold">
+                          {formatVND(calculateDeposit)}
+                        </span>{" "}
+                        ({party} người × 50,000 VNĐ, tối thiểu 200,000 VNĐ).
+                      </p>
+                    </div>
+                  )}
+                  <div className="mb-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={wantDeposit}
+                        disabled={party >= 6}
+                        onChange={(e) => {
+                          if (party >= 6) return;
+                          setWantDeposit(e.target.checked);
+                          if (!e.target.checked) {
+                            setDepositAmount(0);
+                          } else if (depositAmount === 0) {
+                            setDepositAmount(200000);
+                          }
+                        }}
+                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                      <span className="text-sm font-medium text-gray-700">
+                        {party >= 6
+                          ? "Đặt cọc bắt buộc (tự động)"
+                          : "Tôi muốn đặt cọc để giữ chỗ"}
+                      </span>
+                    </label>
+                    {wantDeposit && (
+                      <div className="mt-3 ml-6">
+                        {party >= 6 ? (
+                          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                            <p className="text-sm text-blue-900">
+                              <span className="font-semibold">
+                                Số tiền đặt cọc: {formatVND(depositAmount)}
+                              </span>
+                            </p>
+                            <p className="text-xs text-blue-700 mt-1">
+                              Số tiền này sẽ được tính tự động và yêu cầu thanh
+                              toán online để hoàn tất đặt bàn.
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Số tiền đặt cọc (VNĐ)
+                            </label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="10000"
+                              placeholder="Nhập số tiền đặt cọc"
+                              value={depositAmount || ""}
+                              onChange={(e) => {
+                                const value = parseInt(e.target.value) || 0;
+                                setDepositAmount(value);
+                              }}
+                              className="w-full"
+                            />
+                            {depositAmount > 0 && (
+                              <p className="mt-2 text-sm text-gray-600">
+                                Số tiền đặt cọc:{" "}
+                                <span className="font-semibold text-primary">
+                                  {formatVND(depositAmount)}
+                                </span>
+                              </p>
+                            )}
+                            <p className="mt-1 text-xs text-gray-500">
+                              Số tiền đặt cọc sẽ được trừ vào tổng hóa đơn khi
+                              thanh toán.
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-gray-200">
                   <div className="text-sm text-muted-foreground mb-3">
                     {selectedTableIds.length > 0
                       ? `Đã chọn ${selectedTableIds.length} bàn · tổng sức chứa ${totalSelectedCapacity} khách`
@@ -524,14 +685,14 @@ const BookingTab: React.FC = () => {
                   </div>
                   {selectedTableIds.length > 0 && remainingGuests > 0 && (
                     <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                      Còn thiếu {remainingGuests} chỗ để đủ cho {party} khách. Vui
-                      lòng chọn thêm bàn hoặc điều chỉnh số khách.
+                      Còn thiếu {remainingGuests} chỗ để đủ cho {party} khách.
+                      Vui lòng chọn thêm bàn hoặc điều chỉnh số khách.
                     </div>
                   )}
                   {selectedTableIds.length > 0 && remainingGuests <= 0 && (
                     <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                      Đủ chỗ cho {party} khách. Nếu cần ghép sát nhau, hãy ghi chú
-                      để nhà hàng hỗ trợ.
+                      Đủ chỗ cho {party} khách. Nếu cần ghép sát nhau, hãy ghi
+                      chú để nhà hàng hỗ trợ.
                     </div>
                   )}
 
@@ -563,7 +724,9 @@ const BookingTab: React.FC = () => {
                               type="button"
                               onClick={() =>
                                 setSelectedTableIds(
-                                  selectedTableIds.filter((id) => id !== tableId)
+                                  selectedTableIds.filter(
+                                    (id) => id !== tableId
+                                  )
                                 )
                               }
                               className="text-red-600 hover:text-red-800 font-bold text-lg leading-none px-2 py-1 hover:bg-red-50 rounded"
@@ -611,4 +774,3 @@ const BookingTab: React.FC = () => {
 };
 
 export default BookingTab;
-
