@@ -723,7 +723,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       ThoiGianDatHang: thoiGian,
       SoLuongNguoi: data.partySize,
       GhiChu: data.notes || undefined,
-      MaNhanVien: undefined,
+      MaNhanVien: "NV000",
       TienDatCoc: undefined,
       MaKhachHang: data.customerId || undefined,
       Email: data.email || undefined,

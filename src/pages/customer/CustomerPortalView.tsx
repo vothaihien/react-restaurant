@@ -15,6 +15,9 @@ import { menuApi } from "@/api/menu";
 import EMenuView from "@/components/menu/EMenuView";
 import MenuTheoKhungGio from "@/components/menu/MenuTheoKhungGio";
 
+const CONTACT_NAME_KEY = "customer_contact_name";
+const CONTACT_EMAIL_KEY = "customer_contact_email";
+
 export type CustomerTab =
   | "home"
   | "booking"
@@ -48,6 +51,51 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   const [notes, setNotes] = useState("");
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
   const [showAuthForBooking, setShowAuthForBooking] = useState(false);
+  useEffect(() => {
+    if (!user || user.type !== "customer") return;
+    setName((prev) => (prev ? prev : user.name || ""));
+
+    const fallbackEmail =
+      user.email ||
+      (user.identifier && user.identifier.includes("@")
+        ? user.identifier
+        : undefined);
+    if (fallbackEmail) {
+      setEmail((prev) => (prev ? prev : fallbackEmail));
+    }
+
+    const fallbackPhone =
+      user.phone ||
+      (user.identifier && !user.identifier.includes("@")
+        ? user.identifier
+        : undefined);
+    if (fallbackPhone) {
+      setPhone((prev) => (prev ? prev : fallbackPhone));
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!name) {
+      const cachedName = localStorage.getItem(CONTACT_NAME_KEY);
+      if (cachedName) setName(cachedName);
+    }
+    if (!email) {
+      const cachedEmail = localStorage.getItem(CONTACT_EMAIL_KEY);
+      if (cachedEmail) setEmail(cachedEmail);
+    }
+  }, [name, email]);
+
+  useEffect(() => {
+    if (name) {
+      localStorage.setItem(CONTACT_NAME_KEY, name);
+    }
+  }, [name]);
+
+  useEffect(() => {
+    if (email) {
+      localStorage.setItem(CONTACT_EMAIL_KEY, email);
+    }
+  }, [email]);
 
   // Available tables for selected date/time
   const [availableTables, setAvailableTables] = useState<
@@ -169,6 +217,29 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       return tableMaTang === selectedMaTang;
     });
   }, [availableTables, selectedTang]);
+
+  const selectedTables = useMemo(
+    () =>
+      selectedTableIds
+        .map((id) => availableTables.find((t) => t.id === id))
+        .filter((t): t is (typeof availableTables)[number] => Boolean(t)),
+    [selectedTableIds, availableTables]
+  );
+
+  const totalSelectedCapacity = useMemo(
+    () =>
+      selectedTables.reduce(
+        (sum, table) => sum + (Number(table.capacity) || 0),
+        0
+      ),
+    [selectedTables]
+  );
+
+  const remainingGuests =
+    party > 0 ? Math.max(party - totalSelectedCapacity, 0) : 0;
+
+  const hasEnoughCapacity =
+    selectedTableIds.length === 0 || totalSelectedCapacity >= party;
 
   const submitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -440,13 +511,18 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
       statusStr === "dọn" ||
       statusStr === "bảo trì" ||
       statusStr === "đang bảo trì";
-    const isNotEnoughCapacity =
-      statusStr === "không đủ sức chứa" || statusStr === "không đủ chỗ";
+    const isCapacityLimited =
+      statusStr === "không đủ sức chứa" ||
+      statusStr === "không đủ chỗ" ||
+      statusStr === "suc chua nho";
 
     if (isAvailable) {
       return `${base} border-emerald-400/70 bg-emerald-50/70 hover:bg-emerald-50`;
     }
-    if (isOccupied || isReserved || isCleaning || isNotEnoughCapacity) {
+    if (isCapacityLimited) {
+      return `${base} border-amber-300 bg-amber-50/70 hover:bg-amber-50`;
+    }
+    if (isOccupied || isReserved || isCleaning) {
       return `${base} border-slate-200 bg-slate-50/80 opacity-80 cursor-not-allowed`;
     }
     return `${base} border-slate-200 bg-white`;
@@ -627,6 +703,10 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                 <Card>
                   <CardHeader>
                     <CardTitle>Chọn bàn có sẵn</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Bạn có thể chọn nhiều bàn nhỏ để đủ chỗ cho {party} khách.
+                      Tổng sức chứa đã chọn sẽ hiển thị ngay bên dưới.
+                    </p>
                   </CardHeader>
                   <CardContent>
                     {loadingTables ? (
@@ -670,13 +750,42 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                             </div>
                           )}
                         </div>
+                        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700">
+                          <div className="font-semibold text-slate-900">
+                            Tổng sức chứa đã chọn: {totalSelectedCapacity} /{" "}
+                            {party} khách
+                          </div>
+                          {selectedTableIds.length === 0 ? (
+                            <p className="mt-1">
+                              Chưa chọn bàn. Bạn có thể bỏ trống để nhà hàng tự
+                              sắp xếp hoặc chọn nhiều bàn nhỏ theo nhu cầu.
+                            </p>
+                          ) : remainingGuests > 0 ? (
+                            <p className="mt-1 text-amber-700">
+                              Còn thiếu {remainingGuests} chỗ. Vui lòng chọn
+                              thêm bàn hoặc giảm số khách.
+                            </p>
+                          ) : (
+                            <p className="mt-1 text-emerald-700">
+                              Đã đủ chỗ cho {party} khách. Bạn vẫn có thể ghi
+                              chú thêm yêu cầu đặc biệt phía dưới.
+                            </p>
+                          )}
+                        </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
                           {filteredTables.map((t: any) => {
                             const isAvailable =
                               t.status === "Đang trống" ||
                               t.status === "Available" ||
                               t.status === TableStatus.Empty;
-                            const disabled = !isAvailable;
+                            const isCapacityLimited =
+                              t.status === "Không đủ sức chứa" ||
+                              t.status === "Không đủ chỗ" ||
+                              t.status === "Suc chua nho" ||
+                              t.status === "Sức chứa nhỏ";
+                            const disabled = !(
+                              isAvailable || isCapacityLimited
+                            );
                             const selected = selectedTableIds.includes(t.id);
                             const isReserved =
                               t.status === "Đã đặt" ||
@@ -689,6 +798,8 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
 
                             const statusDotClass = isAvailable
                               ? "bg-emerald-500"
+                              : isCapacityLimited
+                              ? "bg-amber-500"
                               : isReserved
                               ? "bg-amber-500"
                               : isOccupiedNow
@@ -721,6 +832,8 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                                     ? "Bàn không khả dụng"
                                     : selected
                                     ? "Bỏ chọn bàn này"
+                                    : isCapacityLimited
+                                    ? "Bàn nhỏ - bạn có thể chọn nhiều bàn để đủ chỗ"
                                     : "Chọn bàn này"
                                 }
                               >
@@ -853,9 +966,22 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                     <div className="pt-4 border-t border-gray-200">
                       <div className="text-sm text-muted-foreground mb-3">
                         {selectedTableIds.length > 0
-                          ? `Đã chọn ${selectedTableIds.length} bàn`
-                          : "Chưa chọn bàn (tuỳ chọn)"}
+                          ? `Đã chọn ${selectedTableIds.length} bàn · tổng sức chứa ${totalSelectedCapacity} khách`
+                          : "Chưa chọn bàn (tuỳ chọn - nhà hàng sẽ sắp xếp giúp bạn)"}
                       </div>
+                      {selectedTableIds.length > 0 && remainingGuests > 0 && (
+                        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                          Còn thiếu {remainingGuests} chỗ để đủ cho {party}{" "}
+                          khách. Vui lòng chọn thêm bàn hoặc điều chỉnh số
+                          khách.
+                        </div>
+                      )}
+                      {selectedTableIds.length > 0 && remainingGuests <= 0 && (
+                        <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                          Đủ chỗ cho {party} khách. Nếu cần ghép sát nhau, hãy
+                          ghi chú ở trên để nhà hàng hỗ trợ.
+                        </div>
+                      )}
 
                       {/* Danh sách bàn đã chọn - dưới text "Đã chọn n bàn" */}
                       {selectedTableIds.length > 0 && (
@@ -903,7 +1029,14 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
                       )}
 
                       <div className="flex items-center justify-end">
-                        <Button type="submit" disabled={!name || !dateTime}>
+                        <Button
+                          type="submit"
+                          disabled={
+                            !name ||
+                            !dateTime ||
+                            (selectedTableIds.length > 0 && !hasEnoughCapacity)
+                          }
+                        >
                           Gửi yêu cầu đặt bàn
                         </Button>
                       </div>
@@ -1466,7 +1599,9 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
 
 export default CustomerPortalView;
 
-const BookingHistorySection: React.FC<{ token: string }> = ({ token }) => {
+export const BookingHistorySection: React.FC<{ token: string }> = ({
+  token,
+}) => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const { notify, confirm } = useFeedback();
@@ -1503,11 +1638,6 @@ const BookingHistorySection: React.FC<{ token: string }> = ({ token }) => {
     if (!shouldCancel) return;
     try {
       await reservationsApi.cancelBooking(maDonHang, token);
-      notify({
-        tone: "success",
-        title: "Đã hủy đặt bàn",
-        description: "Đặt bàn đã được hủy thành công.",
-      });
       setBookings((prev) =>
         prev.map((b) =>
           b.maDonHang === maDonHang || b.MaDonHang === maDonHang
@@ -1515,6 +1645,11 @@ const BookingHistorySection: React.FC<{ token: string }> = ({ token }) => {
             : b
         )
       );
+      notify({
+        tone: "success",
+        title: "Đã gửi yêu cầu hủy",
+        description: "Nhân viên sẽ kiểm tra và xác nhận trong giây lát.",
+      });
     } catch (err: any) {
       notify({
         tone: "error",
@@ -1544,7 +1679,7 @@ const BookingHistorySection: React.FC<{ token: string }> = ({ token }) => {
           <div key={maDon} className="border border-gray-200 rounded-lg p-4">
             <div className="flex justify-between items-start">
               <div>
-                <div className="font-semibold text-gray-900">Bàn {tenBan}</div>
+                <div className="font-semibold text-gray-900">{tenBan}</div>
                 <div className="text-sm text-gray-600">
                   {new Date(thoiGian).toLocaleString("vi-VN")} · {soNguoi} khách
                 </div>
@@ -1553,14 +1688,19 @@ const BookingHistorySection: React.FC<{ token: string }> = ({ token }) => {
                 </div>
               </div>
               {coTheHuy && !daHuy && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleCancel(maDon)}
-                  className="text-red-600 border-red-300 hover:bg-red-50"
-                >
-                  Hủy đặt
-                </Button>
+                <div className="flex flex-col gap-2 items-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCancel(maDon)}
+                    className="text-amber-600 border-amber-300 hover:bg-amber-50"
+                  >
+                    Yêu cầu hủy đơn
+                  </Button>
+                  <p className="text-[11px] text-amber-600">
+                    Nhà hàng sẽ xác nhận trước khi hủy
+                  </p>
+                </div>
               )}
             </div>
           </div>
@@ -1570,7 +1710,11 @@ const BookingHistorySection: React.FC<{ token: string }> = ({ token }) => {
   );
 };
 
-export const AuthBox: React.FC = () => {
+interface AuthBoxProps {
+  onSuccess?: () => void;
+}
+
+export const AuthBox: React.FC<AuthBoxProps> = ({ onSuccess }) => {
   const { notify } = useFeedback();
   const { checkUser, login, register } = useAuth();
   const [step, setStep] = useState<"identify" | "otp">("identify");
@@ -1608,14 +1752,23 @@ export const AuthBox: React.FC = () => {
     try {
       if (exists) {
         await login(identifier, otp);
+        if (identifier.includes("@")) {
+          localStorage.setItem(CONTACT_EMAIL_KEY, identifier.trim());
+        }
         notify({ tone: "success", title: "Đăng nhập thành công" });
+        onSuccess?.();
       } else {
         if (!name) {
           notify({ tone: "warning", title: "Thiếu họ tên đăng ký" });
           return;
         }
         await register(identifier, name, otp);
+        localStorage.setItem(CONTACT_NAME_KEY, name.trim());
+        if (identifier.includes("@")) {
+          localStorage.setItem(CONTACT_EMAIL_KEY, identifier.trim());
+        }
         notify({ tone: "success", title: "Đăng ký thành công" });
+        onSuccess?.();
       }
     } catch (err: any) {
       notify({

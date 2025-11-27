@@ -3,75 +3,157 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import CustomerPortalView, {
   CustomerTab,
   AuthBox,
+  BookingHistorySection,
 } from "@/pages/customer/CustomerPortalView";
+import { useAuth } from "@/contexts/AuthContext";
 
 const SiteHeader: React.FC<{
   onNavigate?: (tab: CustomerTab) => void;
   onQuickRegister?: () => void;
-}> = ({ onNavigate, onQuickRegister }) => (
-  <header className="sticky top-0 z-50 border-b border-primary/20 bg-white/80 backdrop-blur-sm">
-    <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-10 lg:px-20 py-3">
-      <div className="flex items-center gap-3 text-slate-900">
-        <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary">
-          <svg
-            viewBox="0 0 48 48"
-            xmlns="http://www.w3.org/2000/svg"
-            className="w-5 h-5"
-            fill="none"
-          >
-            <path
-              d="M44 11.2727C44 14.0109 39.8386 16.3957 33.69 17.6364C39.8386 18.877 44 21.2618 44 24C44 26.7382 39.8386 29.123 33.69 30.3636C39.8386 31.6043 44 33.9891 44 36.7273C44 40.7439 35.0457 44 24 44C12.9543 44 4 40.7439 4 36.7273C4 33.9891 8.16144 31.6043 14.31 30.3636C8.16144 29.123 4 26.7382 4 24C4 21.2618 8.16144 18.877 14.31 17.6364C8.16144 16.3957 4 14.0109 4 11.2727C4 7.25611 12.9543 4 24 4C35.0457 4 44 7.25611 44 11.2727Z"
-              fill="currentColor"
-            />
-          </svg>
+  onShowHistory?: () => void;
+}> = ({ onNavigate, onQuickRegister, onShowHistory }) => {
+  const { user, isAuthenticated, logout } = useAuth();
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const initials = user?.name?.charAt(0).toUpperCase() || "G";
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setShowAccountMenu(false);
+    }
+  }, [isAuthenticated]);
+
+  const handleLogout = () => {
+    logout();
+    setShowAccountMenu(false);
+    onNavigate?.("home");
+  };
+
+  const handleHistoryClick = () => {
+    if (!isAuthenticated) {
+      onQuickRegister?.();
+    } else {
+      onShowHistory?.();
+    }
+    setShowAccountMenu(false);
+  };
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-primary/20 bg-white/80 backdrop-blur-sm">
+      <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-10 lg:px-20 py-3">
+        <div className="flex items-center gap-3 text-slate-900">
+          <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary">
+            <svg
+              viewBox="0 0 48 48"
+              xmlns="http://www.w3.org/2000/svg"
+              className="w-5 h-5"
+              fill="none"
+            >
+              <path
+                d="M44 11.2727C44 14.0109 39.8386 16.3957 33.69 17.6364C39.8386 18.877 44 21.2618 44 24C44 26.7382 39.8386 29.123 33.69 30.3636C39.8386 31.6043 44 33.9891 44 36.7273C44 40.7439 35.0457 44 24 44C12.9543 44 4 40.7439 4 36.7273C4 33.9891 8.16144 31.6043 14.31 30.3636C8.16144 29.123 4 26.7382 4 24C4 21.2618 8.16144 18.877 14.31 17.6364C8.16144 16.3957 4 14.0109 4 11.2727C4 7.25611 12.9543 4 24 4C35.0457 4 44 7.25611 44 11.2727Z"
+                fill="currentColor"
+              />
+            </svg>
+          </div>
+          <h2 className="text-lg sm:text-xl font-bold tracking-tight">
+            Viet Restaurant
+          </h2>
         </div>
-        <h2 className="text-lg sm:text-xl font-bold tracking-tight">
-          Viet Restaurant
-        </h2>
+        <div className="hidden md:flex flex-1 justify-end gap-8 items-center">
+          <nav className="flex items-center gap-8 text-sm font-medium text-slate-700">
+            <button
+              onClick={() => onNavigate?.("home")}
+              className="hover:text-primary transition-colors"
+            >
+              Trang Chủ
+            </button>
+            <button
+              onClick={() => onNavigate?.("menu")}
+              className="hover:text-primary transition-colors"
+            >
+              Thực Đơn
+            </button>
+            <button
+              onClick={() => onNavigate?.("booking")}
+              className="hover:text-primary transition-colors"
+            >
+              Đặt Bàn
+            </button>
+            <button
+              onClick={() => onNavigate?.("loyalty")}
+              className="hover:text-primary transition-colors"
+            >
+              Giới Thiệu
+            </button>
+            <button
+              onClick={() => onNavigate?.("feedback")}
+              className="hover:text-primary transition-colors"
+            >
+              Liên Hệ
+            </button>
+          </nav>
+          {isAuthenticated ? (
+            <div className="relative ml-4">
+              <button
+                onClick={() => setShowAccountMenu((prev) => !prev)}
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-base font-semibold text-primary">
+                  {initials}
+                </div>
+              </button>
+
+              {showAccountMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowAccountMenu(false)}
+                  />
+                  <div className="absolute top-14 right-0 z-20 w-56 rounded-2xl border border-slate-200 bg-white shadow-xl">
+                    <div className="px-4 py-3 border-b border-slate-100">
+                      <p className="text-sm font-semibold text-slate-900">
+                        Tài khoản của bạn
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Xin chào, {user?.name || "khách"}!
+                      </p>
+                    </div>
+                    <div className="p-2 flex flex-col">
+                      <button
+                        onClick={handleHistoryClick}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-primary/10 hover:text-primary transition"
+                      >
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                          LS
+                        </span>
+                        Lịch sử đặt bàn
+                      </button>
+                      <button
+                        onClick={handleLogout}
+                        className="mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition"
+                      >
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-600 text-xs font-semibold">
+                          ⎋
+                        </span>
+                        Đăng xuất
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={onQuickRegister}
+              className="ml-4 inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              Đăng ký nhanh
+            </button>
+          )}
+        </div>
       </div>
-      <div className="hidden md:flex flex-1 justify-end gap-8 items-center">
-        <nav className="flex items-center gap-8 text-sm font-medium text-slate-700">
-          <button
-            onClick={() => onNavigate?.("home")}
-            className="hover:text-primary transition-colors"
-          >
-            Trang Chủ
-          </button>
-          <button
-            onClick={() => onNavigate?.("menu")}
-            className="hover:text-primary transition-colors"
-          >
-            Thực Đơn
-          </button>
-          <button
-            onClick={() => onNavigate?.("booking")}
-            className="hover:text-primary transition-colors"
-          >
-            Đặt Bàn
-          </button>
-          <button
-            onClick={() => onNavigate?.("loyalty")}
-            className="hover:text-primary transition-colors"
-          >
-            Giới Thiệu
-          </button>
-          <button
-            onClick={() => onNavigate?.("feedback")}
-            className="hover:text-primary transition-colors"
-          >
-            Liên Hệ
-          </button>
-        </nav>
-        <button
-          onClick={onQuickRegister}
-          className="ml-4 inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
-        >
-          Đăng ký nhanh
-        </button>
-      </div>
-    </div>
-  </header>
-);
+    </header>
+  );
+};
 
 const SiteFooter: React.FC = () => (
   <footer className="mt-10 border-t border-primary/20 bg-white">
@@ -148,11 +230,13 @@ const SiteFooter: React.FC = () => (
 );
 
 const CustomerApp: React.FC = () => {
+  const { isAuthenticated, user } = useAuth();
   const { tab: tabParam } = useParams<{ tab?: string }>();
   const location = useLocation();
   const navigate = useNavigate();
   const [tab, setTab] = useState<CustomerTab>("home");
   const [showQuickRegister, setShowQuickRegister] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Đồng bộ tab với URL và xử lý redirect
   useEffect(() => {
@@ -161,7 +245,7 @@ const CustomerApp: React.FC = () => {
       navigate("/customer/home", { replace: true });
       return;
     }
-    
+
     // Lấy tab từ URL params hoặc từ pathname
     const pathTab = tabParam || location.pathname.split("/").pop() || "home";
     const validTabs: CustomerTab[] = [
@@ -185,11 +269,23 @@ const CustomerApp: React.FC = () => {
     navigate(`/customer/${newTab}`);
   };
 
+  const handleAuthSuccess = () => {
+    setShowQuickRegister(false);
+    handleTabChange("home");
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      setShowQuickRegister(false);
+    }
+  }, [isAuthenticated]);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
       <SiteHeader
         onNavigate={handleTabChange}
         onQuickRegister={() => setShowQuickRegister(true)}
+        onShowHistory={() => setShowHistory(true)}
       />
       <main className="flex-1 max-w-6xl lg:max-w-7xl mx-auto w-full px-4 sm:px-6 md:px-8 py-6">
         <CustomerPortalView tab={tab} onTabChange={handleTabChange} />
@@ -217,7 +313,41 @@ const CustomerApp: React.FC = () => {
             <p className="text-sm text-gray-600 mb-3">
               Sử dụng Email để nhận OTP
             </p>
-            <AuthBox />
+            <AuthBox onSuccess={handleAuthSuccess} />
+          </div>
+        </div>
+      )}
+
+      {showHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div
+            className="absolute inset-0"
+            onClick={() => setShowHistory(false)}
+          />
+          <div className="relative z-10 w-full max-w-2xl rounded-2xl bg-white shadow-xl p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Lịch sử đặt bàn
+                </h2>
+                <p className="text-sm text-gray-500">
+                  Xem các lần đặt bàn đã thực hiện
+                </p>
+              </div>
+              <button
+                className="text-gray-400 hover:text-gray-600"
+                onClick={() => setShowHistory(false)}
+              >
+                ✕
+              </button>
+            </div>
+            {isAuthenticated && user?.token ? (
+              <BookingHistorySection token={user.token} />
+            ) : (
+              <div className="text-sm text-gray-600">
+                Vui lòng đăng nhập để xem lịch sử đặt bàn.
+              </div>
+            )}
           </div>
         </div>
       )}

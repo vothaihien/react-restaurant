@@ -7,23 +7,32 @@ import React, {
   useEffect,
 } from "react";
 import { authService } from "@/services/authService";
-import { StorageKeys } from "@/constants/StorageKeys"; // <-- 1. Import thêm cái này
+import { StorageKeys } from "@/constants/StorageKeys";
+import { khachHangService } from "@/services/khachHangService";
 
+type ContactInfo = {
+  identifier?: string;
+  email?: string;
+  phone?: string;
+};
 
-  type EmployeeUser = {
-    token: string;
-    name: string;
-    employeeId: string;
-    maVaiTro: string;
-    tenVaiTro: string;
-    // Thêm 'staff' vào đây
-    type: "admin" | "staff"; 
-}
+type CustomerUser = {
+  token: string;
+  name: string;
+  customerId: string;
+  type: "customer";
+} & ContactInfo;
 
-type AuthUser =
-  | { token: string; name: string; customerId: string; type: "customer" }
-  | EmployeeUser // Sử dụng kiểu đã định nghĩa
-  | null;
+type EmployeeUser = {
+  token: string;
+  name: string;
+  employeeId: string;
+  maVaiTro: string;
+  tenVaiTro: string;
+  type: "admin" | "staff";
+} & ContactInfo;
+
+type AuthUser = CustomerUser | EmployeeUser | null;
 
 interface AuthContextType {
   user: AuthUser;
@@ -42,6 +51,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [user, setUser] = useState<AuthUser>(null);
+
+  const buildContactInfo = (identifier?: string): ContactInfo => {
+    if (!identifier) return {};
+    const trimmed = identifier.trim();
+    if (!trimmed) return {};
+    if (trimmed.includes("@")) {
+      return { identifier: trimmed, email: trimmed };
+    }
+    return { identifier: trimmed, phone: trimmed };
+  };
+
+  const enrichContactInfo = async (
+    contact: ContactInfo
+  ): Promise<ContactInfo> => {
+    if (contact.email || !contact.phone) return contact;
+    try {
+      const result = await khachHangService.searchByPhone(contact.phone);
+      if (result?.email) {
+        return { ...contact, email: result.email };
+      }
+      return contact;
+    } catch {
+      return contact;
+    }
+  };
 
   // Load user từ localStorage khi F5
   useEffect(() => {
@@ -71,28 +105,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
       login: async (identifier: string, otp: string) => {
         const res = await authService.login({ identifier, otp });
+        const contact = await enrichContactInfo(buildContactInfo(identifier));
         // Mapping dữ liệu: maKhachHang -> customerId (Để khớp với giao diện của bạn)
         setUser({
           token: res.token,
           name: res.hoTen,
           customerId: res.maKhachHang,
           type: "customer",
+          ...contact,
         });
       },
 
       register: async (identifier: string, name: string, otp: string) => {
         const res = await authService.register({ identifier, hoTen: name, otp });
+        const contact = await enrichContactInfo(buildContactInfo(identifier));
         setUser({
           token: res.token,
           name: res.hoTen,
           customerId: res.maKhachHang,
           type: "customer",
+          ...contact,
         });
       },
 
       adminLogin: async (tenDangNhap: string, matKhau: string) => {
         const res = await authService.adminLogin({ tenDangNhap, matKhau });
-        const userType = res.maVaiTro === 'VT001' ? 'admin' : 'staff'
+        const userType = res.maVaiTro === "VT001" ? "admin" : "staff";
+        const contact = buildContactInfo(tenDangNhap);
         setUser({
           token: res.token,
           name: res.hoTen,
@@ -100,6 +139,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
           maVaiTro: res.maVaiTro,
           tenVaiTro: res.tenVaiTro,
           type: userType,
+          ...contact,
         });
       },
 
