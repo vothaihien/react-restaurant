@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import EMenuView from "@/components/menu/EMenuView";
 import MenuTheoKhungGio from "@/components/menu/MenuTheoKhungGio";
 import { formatVND } from "@/utils";
+import { BASE_URL } from "@/utils/api";
+import { FALLBACK_CARD_IMAGE } from "@/utils/placeholders";
 
 type MenuTabProps = {
   menuViewMode: "khungGio" | "eMenu" | "all";
@@ -48,8 +50,28 @@ const MenuTab: React.FC<MenuTabProps> = ({
   endIndex,
   availableMenuItems,
   menuItemsCount,
-}) => (
-  <div className="space-y-6">
+}) => {
+  const [selectedItem, setSelectedItem] = useState<any | null>(null);
+
+  const getImageUrl = (url?: string) => {
+    if (!url) return FALLBACK_CARD_IMAGE;
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    const cleanUrl = url.replace(/^\//, "");
+    return `${BASE_URL}/${cleanUrl}`;
+  };
+
+  const getPriceRange = (sizes: any[]) => {
+    if (!sizes || sizes.length === 0) return { min: 0, max: 0 };
+    const prices = sizes.map((s) => s.price || 0).filter((p) => p > 0);
+    if (prices.length === 0) return { min: 0, max: 0 };
+    return {
+      min: Math.min(...prices),
+      max: Math.max(...prices),
+    };
+  };
+
+  return (
+    <div className="space-y-6">
     <div className="flex gap-2 border-b border-gray-200">
       <button
         onClick={() => setMenuViewMode("khungGio")}
@@ -213,37 +235,63 @@ const MenuTab: React.FC<MenuTabProps> = ({
           ) : (
             <>
               <div
-                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
                 key={`menu-grid-${menuItemsCount}`}
               >
-                {paginatedItems.map((m: any) => (
-                  <div
-                    key={m.id}
-                    className="bg-white border border-gray-200 rounded p-3"
-                  >
-                    <img
-                      src={m.imageUrls?.[0]}
-                      className="w-full h-28 object-cover rounded"
-                    />
-                    <div className="mt-2 text-gray-900 font-semibold">
-                      {m.name}
-                    </div>
-                    <div className="text-gray-600 text-sm">{m.description}</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {m.sizes.map((s: any) => (
-                        <div
-                          key={s.name}
-                          className="text-sm text-gray-900 flex items-center justify-between bg-gray-50 border border-gray-200 px-3 py-1.5 rounded min-w-[120px] flex-shrink-0"
-                        >
-                          <span className="whitespace-nowrap">{s.name}</span>
-                          <span className="ml-2 whitespace-nowrap font-semibold">
-                            {formatVND(s.price)}
-                          </span>
+                {paginatedItems.map((m: any) => {
+                  const priceRange = getPriceRange(m.sizes || []);
+                  const hasStock = m.inStock !== false;
+                  return (
+                    <Card
+                      key={m.id}
+                      className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                      onClick={() => setSelectedItem(m)}
+                    >
+                      <div className="relative">
+                        <img
+                          src={getImageUrl(m.imageUrls?.[0])}
+                          alt={m.name}
+                          className="w-full h-48 object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src =
+                              FALLBACK_CARD_IMAGE;
+                          }}
+                        />
+                        {!hasStock && (
+                          <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">
+                              HẾT HÀNG
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <CardContent className="p-4">
+                        <h4 className="font-bold text-lg text-gray-900 mb-1">
+                          {m.name}
+                        </h4>
+                        {m.description && (
+                          <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                            {m.description}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <div className="text-indigo-600 font-semibold">
+                            {priceRange.min === priceRange.max
+                              ? formatVND(priceRange.min)
+                              : `${formatVND(priceRange.min)} - ${formatVND(
+                                  priceRange.max
+                                )}`}
+                          </div>
+                          {m.sizes && m.sizes.length > 1 && (
+                            <span className="text-xs text-gray-500">
+                              {m.sizes.length} phiên bản
+                            </span>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
 
               {totalPages > 1 && (
@@ -318,8 +366,107 @@ const MenuTab: React.FC<MenuTabProps> = ({
         </CardContent>
       </Card>
     )}
+
+    {/* Modal chi tiết món */}
+    {selectedItem && (
+      <div
+        className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+        onClick={() => setSelectedItem(null)}
+      >
+        <Card
+          className="max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <CardHeader>
+            <div className="flex justify-between items-start">
+              <CardTitle className="text-2xl">{selectedItem.name}</CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedItem(null)}
+              >
+                ✕
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Hình ảnh */}
+            {selectedItem.imageUrls && selectedItem.imageUrls.length > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                {selectedItem.imageUrls.map((img: string, idx: number) => (
+                  <img
+                    key={idx}
+                    src={getImageUrl(img)}
+                    alt={`${selectedItem.name} ${idx + 1}`}
+                    className="w-full h-32 object-cover rounded"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = FALLBACK_CARD_IMAGE;
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Mô tả */}
+            {selectedItem.description && (
+              <div>
+                <h5 className="font-semibold text-gray-900 mb-2">Mô tả</h5>
+                <p className="text-gray-700">{selectedItem.description}</p>
+              </div>
+            )}
+
+            {/* Danh mục */}
+            {selectedItem.category && (
+              <div>
+                <h5 className="font-semibold text-gray-900 mb-2">Danh mục</h5>
+                <p className="text-gray-700">{selectedItem.category}</p>
+              </div>
+            )}
+
+            {/* Phiên bản và giá */}
+            {selectedItem.sizes && selectedItem.sizes.length > 0 && (
+              <div>
+                <h5 className="font-semibold text-gray-900 mb-3">
+                  Phiên bản & Giá
+                </h5>
+                <div className="space-y-2">
+                  {selectedItem.sizes.map((size: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
+                    >
+                      <span className="font-medium text-gray-900">
+                        {size.name}
+                      </span>
+                      <span className="text-indigo-600 font-bold">
+                        {formatVND(size.price || 0)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Trạng thái còn hàng */}
+            <div className="pt-2 border-t border-gray-200">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-gray-900">Trạng thái:</span>
+                {selectedItem.inStock !== false ? (
+                  <span className="text-emerald-600 font-medium">
+                    Còn hàng
+                  </span>
+                ) : (
+                  <span className="text-red-600 font-medium">Hết hàng</span>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )}
   </div>
-);
+  );
+};
 
 export default MenuTab;
 
