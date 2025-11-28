@@ -48,6 +48,34 @@ const OrderManagement: React.FC = () => {
     fetchStats();
   }, []);
 
+  const handlePaymentAndPrint = async (order: Order) => {
+    if (!window.confirm(`Xác nhận thanh toán và in hóa đơn cho đơn ${order.maDonHang}?`)) return;
+
+    try {
+        // 1. Cập nhật trạng thái thành ĐÃ HOÀN THÀNH (Bàn sẽ tự trống bên backend)
+        await orderService.updateOrderStatus(order.maDonHang, "DA_HOAN_THANH");
+        
+        // 2. Cập nhật lại giao diện ngay lập tức
+        await fetchOrders(); 
+        await fetchStats();
+
+        // 3. Set đơn hàng hiện tại để in (quan trọng để InvoiceTemplate nhận data)
+        setSelectedOrder(order);
+        // Lấy chi tiết món để in hóa đơn đầy đủ
+        await fetchOrderDetails(order.maDonHang);
+
+        // 4. Kích hoạt in (setTimeout để đợi state cập nhật xong)
+        setTimeout(() => {
+            handlePrint();
+        }, 500);
+
+        alert("Thanh toán thành công! Đang in hóa đơn...");
+    } catch (error) {
+        alert("Có lỗi khi thanh toán!");
+        console.error(error);
+    }
+  };
+
   useEffect(() => {
     let filtered: Order[] = [];
     switch (activeTab) {
@@ -169,13 +197,14 @@ const OrderManagement: React.FC = () => {
     let message = "Bạn có chắc chắn muốn cập nhật trạng thái?";
 
     // Tùy chỉnh thông báo
-    if (status === "DA_XAC_NHAN")
-      message = "Duyệt đơn này và giữ chỗ cho khách?";
+     if (status === "DA_XAC_NHAN") message = "Duyệt đơn này? (Hệ thống sẽ gửi mail cho khách)";
     if (status === "CHO_THANH_TOAN")
       message = "Xác nhận khách đã đến và bắt đầu phục vụ (Vào bàn)?";
     if (status === "DA_HUY")
       message = "CẢNH BÁO: Bạn có chắc chắn muốn HỦY đơn hàng này không?";
 
+    
+   
     if (window.confirm(message)) {
       try {
         await orderService.updateOrderStatus(id, status);
@@ -355,7 +384,8 @@ const OrderManagement: React.FC = () => {
               <tr>
                 <th className="px-4 py-3 text-left">Mã đơn</th>
                 <th className="px-4 py-3 text-left">Khách hàng</th>
-                <th className="px-4 py-3 text-left">Bàn</th>
+                {/* --- SỬA Ở ĐÂY: Bỏ cột Bàn, Thay bằng Ngày nhận --- */}
+                <th className="px-4 py-3 text-left">Ngày nhận bàn</th> 
                 <th className="px-4 py-3 text-left">Ngày đặt</th>
                 <th className="px-4 py-3 text-left">Tổng tiền</th>
                 <th className="px-4 py-3 text-left">Trạng thái</th>
@@ -363,48 +393,29 @@ const OrderManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center">
-                    Đang tải...
-                  </td>
-                </tr>
-              ) : currentItems.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-gray-500">
-                    Không có dữ liệu
-                  </td>
-                </tr>
-              ) : (
-                currentItems.map((order) => (
+              {/* ... Logic loading/empty giữ nguyên ... */}
+              {currentItems.map((order) => (
                   <tr key={order.maDonHang} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium">{order.maDonHang}</td>
                     <td className="px-4 py-3">
                       <div>{order.hoTenKhachHang}</div>
-                      <div className="text-xs text-gray-500">
-                        {order.soDienThoaiKhach}
-                      </div>
+                      <div className="text-xs text-gray-500">{order.soDienThoaiKhach}</div>
                     </td>
-                    <td
-                      className="px-4 py-3 max-w-xs truncate"
-                      title={order.danhSachBan || ""}
-                    >
-                      {order.danhSachBan || "-"}
+                    
+                    {/* --- HIỂN THỊ NGÀY NHẬN BÀN --- */}
+                    <td className="px-4 py-3 text-sm text-blue-600 font-medium">
+                      {formatDate(order.tgNhanBan)} {/* Đảm bảo API trả về tgNhanBan */}
                     </td>
-                    <td className="px-4 py-3 text-sm">
-                      {formatDate(order.thoiGianDatHang)}
-                    </td>
+
+                    <td className="px-4 py-3 text-sm">{formatDate(order.thoiGianDatHang)}</td>
                     <td className="px-4 py-3 font-bold text-green-600">
                       {formatCurrency(order.tongTien)}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                          order.maTrangThaiDonHang
-                        )}`}
-                      >
-                        {order.tenTrangThai}
-                      </span>
+                        {/* ... Badge trạng thái giữ nguyên ... */}
+                        <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.maTrangThaiDonHang)}`}>
+                            {order.tenTrangThai}
+                        </span>
                     </td>
                     <td className="px-4 py-3 flex gap-2 items-center">
                       <button
@@ -413,12 +424,26 @@ const OrderManagement: React.FC = () => {
                       >
                         Chi tiết
                       </button>
-                      {/* Hiển thị nút thao tác */}
+                      
+                      {/* --- THÊM NÚT THANH TOÁN TRỰC TIẾP TRÊN BẢNG --- */}
+                      {order.maTrangThaiDonHang === "CHO_THANH_TOAN" && (
+                         <button
+                            onClick={() => handlePaymentAndPrint(order)}
+                            className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center gap-1"
+                            title="Thanh toán & In hóa đơn"
+                         >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            Thanh toán
+                         </button>
+                      )}
+
+                      {/* Render các nút duyệt/hủy cũ */}
                       {renderActionButtons(order, "small")}
                     </td>
                   </tr>
-                ))
-              )}
+                ))}
             </tbody>
           </table>
         </div>
@@ -540,41 +565,31 @@ const OrderManagement: React.FC = () => {
             </div>
 
             <div className="p-4 bg-gray-50 border-t flex justify-between items-center gap-3">
-              {/* Nút thao tác bên trái */}
               <div>{renderActionButtons(selectedOrder, "large")}</div>
 
-              {/* Nút đóng & in bên phải */}
               <div className="flex gap-3">
-                <button
-                  onClick={() => setSelectedOrder(null)}
-                  className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 font-medium"
-                >
+                <button onClick={() => setSelectedOrder(null)} className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 font-medium">
                   Đóng lại
                 </button>
-                {/* Nút in hóa đơn */}
-                {(selectedOrder.maTrangThaiDonHang === "DA_HOAN_THANH" ||
-                  selectedOrder.maTrangThaiDonHang === "CHO_THANH_TOAN") && (
-                  <button
-                    onClick={handlePrint}
-                    className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-medium flex items-center gap-2"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
-                      />
-                    </svg>
-                    {selectedOrder.maTrangThaiDonHang === "DA_HOAN_THANH"
-                      ? "In hóa đơn"
-                      : "In tạm tính"}
-                  </button>
+
+                {/* --- NÚT THANH TOÁN TRONG MODAL --- */}
+                {selectedOrder.maTrangThaiDonHang === "CHO_THANH_TOAN" && (
+                     <button
+                        onClick={() => handlePaymentAndPrint(selectedOrder)}
+                        className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-medium flex items-center gap-2"
+                     >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        Thanh toán & In
+                     </button>
+                )}
+                
+                {/* Nút In lại hóa đơn (khi đã hoàn thành rồi) */}
+                {selectedOrder.maTrangThaiDonHang === "DA_HOAN_THANH" && (
+                     <button onClick={handlePrint} className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 font-medium">
+                        In lại hóa đơn
+                     </button>
                 )}
               </div>
             </div>
