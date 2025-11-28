@@ -47,5 +47,19 @@ export const reservationsApi = {
         token,
       }
     ),
+
+  getHistoryByPhone: (phone: string) =>
+    request<{
+      found: boolean;
+      message?: string;
+      customer?: {
+        maKhachHang: string;
+        hoTen?: string;
+        email?: string;
+        soDienThoai?: string;
+        soLanAn?: number;
+      };
+      bookings: any[];
+    }>(`/api/BookingHistory/by-phone/${encodeURIComponent(phone)}`),
 };
 

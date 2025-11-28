@@ -52,7 +52,7 @@ const ContactTab: React.FC = () => {
             <p className="text-sm font-semibold text-slate-900">
               Hotline & Zalo
             </p>
-            <p className="text-2xl font-bold text-primary">0902 888 999</p>
+            <p className="text-2xl font-bold text-primary">1900 1234</p>
             <p className="text-xs text-slate-500">
               Hoạt động 9:00 - 22:00 hằng ngày
             </p>

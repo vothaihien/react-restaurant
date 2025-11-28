@@ -1,23 +1,17 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { useAppContext } from "@/contexts/AppContext";
 import { useFeedback } from "@/contexts/FeedbackContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { tablesApi } from "@/api/tables";
 import { TableStatus } from "@/types/tables";
-import AuthBox from "@/pages/customer/components/AuthBox";
 import { formatVND } from "@/utils";
-import {
-  CONTACT_EMAIL_KEY,
-  CONTACT_NAME_KEY,
-} from "@/pages/customer/constants";
+import { khachHangService } from "@/services/khachHangService";
 
 const BookingTab: React.FC = () => {
   const { createReservation, getAvailableTables } = useAppContext() as any;
-  const { user, isAuthenticated } = useAuth();
   const { notify } = useFeedback();
 
   const [name, setName] = useState("");
@@ -27,9 +21,18 @@ const BookingTab: React.FC = () => {
   const [dateTime, setDateTime] = useState<Date | undefined>(undefined);
   const [notes, setNotes] = useState("");
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
-  const [showAuthForBooking, setShowAuthForBooking] = useState(false);
   const [wantDeposit, setWantDeposit] = useState(false);
   const [depositAmount, setDepositAmount] = useState<number>(0);
+  const [customerId, setCustomerId] = useState<string | undefined>(undefined);
+  const [wantEmailNotification, setWantEmailNotification] = useState(false);
+  const [visitType, setVisitType] = useState<"first" | "returning">("first");
+  const [lookupPhone, setLookupPhone] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupStatus, setLookupStatus] = useState<
+    "idle" | "success" | "notfound" | "error"
+  >("idle");
+  const [lookupMessage, setLookupMessage] = useState("");
+  const [hasLookupAttempt, setHasLookupAttempt] = useState(false);
 
   // Tính tiền cọc tự động dựa trên số người (theo logic backend)
   const calculateDeposit = useMemo(() => {
@@ -51,6 +54,28 @@ const BookingTab: React.FC = () => {
       setDepositAmount(calculateDeposit);
     }
   }, [party, calculateDeposit]);
+
+  const prevVisitTypeRef = useRef<"first" | "returning">("first");
+
+  useEffect(() => {
+    if (visitType === "first") {
+      setCustomerId(undefined);
+      setLookupStatus("idle");
+      setLookupMessage("");
+      setHasLookupAttempt(false);
+      setLookupPhone("");
+      if (prevVisitTypeRef.current === "returning") {
+        setName("");
+        setPhone("");
+        setEmail("");
+        setNotes("");
+        setWantEmailNotification(false);
+      }
+    } else {
+      setLookupPhone((prev) => prev || phone);
+    }
+    prevVisitTypeRef.current = visitType;
+  }, [visitType, phone]);
 
   const [availableTables, setAvailableTables] = useState<
     Array<{
@@ -114,41 +139,46 @@ const BookingTab: React.FC = () => {
     fetchTables();
   }, [dateTime, party, getAvailableTables, notify]);
 
-  useEffect(() => {
-    if (!user || user.type !== "customer") return;
-    setName((prev) => (prev ? prev : user.name || ""));
-    const fallbackEmail =
-      user.email ||
-      (user.identifier && user.identifier.includes("@")
-        ? user.identifier
-        : undefined);
-    if (fallbackEmail) setEmail((prev) => (prev ? prev : fallbackEmail));
-    const fallbackPhone =
-      user.phone ||
-      (user.identifier && !user.identifier.includes("@")
-        ? user.identifier
-        : undefined);
-    if (fallbackPhone) setPhone((prev) => (prev ? prev : fallbackPhone));
-  }, [user]);
-
-  useEffect(() => {
-    if (!name) {
-      const cachedName = localStorage.getItem(CONTACT_NAME_KEY);
-      if (cachedName) setName(cachedName);
+  const handleCustomerLookup = async () => {
+    if (!lookupPhone.trim()) {
+      notify({
+        tone: "warning",
+        title: "Thiếu số điện thoại",
+        description: "Vui lòng nhập số điện thoại để tra cứu khách hàng.",
+      });
+      return;
     }
-    if (!email) {
-      const cachedEmail = localStorage.getItem(CONTACT_EMAIL_KEY);
-      if (cachedEmail) setEmail(cachedEmail);
+    setLookupLoading(true);
+    setHasLookupAttempt(true);
+    try {
+      const result = await khachHangService.searchByPhone(lookupPhone.trim());
+      if (result.found) {
+        setCustomerId(result.maKhachHang);
+        setName((prev) => result.tenKhach || prev || "");
+        setPhone(lookupPhone.trim());
+        setEmail((prev) => result.email || prev || "");
+        setLookupStatus("success");
+        setLookupMessage(
+          result.message || "Đã tìm thấy khách hàng thân thiết."
+        );
+      } else {
+        setCustomerId(undefined);
+        setLookupStatus("notfound");
+        setLookupMessage(
+          result.message ||
+            "Không tìm thấy khách hàng. Bạn có thể tiếp tục nhập thông tin như khách mới."
+        );
+      }
+    } catch (error: any) {
+      setCustomerId(undefined);
+      setLookupStatus("error");
+      setLookupMessage(
+        error?.message || "Không thể tra cứu khách hàng. Vui lòng thử lại."
+      );
+    } finally {
+      setLookupLoading(false);
     }
-  }, [name, email]);
-
-  useEffect(() => {
-    if (name) localStorage.setItem(CONTACT_NAME_KEY, name);
-  }, [name]);
-
-  useEffect(() => {
-    if (email) localStorage.setItem(CONTACT_EMAIL_KEY, email);
-  }, [email]);
+  };
 
   const filteredTables = useMemo(() => {
     if (!selectedTang || selectedTang.trim() === "") return availableTables;
@@ -183,24 +213,13 @@ const BookingTab: React.FC = () => {
 
   const submitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone || !email || !dateTime) {
+    if (!name || !phone || !dateTime || (wantEmailNotification && !email)) {
       notify({
         tone: "warning",
         title: "Thiếu thông tin đặt bàn",
         description:
           "Vui lòng nhập Họ tên, Điện thoại, Email và chọn ngày giờ mong muốn.",
       });
-      return;
-    }
-
-    if (!isAuthenticated) {
-      notify({
-        tone: "warning",
-        title: "Cần đăng nhập để đặt bàn",
-        description:
-          "Vui lòng đăng nhập hoặc đăng ký bằng Email/SĐT để quản lý lịch sử và hủy đặt bàn của bạn.",
-      });
-      setShowAuthForBooking(true);
       return;
     }
 
@@ -219,17 +238,15 @@ const BookingTab: React.FC = () => {
       const reservationData: any = {
         customerName: name,
         phone,
-        email,
-        customerId:
-          user && "customerId" in user && user.type === "customer"
-            ? user.customerId
-            : undefined,
+        customerId: customerId,
         partySize: party,
         time: ts,
         source: "App",
         notes: notes || "",
         tableIds: tableIds.length > 0 ? tableIds : undefined,
         tienDatCoc: wantDeposit && depositAmount > 0 ? depositAmount : 0,
+        email:
+          wantEmailNotification && email ? email : undefined,
       };
 
       const result = await createReservation(reservationData);
@@ -258,6 +275,13 @@ const BookingTab: React.FC = () => {
       setAvailableTables([]);
       setWantDeposit(false);
       setDepositAmount(0);
+      setCustomerId(undefined);
+      setVisitType("first");
+      setLookupPhone("");
+      setLookupStatus("idle");
+      setLookupMessage("");
+      setHasLookupAttempt(false);
+      setWantEmailNotification(false);
 
       const selectedTablesNames = selectedTableIds
         .map((id) => availableTables.find((t) => t.id === id)?.name || id)
@@ -289,35 +313,82 @@ const BookingTab: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (isAuthenticated && showAuthForBooking) {
-      setShowAuthForBooking(false);
-    }
-  }, [isAuthenticated, showAuthForBooking]);
-
   return (
     <div className="space-y-4">
-      {!isAuthenticated && (
-        <div className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="text-sm text-gray-800">
-            <div className="font-semibold text-indigo-900">
-              Đăng nhập bằng Email / SĐT để quản lý lịch sử & hủy đặt bàn của
-              bạn
-            </div>
-            <div className="text-xs sm:text-sm text-gray-700 mt-1">
-              Khi đăng nhập, mỗi lần đặt bàn sẽ được lưu lại, bạn có thể xem lại
-              và chủ động hủy trên mục Lịch sử.
-            </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Bạn đã từng ăn tại Viet Restaurant?</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setVisitType("returning")}
+              className={`rounded-2xl border px-4 py-3 text-left transition ${
+                visitType === "returning"
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-slate-200 hover:border-primary/60 hover:bg-primary/5"
+              }`}
+            >
+              <div className="text-base font-semibold">Đã từng ăn</div>
+              <p className="text-sm text-slate-600">
+                Tra cứu nhanh bằng số điện thoại để tự động điền thông tin.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisitType("first")}
+              className={`rounded-2xl border px-4 py-3 text-left transition ${
+                visitType === "first"
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-slate-200 hover:border-primary/60 hover:bg-primary/5"
+              }`}
+            >
+              <div className="text-base font-semibold">Lần đầu ăn</div>
+              <p className="text-sm text-slate-600">
+                Nhập thông tin đặt bàn đầy đủ như thông thường.
+              </p>
+            </button>
           </div>
-          <Button
-            variant="default"
-            className="sm:flex-shrink-0"
-            onClick={() => setShowAuthForBooking(true)}
-          >
-            Đăng nhập / Đăng ký nhanh
-          </Button>
-        </div>
-      )}
+
+          {visitType === "returning" && (
+            <div className="mt-5 space-y-3">
+              <p className="text-sm text-slate-600">
+                Nhập số điện thoại bạn từng dùng để đặt bàn, hệ thống sẽ tìm và
+                điền lại thông tin giúp bạn.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 items-start">
+                <Input
+                  placeholder="Nhập số điện thoại đã dùng trước đây"
+                  value={lookupPhone}
+                  onChange={(e) => setLookupPhone(e.target.value)}
+                  className="flex-1 min-w-[240px]"
+                />
+                <Button
+                  type="button"
+                  onClick={handleCustomerLookup}
+                  disabled={lookupLoading}
+                >
+                  {lookupLoading ? "Đang tra cứu..." : "Tra cứu khách hàng"}
+                </Button>
+              </div>
+              {hasLookupAttempt && lookupMessage && (
+                <div
+                  className={`rounded-xl border px-4 py-3 text-sm ${
+                    lookupStatus === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : lookupStatus === "notfound"
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : "border-red-200 bg-red-50 text-red-700"
+                  }`}
+                >
+                  {lookupMessage}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.7fr,1.3fr] gap-4">
         <div className="space-y-4">
@@ -567,17 +638,25 @@ const BookingTab: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={wantEmailNotification}
+                      onChange={(e) => setWantEmailNotification(e.target.checked)}
+                      className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                    />
+                    Tôi muốn nhận email xác nhận
                   </label>
-                  <Input
-                    type="email"
-                    placeholder="Nhập email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
+                  {wantEmailNotification && (
+                    <Input
+                      type="email"
+                      placeholder="Nhập email để nhận thông báo"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -753,20 +832,6 @@ const BookingTab: React.FC = () => {
             </CardContent>
           </Card>
 
-          {showAuthForBooking && !isAuthenticated && (
-            <Card className="border border-dashed border-indigo-300 bg-indigo-50/40">
-              <CardHeader>
-                <CardTitle>Đăng nhập / Đăng ký để hoàn tất đặt bàn</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-700 mb-3">
-                  Vui lòng xác thực Email hoặc Số điện thoại để có thể xem lại
-                  lịch sử và chủ động hủy đặt bàn sau này.
-                </p>
-                <AuthBox onSuccess={() => setShowAuthForBooking(false)} />
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>
