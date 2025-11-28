@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import CustomerPortalView, {
   CustomerTab,
-  AuthBox,
   BookingHistorySection,
 } from "@/pages/customer/CustomerPortalView";
+import AuthBox from "@/pages/customer/components/AuthBox";
 import { useAuth } from "@/contexts/AuthContext";
 
 const SiteHeader: React.FC<{

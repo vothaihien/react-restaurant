@@ -41,18 +41,36 @@ const UnauthorizedView: React.FC = () => {
           </Box>
 
           {/* 2. Tiêu đề & Thông báo */}
-          <Typography variant="h4" fontWeight="bold" gutterBottom color="text.primary">
+          <Typography
+            variant="h4"
+            fontWeight="bold"
+            gutterBottom
+            color="text.primary"
+          >
             Truy cập bị từ chối
           </Typography>
-          
-          <Typography variant="body1" color="text.secondary" paragraph sx={{ mb: 4 }}>
-            Xin lỗi, tài khoản hiện tại của bạn không có đủ quyền hạn để truy cập vào trang này.
+
+          <Typography
+            variant="body1"
+            color="text.secondary"
+            paragraph
+            sx={{ mb: 4 }}
+          >
+            Xin lỗi, tài khoản hiện tại của bạn không có đủ quyền hạn để truy
+            cập vào trang này.
             <br />
             Vui lòng liên hệ với Quản lý nếu bạn nghĩ đây là một sự nhầm lẫn.
           </Typography>
 
           {/* 3. Các nút điều hướng */}
-          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", justifyContent: "center" }}>
+          <Box
+            sx={{
+              display: "flex",
+              gap: 2,
+              flexWrap: "wrap",
+              justifyContent: "center",
+            }}
+          >
             <Button
               variant="outlined"
               startIcon={<ArrowBack />}
@@ -65,7 +83,7 @@ const UnauthorizedView: React.FC = () => {
             <Button
               variant="contained"
               startIcon={<Home />}
-              onClick={() => navigate("/")} // Về Dashboard
+              onClick={() => navigate("/customer/home")} // Về Dashboard
               size="large"
               color="primary"
             >

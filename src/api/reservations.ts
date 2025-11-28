@@ -13,7 +13,16 @@ export const reservationsApi = {
     MaKhachHang?: string;
     Email?: string;
   }) =>
-    request<{ message: string; donHang: any }>("/api/DatBanAPI/TaoDatBan", {
+    request<{ 
+      message: string; 
+      donHang?: any;
+      success?: boolean;
+      requirePayment?: boolean;
+      paymentUrl?: string;
+      depositAmount?: number;
+      maDonHang?: string;
+      danhSachBan?: string;
+    }>("/api/DatBanAPI/TaoDatBan", {
       method: "POST",
       body: data,
     }),

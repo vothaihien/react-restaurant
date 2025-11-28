@@ -724,11 +724,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
       SoLuongNguoi: data.partySize,
       GhiChu: data.notes || undefined,
       MaNhanVien: "NV000",
-      TienDatCoc: undefined,
+      TienDatCoc: data.tienDatCoc && data.tienDatCoc > 0 ? data.tienDatCoc : undefined,
       MaKhachHang: data.customerId || undefined,
       Email: data.email || undefined,
     };
     const res = await reservationsApi.createReservation(payload);
+    
+    // Xử lý payment URL nếu backend yêu cầu thanh toán đặt cọc
+    if (res?.requirePayment && res?.paymentUrl) {
+      return {
+        ...res,
+        requiresPayment: true,
+        paymentUrl: res.paymentUrl,
+        depositAmount: res.depositAmount,
+      };
+    }
     const newId = generateDailyId(reservations.map((r) => r.id));
     const newRes: Reservation = {
       id: newId,
