@@ -1220,7 +1220,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     }
 
     if (itemToEdit) {
-      // TODO: Implement update API
+      await menuApi.updateDish(itemToEdit.id, apiData);
+
       updateMenuItem({
         id: itemToEdit.id,
         name,

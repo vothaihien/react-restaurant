@@ -31,6 +31,31 @@ export const menuApi = {
       }>;
     }>;
   }) => request<any>("/api/MonAnsAPI", { method: "POST", body: data }),
+  updateDish: (
+    maMonAn: string,
+    data: {
+      TenMonAn: string;
+      MaDanhMuc?: string;
+      IsShow?: boolean;
+      HinhAnhUrls?: string[];
+      PhienBanMonAns: Array<{
+        MaPhienBan?: string;
+        TenPhienBan: string;
+        Gia: number;
+        MaTrangThai?: string;
+        IsShow?: boolean;
+        ThuTu?: number;
+        CongThucNauAns: Array<{
+          MaNguyenLieu: string;
+          SoLuongCanDung: number;
+        }>;
+      }>;
+    }
+  ) =>
+    request<any>(`/api/MonAnsAPI/${encodeURIComponent(maMonAn)}`, {
+      method: "PUT",
+      body: data,
+    }),
 
   getVersions: () => request<any[]>("/api/PhienBanAPI"),
 
