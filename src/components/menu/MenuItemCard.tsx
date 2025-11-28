@@ -89,7 +89,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onSelect }) => {
                 </div>
             </div>
 
-            {/* Modal chọn size - ĐÃ SỬA NHỎ GỌN */}
+            {/* Modal chọn size*/}
             {showSizes && item.sizes.length > 1 && (
                 <div
                     className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"

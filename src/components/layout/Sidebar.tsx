@@ -1,5 +1,6 @@
 import React from 'react';
 import type { View } from '@/types';
+import { Tag } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   Package,
@@ -45,6 +46,7 @@ const Sidebar: React.FC<SidebarProps> = ({currentPath}) => {
         { path: '/reports', label: 'Báo cáo', icon: ChartIcon, allowedRoles: ['admin'] },
         { path: '/employees', label: 'Nhân viên', icon: Users, allowedRoles: ['admin'] }, 
         { path: '/settings', label: 'Cài đặt', icon: SettingsIcon, allowedRoles: ['admin'] },
+         { path: '/promotions', label: 'Khuyến mãi', icon: Tag, allowedRoles: ['admin'] },
         
         // Màn hình bếp (Nếu sau này mở lại thì thêm role vào)
         // { path: '/kds', label: 'Màn hình bếp', icon: ChefHatIcon, allowedRoles: ['admin', 'staff'] },
