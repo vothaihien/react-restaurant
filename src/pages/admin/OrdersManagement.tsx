@@ -1,56 +1,95 @@
 // components/OrderManagement.tsx
-import React, { useState, useEffect } from 'react';
-import { ordersApi, Order, OrderStats, OrderDetail } from 'src/api/donhang';
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { donHangService } from "@/services/donHangService";
+import { ordersApi, Order, OrderStats } from "@/api/donhang";
+import { orderService } from "@/services/orderService"; // Đảm bảo import service này
+import { useReactToPrint } from "react-to-print";
+import { InvoiceTemplate } from "@/components/invoice/InvoiceTemplate";
+
+type TabType = "all" | "pending" | "active" | "completed" | "cancelled";
+
+interface GroupedItem {
+  tenMon: string;
+  tenPhienBan: string;
+  donGia: number;
+  soLuong: number;
+  thanhTien: number;
+}
+
+interface TableGroup {
+  tenBan: string;
+  items: GroupedItem[];
+  totalAmount: number;
+}
 
 const OrderManagement: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'all' | 'completed' | 'cancelled'>('all');
+  const [activeTab, setActiveTab] = useState<TabType>("all");
   const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [orderDetails, setOrderDetails] = useState<OrderDetail[]>([]);
+  const [rawOrderDetails, setRawOrderDetails] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
-  // Load dữ liệu
+  // --- Cấu hình in ---
+  const invoiceRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    contentRef: invoiceRef,
+    documentTitle: selectedOrder
+      ? `HoaDon_${selectedOrder.maDonHang}`
+      : "HoaDon",
+  });
+
   useEffect(() => {
     fetchOrders();
     fetchStats();
   }, []);
 
-  // Lọc đơn hàng khi activeTab hoặc orders thay đổi
   useEffect(() => {
-    filterOrders();
-  }, [activeTab, orders]);
-
-  const filterOrders = () => {
     let filtered: Order[] = [];
-    
     switch (activeTab) {
-      case 'completed':
-        filtered = orders.filter(order => order.maTrangThaiDonHang === 'DA_HOAN_THANH');
+      case "pending":
+        filtered = orders.filter(
+          (o) => o.maTrangThaiDonHang === "CHO_XAC_NHAN"
+        );
         break;
-      case 'cancelled':
-        filtered = orders.filter(order => order.maTrangThaiDonHang === 'DA_HUY');
+      case "active":
+        filtered = orders.filter((o) =>
+          ["DA_XAC_NHAN", "CHO_THANH_TOAN"].includes(o.maTrangThaiDonHang)
+        );
+        break;
+      case "completed":
+        filtered = orders.filter(
+          (o) => o.maTrangThaiDonHang === "DA_HOAN_THANH"
+        );
+        break;
+      case "cancelled":
+        filtered = orders.filter((o) => o.maTrangThaiDonHang === "DA_HUY");
         break;
       default:
         filtered = orders;
         break;
     }
-    
     setFilteredOrders(filtered);
-  };
+    setCurrentPage(1);
+  }, [activeTab, orders]);
+
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
   const fetchOrders = async () => {
     setLoading(true);
     try {
       const data = await ordersApi.getOrders();
-      console.log('Dữ liệu đơn hàng:', data);
       setOrders(data);
     } catch (error: any) {
-      console.error('Lỗi khi tải danh sách đơn hàng:', error);
-      const errorMessage = error?.message || 'Lỗi khi tải danh sách đơn hàng';
-      alert(`Lỗi: ${errorMessage}`);
+      console.error("Lỗi tải đơn hàng:", error);
     } finally {
       setLoading(false);
     }
@@ -58,397 +97,500 @@ const OrderManagement: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      const data = await ordersApi.getOrderStats();
-      console.log('Dữ liệu thống kê:', data);
-      setStats(data);
-    } catch (error: any) {
-      console.error('Lỗi khi tải thống kê:', error);
-      const errorMessage = error?.message || 'Lỗi khi tải thống kê';
-      alert(`Lỗi thống kê: ${errorMessage}`);
+      setStats(await ordersApi.getOrderStats());
+    } catch (error) {
+      console.error(error);
     }
   };
 
   const fetchOrderDetails = async (orderId: string) => {
     setDetailLoading(true);
     try {
-      const details = await ordersApi.getOrderDetail(orderId);
-      setOrderDetails(details);
+      const data = await donHangService.getMyBookingDetail({
+        maDonHang: orderId,
+      });
+      setRawOrderDetails(data?.monAns || []);
     } catch (error: any) {
-      console.error('Lỗi khi tải chi tiết đơn hàng:', error);
-      alert('Lỗi khi tải chi tiết đơn hàng');
+      alert("Lỗi tải chi tiết");
     } finally {
       setDetailLoading(false);
     }
   };
+
+  // --- Gom nhóm món ăn ---
+  const groupedDetails: TableGroup[] = useMemo(() => {
+    if (!rawOrderDetails.length) return [];
+    const groups: { [key: string]: TableGroup } = {};
+
+    rawOrderDetails.forEach((item) => {
+      const banKey = item.tenBan || "Mang về";
+      if (!groups[banKey])
+        groups[banKey] = { tenBan: banKey, items: [], totalAmount: 0 };
+
+      const existingItem = groups[banKey].items.find(
+        (i) =>
+          i.tenMon === (item.tenMon || item.tenMonAn) &&
+          i.tenPhienBan === item.tenPhienBan
+      );
+      const itemPrice = item.donGia || item.gia || 0;
+      const itemTotal = itemPrice * item.soLuong;
+
+      if (existingItem) {
+        existingItem.soLuong += item.soLuong;
+        existingItem.thanhTien += itemTotal;
+      } else {
+        groups[banKey].items.push({
+          tenMon: item.tenMon || item.tenMonAn,
+          tenPhienBan: item.tenPhienBan,
+          donGia: itemPrice,
+          soLuong: item.soLuong,
+          thanhTien: itemTotal,
+        });
+      }
+      groups[banKey].totalAmount += itemTotal;
+    });
+    return Object.values(groups).sort((a, b) =>
+      a.tenBan.localeCompare(b.tenBan)
+    );
+  }, [rawOrderDetails]);
+
+  // --- Tổng tiền ---
+  const calculatedTotal = useMemo(() => {
+    return groupedDetails.reduce((sum, group) => sum + group.totalAmount, 0);
+  }, [groupedDetails]);
 
   const handleViewDetails = (order: Order) => {
     setSelectedOrder(order);
     fetchOrderDetails(order.maDonHang);
   };
 
-  const handleUpdateStatus = async (orderId: string, newStatus: string) => {
-    if (window.confirm('Bạn có chắc chắn muốn cập nhật trạng thái đơn hàng?')) {
+  // --- HÀM CẬP NHẬT TRẠNG THÁI (ĐÃ NÂNG CẤP) ---
+  const handleUpdateStatus = async (id: string, status: string) => {
+    let message = "Bạn có chắc chắn muốn cập nhật trạng thái?";
+
+    // Tùy chỉnh thông báo
+    if (status === "DA_XAC_NHAN")
+      message = "Duyệt đơn này và giữ chỗ cho khách?";
+    if (status === "CHO_THANH_TOAN")
+      message = "Xác nhận khách đã đến và bắt đầu phục vụ (Vào bàn)?";
+    if (status === "DA_HUY")
+      message = "CẢNH BÁO: Bạn có chắc chắn muốn HỦY đơn hàng này không?";
+
+    if (window.confirm(message)) {
       try {
-        await ordersApi.updateOrderStatus(orderId, newStatus);
-        alert('Cập nhật trạng thái thành công!');
-        fetchOrders();
-        fetchStats();
-      } catch (error: any) {
-        alert(error.message || 'Có lỗi xảy ra');
+        await orderService.updateOrderStatus(id, status);
+        // Đóng modal nếu đang xem đúng đơn đó
+        if (selectedOrder?.maDonHang === id) {
+          setSelectedOrder(null);
+        }
+        await fetchOrders();
+        await fetchStats();
+      } catch (error) {
+        alert("Có lỗi xảy ra khi cập nhật trạng thái!");
+        console.error(error);
       }
     }
   };
 
-  const handleDeleteOrder = async (orderId: string) => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa đơn hàng này?')) {
-      try {
-        await ordersApi.deleteOrder(orderId);
-        alert('Xóa đơn hàng thành công!');
-        fetchOrders();
-        fetchStats();
-      } catch (error: any) {
-        alert(error.message || 'Có lỗi xảy ra khi xóa đơn hàng');
-      }
-    }
+  // --- HÀM RENDER CÁC NÚT THAO TÁC ---
+  const renderActionButtons = (
+    order: Order,
+    size: "small" | "large" = "small"
+  ) => {
+    const btnClass =
+      size === "small" ? "px-2 py-1 text-xs" : "px-4 py-2 font-medium";
+
+    return (
+      <div className="flex gap-2">
+        {/* 1. Nút DUYỆT: Chỉ hiện khi Chờ xác nhận */}
+        {order.maTrangThaiDonHang === "CHO_XAC_NHAN" && (
+          <>
+            <button
+              onClick={() => handleUpdateStatus(order.maDonHang, "DA_XAC_NHAN")}
+              className={`${btnClass} bg-green-500 text-white rounded hover:bg-green-600`}
+              title="Duyệt đơn"
+            >
+              Duyệt
+            </button>
+            <button
+              onClick={() => handleUpdateStatus(order.maDonHang, "DA_HUY")}
+              className={`${btnClass} bg-red-500 text-white rounded hover:bg-red-600`}
+              title="Hủy đơn"
+            >
+              Hủy
+            </button>
+          </>
+        )}
+
+        {/* 2. Nút VÀO BÀN: Chỉ hiện khi Đã xác nhận (Khách đến check-in) */}
+        {["DA_XAC_NHAN"].includes(order.maTrangThaiDonHang) && (
+          <>
+            <button
+              onClick={() =>
+                handleUpdateStatus(order.maDonHang, "CHO_THANH_TOAN")
+              }
+              className={`${btnClass} bg-blue-500 text-white rounded hover:bg-blue-600`}
+              title="Khách vào bàn"
+            >
+              Vào bàn
+            </button>
+            <button
+              onClick={() => handleUpdateStatus(order.maDonHang, "DA_HUY")}
+              className={`${btnClass} bg-red-500 text-white rounded hover:bg-red-600`}
+              title="Hủy đơn"
+            >
+              Hủy
+            </button>
+          </>
+        )}
+
+        {/* 3. Nút HỦY ĐƠN: Hiện khi Đang phục vụ (nếu cần xử lý sự cố) */}
+        {["CHO_THANH_TOAN"].includes(order.maTrangThaiDonHang) && (
+          <button
+            onClick={() => handleUpdateStatus(order.maDonHang, "DA_HUY")}
+            className={`${btnClass} bg-gray-500 text-white rounded hover:bg-gray-600`}
+            title="Hủy đơn đang phục vụ"
+          >
+            Hủy
+          </button>
+        )}
+      </div>
+    );
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND'
-    }).format(amount);
-  };
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleString('vi-VN');
-  };
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+    }).format(val);
+  const formatDate = (date: string) =>
+    date ? new Date(date).toLocaleString("vi-VN") : "-";
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'DA_HOAN_THANH': return 'bg-green-100 text-green-800';
-      case 'DA_HUY': return 'bg-red-100 text-red-800';
-      case 'CHO_XAC_NHAN': return 'bg-yellow-100 text-yellow-800';
-      case 'DA_XAC_NHAN': return 'bg-blue-100 text-blue-800';
-      case 'CHO_THANH_TOAN': return 'bg-purple-100 text-purple-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case "DA_HOAN_THANH":
+        return "bg-green-100 text-green-800";
+      case "DA_HUY":
+        return "bg-red-100 text-red-800";
+      case "CHO_XAC_NHAN":
+        return "bg-yellow-100 text-yellow-800";
+      case "DA_XAC_NHAN":
+        return "bg-blue-100 text-blue-800";
+      case "CHO_THANH_TOAN":
+        return "bg-purple-100 text-purple-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
-  // Tính toán số liệu cho từng tab
-  const getTabStats = () => {
-    const completedOrders = orders.filter(order => order.maTrangThaiDonHang === 'DA_HOAN_THANH');
-    const cancelledOrders = orders.filter(order => order.maTrangThaiDonHang === 'DA_HUY');
-    
-    const completedCount = completedOrders.length;
-    const cancelledCount = cancelledOrders.length;
-    const completedRevenue = completedOrders.reduce((sum, order) => sum + order.tongTien, 0);
-
-    return { completedCount, cancelledCount, completedRevenue };
+  const tabStats = {
+    pending: orders.filter((o) => o.maTrangThaiDonHang === "CHO_XAC_NHAN")
+      .length,
+    active: orders.filter((o) =>
+      ["DA_XAC_NHAN", "CHO_THANH_TOAN"].includes(o.maTrangThaiDonHang)
+    ).length,
+    completed: orders.filter((o) => o.maTrangThaiDonHang === "DA_HOAN_THANH")
+      .length,
+    cancelled: orders.filter((o) => o.maTrangThaiDonHang === "DA_HUY").length,
+    all: orders.length,
   };
-
-  const tabStats = getTabStats();
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Quản lý đơn hàng</h1>
-        <div className="text-sm text-gray-500">
-          Tổng số đơn: {orders.length} | 
-          Đơn hoàn thành: {tabStats.completedCount} | 
-          Đơn đã hủy: {tabStats.cancelledCount}
-        </div>
       </div>
 
-      {/* Thống kê tổng quan */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
-            <h3 className="text-lg font-semibold text-gray-700">Tổng số đơn</h3>
-            <p className="text-2xl font-bold text-blue-600">{stats.tongSoDon}</p>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
-            <h3 className="text-lg font-semibold text-gray-700">Doanh thu hôm nay</h3>
-            <p className="text-2xl font-bold text-green-600">
-              {formatCurrency(stats.tongDoanhThu)}
-            </p>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
-            <h3 className="text-lg font-semibold text-gray-700">Đơn hoàn thành</h3>
-            <p className="text-2xl font-bold text-green-600">{stats.donHoanThanh}</p>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
-            <h3 className="text-lg font-semibold text-gray-700">Đơn đã hủy</h3>
-            <p className="text-2xl font-bold text-red-600">{stats.donDaHuy}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Tabs với số lượng */}
-      <div className="flex space-x-4 mb-6">
-        <button
-          onClick={() => setActiveTab('all')}
-          className={`px-4 py-2 rounded-lg font-medium flex items-center space-x-2 ${
-            activeTab === 'all'
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          <span>Tất cả đơn</span>
-          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
-            {orders.length}
-          </span>
-        </button>
-        <button
-          onClick={() => setActiveTab('completed')}
-          className={`px-4 py-2 rounded-lg font-medium flex items-center space-x-2 ${
-            activeTab === 'completed'
-              ? 'bg-green-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          <span>Đơn hoàn thành</span>
-          <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">
-            {tabStats.completedCount}
-          </span>
-        </button>
-        <button
-          onClick={() => setActiveTab('cancelled')}
-          className={`px-4 py-2 rounded-lg font-medium flex items-center space-x-2 ${
-            activeTab === 'cancelled'
-              ? 'bg-red-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          <span>Đơn đã hủy</span>
-          <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs">
-            {tabStats.cancelledCount}
-          </span>
-        </button>
-      </div>
-
-      {/* Thông tin tab hiện tại */}
-      <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-        {activeTab === 'completed' && (
-          <div className="flex justify-between items-center">
-            <span className="font-semibold">Đang hiển thị {filteredOrders.length} đơn hoàn thành</span>
-            <span className="text-green-600 font-bold">
-              Tổng doanh thu: {formatCurrency(tabStats.completedRevenue)}
+      {/* Tabs */}
+      <div className="flex space-x-2 mb-6 overflow-x-auto pb-2">
+        {[
+          { id: "all", label: "Tất cả", count: tabStats.all, color: "gray" },
+          {
+            id: "pending",
+            label: "Chờ xác nhận",
+            count: tabStats.pending,
+            color: "yellow",
+          },
+          {
+            id: "active",
+            label: "Đang phục vụ",
+            count: tabStats.active,
+            color: "blue",
+          },
+          {
+            id: "completed",
+            label: "Hoàn thành",
+            count: tabStats.completed,
+            color: "green",
+          },
+          {
+            id: "cancelled",
+            label: "Đã hủy",
+            count: tabStats.cancelled,
+            color: "red",
+          },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as TabType)}
+            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap flex items-center gap-2 ${
+              activeTab === tab.id
+                ? `bg-${tab.color}-600 text-white`
+                : `bg-${tab.color}-100 text-${tab.color}-800`
+            }`}
+          >
+            {tab.label}{" "}
+            <span className="bg-white bg-opacity-30 px-2 rounded-full text-xs">
+              {tab.count}
             </span>
-          </div>
-        )}
-        {activeTab === 'cancelled' && (
-          <div className="flex justify-between items-center">
-            <span className="font-semibold">Đang hiển thị {filteredOrders.length} đơn đã hủy</span>
-            <span className="text-red-600 font-semibold">
-              Tổng số đơn đã hủy: {tabStats.cancelledCount}
-            </span>
-          </div>
-        )}
-        {activeTab === 'all' && (
-          <div className="flex justify-between items-center">
-            <span className="font-semibold">Đang hiển thị tất cả {filteredOrders.length} đơn hàng</span>
-            <div className="text-sm text-gray-600">
-              <span className="text-green-600">Hoàn thành: {tabStats.completedCount}</span>
-              {' | '}
-              <span className="text-red-600">Đã hủy: {tabStats.cancelledCount}</span>
-            </div>
-          </div>
-        )}
+          </button>
+        ))}
       </div>
 
-      {/* Danh sách đơn hàng */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-            <p className="mt-2 text-gray-600">Đang tải danh sách đơn hàng...</p>
-          </div>
-        ) : filteredOrders.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <div className="text-4xl mb-2">
-              {activeTab === 'completed' ? '✅' : activeTab === 'cancelled' ? '❌' : '📦'}
-            </div>
-            <p className="text-lg font-medium">
-              {activeTab === 'completed' ? 'Không có đơn hàng nào đã hoàn thành' :
-               activeTab === 'cancelled' ? 'Không có đơn hàng nào đã hủy' :
-               'Không có đơn hàng nào'}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
+      {/* Bảng danh sách */}
+      <div className="bg-white rounded-lg shadow overflow-hidden flex flex-col min-h-[500px]">
+        <div className="flex-grow overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left">Mã đơn</th>
+                <th className="px-4 py-3 text-left">Khách hàng</th>
+                <th className="px-4 py-3 text-left">Bàn</th>
+                <th className="px-4 py-3 text-left">Ngày đặt</th>
+                <th className="px-4 py-3 text-left">Tổng tiền</th>
+                <th className="px-4 py-3 text-left">Trạng thái</th>
+                <th className="px-4 py-3 text-left">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {loading ? (
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã đơn</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Khách hàng</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bàn</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thời gian đặt</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số người</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tổng tiền</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th>
+                  <td colSpan={7} className="p-8 text-center">
+                    Đang tải...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredOrders.map((order) => (
-                  <tr key={order.maDonHang} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-900">{order.maDonHang}</td>
+              ) : currentItems.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-gray-500">
+                    Không có dữ liệu
+                  </td>
+                </tr>
+              ) : (
+                currentItems.map((order) => (
+                  <tr key={order.maDonHang} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium">{order.maDonHang}</td>
                     <td className="px-4 py-3">
-                      <div>
-                        <div className="font-medium text-gray-900">{order.hoTenKhachHang}</div>
-                        <div className="text-sm text-gray-500">{order.soDienThoaiKhach}</div>
+                      <div>{order.hoTenKhachHang}</div>
+                      <div className="text-xs text-gray-500">
+                        {order.soDienThoaiKhach}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{order.danhSachBan || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                    <td
+                      className="px-4 py-3 max-w-xs truncate"
+                      title={order.danhSachBan || ""}
+                    >
+                      {order.danhSachBan || "-"}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
                       {formatDate(order.thoiGianDatHang)}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{order.soLuongNguoiDK}</td>
-                    <td className="px-4 py-3 font-medium text-green-600">
+                    <td className="px-4 py-3 font-bold text-green-600">
                       {formatCurrency(order.tongTien)}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.maTrangThaiDonHang)}`}>
+                      <span
+                        className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                          order.maTrangThaiDonHang
+                        )}`}
+                      >
                         {order.tenTrangThai}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleViewDetails(order)}
-                          className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition-colors"
-                        >
-                          Chi tiết
-                        </button>
-                        {order.maTrangThaiDonHang === 'CHO_XAC_NHAN' && (
-                          <button
-                            onClick={() => handleUpdateStatus(order.maDonHang, 'DA_XAC_NHAN')}
-                            className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600 transition-colors"
-                          >
-                            Xác nhận
-                          </button>
-                        )}
-                        {order.maTrangThaiDonHang !== 'DA_HUY' && order.maTrangThaiDonHang !== 'DA_HOAN_THANH' && (
-                          <button
-                            onClick={() => handleUpdateStatus(order.maDonHang, 'DA_HUY')}
-                            className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600 transition-colors"
-                          >
-                            Hủy
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDeleteOrder(order.maDonHang)}
-                          className="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600 transition-colors"
-                        >
-                          Xóa
-                        </button>
-                      </div>
+                    <td className="px-4 py-3 flex gap-2 items-center">
+                      <button
+                        onClick={() => handleViewDetails(order)}
+                        className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-200 border border-gray-300"
+                      >
+                        Chi tiết
+                      </button>
+                      {/* Hiển thị nút thao tác */}
+                      {renderActionButtons(order, "small")}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {/* Phân trang */}
+        {filteredOrders.length > 0 && (
+          <div className="p-4 border-t border-gray-200 flex justify-between items-center bg-gray-50">
+            <button
+              onClick={() => paginate(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="px-3 py-1 border rounded bg-white disabled:opacity-50"
+            >
+              Trước
+            </button>
+            <span>
+              Trang {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => paginate(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1 border rounded bg-white disabled:opacity-50"
+            >
+              Sau
+            </button>
           </div>
         )}
       </div>
 
-      {/* Modal chi tiết đơn hàng */}
+      {/* --- MODAL CHI TIẾT --- */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Chi tiết đơn hàng: {selectedOrder.maDonHang}</h2>
+          <div className="bg-white rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto flex flex-col shadow-2xl">
+            <div className="flex justify-between items-center p-4 border-b bg-gray-50">
+              <h2 className="text-lg font-bold">
+                Chi tiết đơn: {selectedOrder.maDonHang}
+              </h2>
               <button
                 onClick={() => setSelectedOrder(null)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
+                className="text-3xl hover:text-red-500"
               >
-                ✕
+                &times;
               </button>
             </div>
 
-            {/* Thông tin chung */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div>
-                <h3 className="font-semibold mb-2">Thông tin khách hàng</h3>
-                <p><strong>Họ tên:</strong> {selectedOrder.hoTenKhachHang}</p>
-                <p><strong>SĐT:</strong> {selectedOrder.soDienThoaiKhach}</p>
-                <p><strong>Email:</strong> {selectedOrder.emailKhachHang || '-'}</p>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2">Thông tin đơn hàng</h3>
-                <p><strong>Bàn:</strong> {selectedOrder.danhSachBan || '-'}</p>
-                <p><strong>Thời gian đặt:</strong> {formatDate(selectedOrder.thoiGianDatHang)}</p>
-                <p><strong>Số người:</strong> {selectedOrder.soLuongNguoiDK}</p>
-                <p><strong>Trạng thái:</strong> 
-                  <span className={`ml-2 px-2 py-1 rounded-full text-sm ${getStatusColor(selectedOrder.maTrangThaiDonHang)}`}>
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-6 text-sm">
+                <div>
+                  <p className="text-gray-500">Khách hàng</p>
+                  <p className="font-semibold text-gray-900 text-base">
+                    {selectedOrder.hoTenKhachHang}
+                  </p>
+                  <p>{selectedOrder.soDienThoaiKhach}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-gray-500">Thời gian đặt</p>
+                  <p className="font-semibold text-gray-900">
+                    {formatDate(selectedOrder.thoiGianDatHang)}
+                  </p>
+                  <p>Số người: {selectedOrder.soLuongNguoiDK}</p>
+                  <p
+                    className={`inline-block px-2 py-1 rounded text-xs font-bold mt-1 ${getStatusColor(
+                      selectedOrder.maTrangThaiDonHang
+                    )}`}
+                  >
                     {selectedOrder.tenTrangThai}
-                  </span>
-                </p>
+                  </p>
+                </div>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                {detailLoading ? (
+                  <div className="p-8 text-center">Đang tải...</div>
+                ) : groupedDetails.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500">Trống</div>
+                ) : (
+                  groupedDetails.map((group, idx) => (
+                    <div key={idx} className="border-b last:border-b-0">
+                      <div className="bg-gray-100 px-4 py-2 flex justify-between font-bold">
+                        <span>{group.tenBan}</span>
+                        <span>{formatCurrency(group.totalAmount)}</span>
+                      </div>
+                      {group.items.map((item, i) => (
+                        <div
+                          key={i}
+                          className="px-4 py-2 flex justify-between border-t border-gray-100"
+                        >
+                          <span>
+                            {item.tenMon} ({item.tenPhienBan}) x {item.soLuong}
+                          </span>
+                          <span>{formatCurrency(item.thanhTien)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="flex justify-end text-right">
+                <div className="w-1/2 space-y-2">
+                  <div className="flex justify-between text-gray-600">
+                    <span>Tổng tiền hàng:</span>
+                    <span>{formatCurrency(calculatedTotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Đã đặt cọc:</span>
+                    <span>
+                      -{formatCurrency(selectedOrder.tienDatCoc || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xl font-bold text-green-600 border-t pt-2">
+                    <span>Cần thanh toán:</span>
+                    <span>
+                      {formatCurrency(
+                        calculatedTotal - (selectedOrder.tienDatCoc || 0)
+                      )}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Chi tiết món ăn */}
-            <h3 className="font-semibold mb-4">Chi tiết món ăn</h3>
-            {detailLoading ? (
-              <div className="text-center">
-                <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-                <p className="mt-2 text-gray-600">Đang tải chi tiết...</p>
-              </div>
-            ) : orderDetails.length === 0 ? (
-              <div className="text-center text-gray-500 p-4">
-                Không có chi tiết món ăn
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left">Món ăn</th>
-                      <th className="px-4 py-2 text-left">Phiên bản</th>
-                      <th className="px-4 py-2 text-left">Số lượng</th>
-                      <th className="px-4 py-2 text-left">Đơn giá</th>
-                      <th className="px-4 py-2 text-left">Thành tiền</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {orderDetails.map((detail) => (
-                      <tr key={detail.maChiTietDonHang}>
-                        <td className="px-4 py-2">{detail.tenMonAn}</td>
-                        <td className="px-4 py-2">{detail.tenPhienBan}</td>
-                        <td className="px-4 py-2">{detail.soLuong}</td>
-                        <td className="px-4 py-2">{formatCurrency(detail.gia)}</td>
-                        <td className="px-4 py-2 font-medium">
-                          {formatCurrency(detail.thanhTien)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-gray-50">
-                    <tr>
-                      <td colSpan={4} className="px-4 py-2 text-right font-semibold">
-                        Tổng cộng:
-                      </td>
-                      <td className="px-4 py-2 font-bold text-green-600">
-                        {formatCurrency(selectedOrder.tongTien)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
+            <div className="p-4 bg-gray-50 border-t flex justify-between items-center gap-3">
+              {/* Nút thao tác bên trái */}
+              <div>{renderActionButtons(selectedOrder, "large")}</div>
 
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={() => setSelectedOrder(null)}
-                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors"
-              >
-                Đóng
-              </button>
+              {/* Nút đóng & in bên phải */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setSelectedOrder(null)}
+                  className="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 font-medium"
+                >
+                  Đóng lại
+                </button>
+                {/* Nút in hóa đơn */}
+                {(selectedOrder.maTrangThaiDonHang === "DA_HOAN_THANH" ||
+                  selectedOrder.maTrangThaiDonHang === "CHO_THANH_TOAN") && (
+                  <button
+                    onClick={handlePrint}
+                    className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-medium flex items-center gap-2"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+                      />
+                    </svg>
+                    {selectedOrder.maTrangThaiDonHang === "DA_HOAN_THANH"
+                      ? "In hóa đơn"
+                      : "In tạm tính"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* --- COMPONENT ẨN ĐỂ IN --- */}
+      <div style={{ display: "none" }}>
+        <InvoiceTemplate
+          ref={invoiceRef}
+          order={selectedOrder}
+          groupedItems={groupedDetails}
+          totalAmount={calculatedTotal}
+        />
+      </div>
     </div>
   );
 };

@@ -1,12 +1,11 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useAppContext } from "@/contexts/AppContext";
 import MenuItemModal from "@/components/menu/MenuItemModal";
-import type { MenuItem, Recipe } from "@/types/menu";
+import type { MenuItem, Recipe, MenuItemSize } from "@/types/menu";
 import { PlusCircleIcon, EditIcon, TrashIcon } from "@/components/icons";
 import { useFeedback } from "@/contexts/FeedbackContext";
 import { BASE_URL } from "@/utils/api";
 import { menuApi } from "@/api/menu";
-import { Pagination } from "@/components/ui/pagination";
 import { FALLBACK_THUMB_IMAGE } from "@/utils/placeholders";
 
 const MenuView: React.FC = () => {
@@ -19,15 +18,22 @@ const MenuView: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [searchString, setSearchString] = useState<string>("");
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const params = selectedCategory
-          ? { maDanhMuc: selectedCategory }
-          : undefined;
-        const data = await menuApi.getDishes(params);
+        const params: { maDanhMuc?: string; searchString?: string } = {};
+        if (selectedCategory) {
+          params.maDanhMuc = selectedCategory;
+        }
+        if (searchString.trim()) {
+          params.searchString = searchString.trim();
+        }
+        const data = await menuApi.getDishes(
+          Object.keys(params).length > 0 ? params : undefined
+        );
         // Xử lý response: có thể là array trực tiếp hoặc object với data property
         let dishes: any[] = [];
         if (Array.isArray(data)) {
@@ -69,15 +75,18 @@ const MenuView: React.FC = () => {
 
                 // Lưu ý: Khi load danh sách, API không trả về CongThucNauAns
                 // Chỉ có khi get single dish (getDish)
-                const congThucNauAns = p.congThucNauAns || p.CongThucNauAns || [];
+                const congThucNauAns =
+                  p.congThucNauAns || p.CongThucNauAns || [];
                 const recipeIngredients = Array.isArray(congThucNauAns)
                   ? congThucNauAns.map((ct: any) => ({
                       ingredient: {
                         id: ct.maNguyenLieu || ct.MaNguyenLieu || "",
                         name: ct.tenNguyenLieu || ct.TenNguyenLieu || "",
                         unit: ct.donViTinh || ct.DonViTinh || "",
+                        stock: 0, // Không cần stock trong công thức
                       },
-                      quantity: Number(ct.soLuongCanDung || ct.SoLuongCanDung) || 0,
+                      quantity:
+                        Number(ct.soLuongCanDung || ct.SoLuongCanDung) || 0,
                     }))
                   : [];
 
@@ -133,7 +142,7 @@ const MenuView: React.FC = () => {
       }
     };
     load();
-  }, [notify, selectedCategory]);
+  }, [notify, selectedCategory, searchString]);
 
   const handleOpenAddModal = () => {
     setEditingItem(null);
@@ -166,8 +175,8 @@ const MenuView: React.FC = () => {
       // Map phiên bản món ăn với công thức đầy đủ
       const phienBanList =
         fullData.phienBanMonAns || fullData.PhienBanMonAns || [];
-      const sizes = Array.from(
-        new Map(
+      const sizes: MenuItemSize[] = Array.from(
+        new Map<string, MenuItemSize>(
           phienBanList.map((p: any, idx: number) => {
             const versionId = p.maPhienBan || p.MaPhienBan || "";
             const versionName = p.tenPhienBan || p.TenPhienBan || "";
@@ -180,6 +189,7 @@ const MenuView: React.FC = () => {
                     id: ct.maNguyenLieu || ct.MaNguyenLieu || "",
                     name: ct.tenNguyenLieu || ct.TenNguyenLieu || "",
                     unit: ct.donViTinh || ct.DonViTinh || "",
+                    stock: 0, // Không cần stock trong công thức
                   },
                   quantity: Number(ct.soLuongCanDung || ct.SoLuongCanDung) || 0,
                 }))
@@ -194,14 +204,16 @@ const MenuView: React.FC = () => {
               ingredients: recipeIngredients,
             };
 
-            const normalizedSize = {
+            const normalizedSize: MenuItemSize = {
+              id: versionId || `${fullData.maMonAn}_${idx}`,
               name: versionName,
               price: Number(p.gia || p.Gia) || 0,
               recipe: recipe,
             };
 
-            const key = versionId || versionName || `${fullData.maMonAn}_${idx}`;
-            return [key, normalizedSize] as const;
+            const key =
+              versionId || versionName || `${fullData.maMonAn}_${idx}`;
+            return [key, normalizedSize] as [string, MenuItemSize];
           })
         ).values()
       );
@@ -265,25 +277,13 @@ const MenuView: React.FC = () => {
     }
   };
 
+  // Vì API đã xử lý lọc theo danh mục và tìm kiếm, nên chỉ cần dùng dữ liệu từ API
   const filteredItems = useMemo(() => {
-    const items = remoteItems ?? menuItems;
-    if (!selectedCategory) return items;
-    const selectedCategoryName = categories
-      .find((c) => c.id === selectedCategory)
-      ?.name?.toLowerCase()
-      ?.trim();
-    return items.filter((item) => {
-      if (item.categoryId) {
-        return item.categoryId === selectedCategory;
-      }
-      if (selectedCategoryName) {
-        return item.category?.toLowerCase()?.trim() === selectedCategoryName;
-      }
-      return false;
-    });
-  }, [remoteItems, menuItems, selectedCategory, categories]);
+    return remoteItems ?? menuItems;
+  }, [remoteItems, menuItems]);
 
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
   const paginatedItems = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -316,29 +316,42 @@ const MenuView: React.FC = () => {
       )}
 
       <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <label className="text-sm text-gray-700">Hiển thị:</label>
-            <select
-              value={itemsPerPage}
-              onChange={(e) => {
-                setItemsPerPage(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value={5}>5 món</option>
-              <option value={10}>10 món</option>
-              <option value={20}>20 món</option>
-              <option value={50}>50 món</option>
-            </select>
+        <div className="px-4 py-3 border-b border-gray-200 space-y-4">
+          {/* Tìm kiếm theo tên món ăn */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-1">
+              <label className="text-sm text-gray-700 font-medium whitespace-nowrap">
+                Tìm kiếm:
+              </label>
+              <input
+                type="text"
+                value={searchString}
+                onChange={(e) => {
+                  setSearchString(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Nhập tên món ăn để tìm kiếm..."
+                className="flex-1 border border-gray-300 rounded-md px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+              {searchString && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchString("");
+                    setCurrentPage(1);
+                  }}
+                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition"
+                >
+                  Xóa
+                </button>
+              )}
+            </div>
+            <div className="text-sm text-gray-600 whitespace-nowrap">
+              Tổng:{" "}
+              <span className="font-semibold">{filteredItems.length}</span> món
+            </div>
           </div>
-          <div className="text-sm text-gray-600">
-            Tổng: <span className="font-semibold">{filteredItems.length}</span>{" "}
-            món
-          </div>
-        </div>
-        <div className="px-4 py-3 border-b border-gray-200">
+          {/* Lọc theo danh mục */}
           <div className="flex flex-wrap gap-3 items-center">
             <span className="text-sm text-gray-700 font-medium">Danh mục:</span>
             <button
@@ -493,14 +506,63 @@ const MenuView: React.FC = () => {
             </tbody>
           </table>
         </div>
-        {totalPages > 0 && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-            itemsPerPage={itemsPerPage}
-            totalItems={filteredItems.length}
-          />
+        {filteredItems.length > 0 && (
+          <div className="p-4 border-t border-gray-200 flex justify-between items-center bg-gray-50">
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                Hiển thị:
+              </label>
+              <div className="relative">
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 shadow-sm hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all cursor-pointer"
+                >
+                  <option value={5}>5 món</option>
+                  <option value={10}>10 món</option>
+                  <option value={20}>20 món</option>
+                  <option value={50}>50 món</option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                  <svg
+                    className="h-4 w-4 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => paginate(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1 border rounded bg-white disabled:opacity-50 hover:bg-gray-50 transition"
+              >
+                Trước
+              </button>
+              <span className="text-sm text-gray-700">
+                Trang {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={() => paginate(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 border rounded bg-white disabled:opacity-50 hover:bg-gray-50 transition"
+              >
+                Sau
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
@@ -512,10 +574,16 @@ const MenuView: React.FC = () => {
           const load = async () => {
             setLoading(true);
             try {
-              const params = selectedCategory
-                ? { maDanhMuc: selectedCategory }
-                : undefined;
-              const data = await menuApi.getDishes(params);
+              const params: { maDanhMuc?: string; searchString?: string } = {};
+              if (selectedCategory) {
+                params.maDanhMuc = selectedCategory;
+              }
+              if (searchString.trim()) {
+                params.searchString = searchString.trim();
+              }
+              const data = await menuApi.getDishes(
+                Object.keys(params).length > 0 ? params : undefined
+              );
 
               // Xử lý response: có thể là array trực tiếp hoặc object với data property
               let dishes: any[] = [];
@@ -603,8 +671,3 @@ const MenuView: React.FC = () => {
 };
 
 export default MenuView;
-
-
-
-
-

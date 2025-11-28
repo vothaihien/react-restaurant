@@ -223,20 +223,21 @@ const DashboardView: React.FC = () => {
   // -----------------------------------------------------------
   const handleTableClick = (table: Table) => {
     setSelectedTable(table);
-
-    // Chuẩn hóa chuỗi trạng thái để so sánh
     const statusStr = String(table.status || "")
       .trim()
       .toLowerCase();
     const isOccupied =
-      statusStr === "occupied" ||
-      statusStr === "đang phục vụ" ||
-      statusStr === "dang phuc vu";
+      statusStr.includes("đang phục vụ") ||
+      statusStr.includes("occupied") ||
+      statusStr.includes("đang ăn") ||
+      (table.orderId && table.orderId.length > 0);
 
     if (isOccupied) {
       setOrderModalOpen(true);
     } else {
-      setOrderModalOpen(true);
+      alert(
+        `${table.name} đang trống. Vui lòng tạo đơn mới (Check-in) trước khi gọi món!`
+      );
     }
   };
 
@@ -325,78 +326,6 @@ const DashboardView: React.FC = () => {
       </div>
 
       <hr className="border-gray-300" />
-
-      {/* === KHỐI 3: THỰC ĐƠN MÓN ĂN (MENU) === */}
-      <div className="bg-white p-4 rounded-lg shadow-sm">
-        <h2 className="text-xl font-bold mb-4 text-gray-800">
-          Thực đơn món ăn
-        </h2>
-
-        {/* A. Danh sách nút Danh mục */}
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
-          <button
-            onClick={() => setSelectedCategory("ALL")}
-            className={`px-5 py-2 rounded-full font-medium transition-colors whitespace-nowrap ${
-              selectedCategory === "ALL"
-                ? "bg-green-600 text-white shadow-lg"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            Tất cả
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-5 py-2 rounded-full font-medium transition-colors whitespace-nowrap ${
-                selectedCategory === cat.id
-                  ? "bg-green-600 text-white shadow-lg"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              {cat.name}
-            </button>
-          ))}
-        </div>
-
-        {/* B. Lưới hiển thị Món ăn */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          {displayedDishes.map((dish) => (
-            <div
-              key={dish.id}
-              className="bg-white border rounded-xl p-3 shadow-sm hover:shadow-md cursor-pointer transition-all flex flex-col h-full"
-            >
-              <div className="relative w-full h-32 mb-3 overflow-hidden rounded-lg bg-gray-100">
-                <img
-                  src={dish.imageUrls[0] || FALLBACK_TILE_IMAGE}
-                  alt={dish.name}
-                  className="w-full h-full object-cover transition-transform hover:scale-105"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = FALLBACK_TILE_IMAGE;
-                  }}
-                />
-              </div>
-              <h3 className="font-bold text-gray-800 text-sm line-clamp-2 mb-1 flex-grow">
-                {dish.name}
-              </h3>
-              <div className="flex justify-between items-center mt-auto">
-                <p className="text-green-600 font-bold text-sm">
-                  {dish.sizes[0]?.price.toLocaleString("vi-VN")} đ
-                </p>
-                <button className="bg-green-50 text-green-700 p-1 rounded-md hover:bg-green-100">
-                  +
-                </button>
-              </div>
-            </div>
-          ))}
-
-          {displayedDishes.length === 0 && (
-            <div className="col-span-full text-center py-12 text-gray-500 border border-dashed rounded-lg">
-              Không tìm thấy món ăn nào trong danh mục này.
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* === KHỐI 4: CÁC MODAL === */}
       {selectedTable && isOrderModalOpen && (

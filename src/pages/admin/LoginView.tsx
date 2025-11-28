@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFeedback } from "@/contexts/FeedbackContext";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const LoginView: React.FC = () => {
   const { adminLogin } = useAuth();
@@ -8,6 +9,22 @@ const LoginView: React.FC = () => {
   const [tenDangNhap, setTenDangNhap] = useState("");
   const [matKhau, setMatKhau] = useState("");
   const [loading, setLoading] = useState(false);
+  
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // --- XỬ LÝ ĐƯỜNG DẪN TRƯỚC ĐÓ AN TOÀN HƠN ---
+  // Mặc định về trang chủ
+  let from = "/";
+  
+  // Kiểm tra kỹ cấu trúc state để tránh lỗi [object Object]
+  if (location.state && location.state.from) {
+      if (typeof location.state.from === 'string') {
+          from = location.state.from;
+      } else if (location.state.from.pathname) {
+          from = location.state.from.pathname;
+      }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,11 +41,18 @@ const LoginView: React.FC = () => {
     setLoading(true);
     try {
       await adminLogin(tenDangNhap.trim(), matKhau);
+      
       notify({
         tone: "success",
         title: "Đăng nhập thành công",
         description: "Chào mừng bạn quay trở lại!",
       });
+
+      // Chuyển hướng sau 0.5s để người dùng thấy thông báo
+      setTimeout(() => {
+        navigate(from, { replace: true });
+      }, 500);
+
     } catch (error: any) {
       notify({
         tone: "error",
@@ -112,6 +136,3 @@ const LoginView: React.FC = () => {
 };
 
 export default LoginView;
-
-
-
