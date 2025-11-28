@@ -727,9 +727,10 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       setRecipeDraftIngredients(
         dishIngredients.map((item) => ({
           ingredientId: item.ingredientId,
-          quantity:
+          quantity: normalizeIntegerQuantity(
             quantityMap.get(item.ingredientId) ??
-            (item.defaultQuantity === "" ? "" : Number(item.defaultQuantity)),
+              (item.defaultQuantity === "" ? "" : Number(item.defaultQuantity))
+          ),
         }))
       );
     } else {
@@ -738,7 +739,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
           ? target.ingredients
               .map((item) => ({
                 ingredientId: item.ingredient?.id || "",
-                quantity: item.quantity,
+                quantity: normalizeIntegerQuantity(item.quantity),
               }))
               .filter((draft) => draft.ingredientId)
           : [];
@@ -769,16 +770,24 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     }
   };
 
+  const normalizeIntegerQuantity = (input: string | number | "") => {
+    if (input === "" || input === null || input === undefined) return "";
+    const parsed = typeof input === "number" ? input : Number(input);
+    if (!Number.isFinite(parsed)) return "";
+    return Math.max(0, Math.floor(parsed));
+  };
+
   const handleRecipeIngredientQuantityChange = (
     ingredientId: string,
     value: string
   ) => {
+    const normalized = normalizeIntegerQuantity(value);
     setRecipeDraftIngredients((prev) =>
       prev.map((item) =>
         item.ingredientId === ingredientId
           ? {
               ...item,
-              quantity: value === "" ? "" : Number(value),
+              quantity: normalized,
             }
           : item
       )
@@ -860,9 +869,11 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         });
         return;
       }
+      const normalizedQuantity = normalizeIntegerQuantity(item.quantity);
       recipeIngredients.push({
         ingredient,
-        quantity: Number(item.quantity),
+        quantity:
+          normalizedQuantity === "" ? 0 : (normalizedQuantity as number),
       });
     }
 
@@ -952,6 +963,14 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       return;
     }
     const selected = versionOptions.find((opt) => opt.id === versionId);
+    if (!selected) {
+      notify({
+        tone: "warning",
+        title: "Phiên bản không tồn tại",
+        description: "Phiên bản đã chọn không tồn tại. Vui lòng chọn lại.",
+      });
+      return;
+    }
     setRecipes((prev) =>
       prev.map((r) =>
         r.id === recipeId
@@ -1200,8 +1219,33 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       }
     }
 
+    const phienBanMonAns = sizes.map((size, index) => ({
+      MaPhienBan: size.recipe.versionId,
+      TenPhienBan: size.name,
+      Gia: size.price,
+      MaTrangThai: inStock ? "CON_HANG" : "HET_HANG",
+      IsShow: true,
+      ThuTu: index + 1,
+      CongThucNauAns: size.recipe.ingredients.map((ing) => ({
+        MaNguyenLieu: ing.ingredient.id,
+        SoLuongCanDung: (() => {
+          const normalized = normalizeIntegerQuantity(ing.quantity);
+          return normalized === "" ? 0 : (normalized as number);
+        })(),
+      })),
+    }));
+
+    const apiData = {
+      TenMonAn: name,
+      MaDanhMuc: matchedCategory?.id || categoryId || itemToEdit?.categoryId || null,
+      IsShow: true,
+      HinhAnhUrls: imageUrlsForPayload,
+      PhienBanMonAns: phienBanMonAns,
+    };
+
     if (itemToEdit) {
-      // TODO: Implement update API
+      await menuApi.updateDish(itemToEdit.id, apiData);
+
       updateMenuItem({
         id: itemToEdit.id,
         name,
@@ -1221,28 +1265,6 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     } else {
       // Tạo món ăn mới qua API
       try {
-        // Chuyển đổi dữ liệu sang format API
-        const phienBanMonAns = sizes.map((size, index) => ({
-          MaPhienBan: size.recipe.versionId,
-          TenPhienBan: size.name,
-          Gia: size.price,
-          MaTrangThai: inStock ? "CON_HANG" : "HET_HANG",
-          IsShow: true,
-          ThuTu: index + 1,
-          CongThucNauAns: size.recipe.ingredients.map((ing) => ({
-            MaNguyenLieu: ing.ingredient.id,
-            SoLuongCanDung: ing.quantity || 0,
-          })),
-        }));
-
-        const apiData = {
-          TenMonAn: name,
-          MaDanhMuc: matchedCategory?.id || categoryId || null,
-          IsShow: true,
-          HinhAnhUrls: imageUrlsForPayload,
-          PhienBanMonAns: phienBanMonAns,
-        };
-
         await menuApi.createDish(apiData);
 
         // Cũng thêm vào local state để hiển thị ngay
@@ -1747,7 +1769,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                                 <input
                                   type="number"
                                   min="0"
-                                  step="any"
+                                  step="1"
                                   value={draft.quantity}
                                   onChange={(e) =>
                                     handleRecipeIngredientQuantityChange(
@@ -1811,7 +1833,3 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
 };
 
 export default MenuItemModal;
-
-
-
-

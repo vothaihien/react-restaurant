@@ -1,5 +1,6 @@
 export { default as DashboardView } from "./DashboardView";
 export { default as MenuView } from "./MenuView";
+export { default as MenuManagementView } from "./MenuManagementView";
 export { default as ReservationsView } from "./ReservationsView";
 export { default as InventoryView } from "./InventoryView";
 export { default as MasterDataView } from "./MasterDataView";
