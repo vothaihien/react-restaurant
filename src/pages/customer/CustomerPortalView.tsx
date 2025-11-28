@@ -411,6 +411,7 @@ export const BookingHistorySection: React.FC<{ token: string }> = ({
         const maDon = b.maDonHang || b.MaDonHang;
         const tenBan = b.tenBan || b.TenBan;
         const thoiGian = b.thoiGianBatDau || b.ThoiGianBatDau;
+        const thoiGianDuKien = b.thoiGianDuKien || b.ThoiGianDuKien;
         const soNguoi = b.soLuongNguoi || b.SoLuongNguoi;
         const trangThai = b.trangThai || b.TrangThai;
         const daHuy = b.daHuy || b.DaHuy;
@@ -422,8 +423,15 @@ export const BookingHistorySection: React.FC<{ token: string }> = ({
               <div>
                 <div className="font-semibold text-gray-900">{tenBan}</div>
                 <div className="text-sm text-gray-600">
-                  {new Date(thoiGian).toLocaleString("vi-VN")} · {soNguoi} khách
+                  Thời gian đặt: {new Date(thoiGian).toLocaleString("vi-VN")} ·{" "}
+                  {soNguoi} khách
                 </div>
+                {thoiGianDuKien && (
+                  <div className="text-sm text-blue-600 mt-1">
+                    Thời gian dự kiến:{" "}
+                    {new Date(thoiGianDuKien).toLocaleString("vi-VN")}
+                  </div>
+                )}
                 <div className="text-sm text-gray-700 mt-1">
                   Trạng thái: {trangThai}
                 </div>

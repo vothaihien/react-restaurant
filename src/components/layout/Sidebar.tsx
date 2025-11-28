@@ -41,7 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({currentPath}) => {
         
         // --- NHÓM CHỈ QUẢN LÝ (Admin) ---
         { path: '/inventory', label: 'Kho', icon: MenuIcon, allowedRoles: ['admin'] },
-        { path: '/masterdata', label: 'Danh mục', icon: SettingsIcon, allowedRoles: ['admin'] },
+        { path: '/masterdata', label: 'Danh mục & Menu', icon: SettingsIcon, allowedRoles: ['admin'] },
         { path: '/reports', label: 'Báo cáo', icon: ChartIcon, allowedRoles: ['admin'] },
         { path: '/employees', label: 'Nhân viên', icon: Users, allowedRoles: ['admin'] }, 
         { path: '/settings', label: 'Cài đặt', icon: SettingsIcon, allowedRoles: ['admin'] },
