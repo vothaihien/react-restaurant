@@ -42,6 +42,7 @@ const Sidebar: React.FC<SidebarProps> = ({currentPath}) => {
         { path: '/kds', label: 'Màn hình bếp', icon: ChefHatIcon },
         { path: '/reports', label: 'Báo cáo', icon: ChartIcon },
         { path: '/settings', label: 'Cài đặt', icon: SettingsIcon },
+        { path: '/customer-management', label: 'Quản lý khách hàng', icon: Users },
         { path: '/customer', label: 'Cổng Khách hàng', icon: UserIcon }, 
 
 

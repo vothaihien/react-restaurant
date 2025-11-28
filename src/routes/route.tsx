@@ -2,6 +2,7 @@ import React from "react";
 import OrderManagement from 'src/pages/admin/OrdersManagement';
 import PromotionManagement from 'src/pages/admin/PromoteManagement';
 import { Routes, Route } from "react-router-dom";
+import CustomerManagement from "src/pages/admin/CustomerManagement";
 import {
   DashboardView,
   MenuView,
@@ -21,11 +22,12 @@ const AppRoutes: React.FC = () => {
     <Routes>
       <Route path="/" element={<DashboardView />} />
       <Route path="/menu" element={<MenuView />} />
-      <Route path="/reservations" element={<ReservationsView />} />
+      <Route path="/reservations" element={<ReservationsView />} /> 
       <Route path="/inventory" element={<InventoryScreen />} />
       <Route path="/masterdata" element={<MasterDataView />} />
       <Route path="/orders-management" element={<OrderManagement />} />
       <Route path="/promotions" element={<PromotionManagement />} />
+      <Route path="/customer-management" element={<CustomerManagement/>} />
       <Route path="/kds" element={<KDSView />} />
       <Route
         path="/customer"
