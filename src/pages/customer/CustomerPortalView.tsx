@@ -1,24 +1,22 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useAppContext } from "@/contexts/AppContext";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatVND } from "@/utils";
-import { useFeedback } from "@/contexts/FeedbackContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { reservationsApi } from "@/api/reservations";
 import { menuApi } from "@/api/menu";
 import HomeTab from "@/pages/customer/sections/HomeTab";
 import BookingTab from "@/pages/customer/sections/BookingTab";
 import MenuTab from "@/pages/customer/sections/MenuTab";
 import AboutTab from "@/pages/customer/sections/AboutTab";
 import ContactTab from "@/pages/customer/sections/ContactTab";
+import BookingHistoryByPhoneTab from "@/pages/customer/sections/BookingHistoryByPhoneTab";
 
 export type CustomerTab =
   | "home"
   | "booking"
   | "menu"
+  | "history"
   | "order"
   | "loyalty"
   | "promotions"
@@ -34,8 +32,6 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   onTabChange,
 }) => {
   const { menuItems } = useAppContext() as any;
-  const { user, isAuthenticated } = useAuth();
-  const { notify } = useFeedback();
 
   // Cart (shared cho menu & order tab)
   const [cart, setCart] = useState<any[]>([]);
@@ -230,7 +226,6 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
 
         <TabsContent value="menu">
           <MenuTab
-            menuViewMode={menuViewMode}
             setMenuViewMode={setMenuViewMode}
             loadingCategories={loadingCategories}
             categories={categories}
@@ -250,6 +245,10 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
             availableMenuItems={availableMenuItems}
             menuItemsCount={menuItems?.length || 0}
           />
+        </TabsContent>
+
+        <TabsContent value="history">
+          <BookingHistoryByPhoneTab />
         </TabsContent>
 
         <TabsContent value="order">
@@ -339,122 +338,3 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
 };
 
 export default CustomerPortalView;
-
-export const BookingHistorySection: React.FC<{ token: string }> = ({
-  token,
-}) => {
-  const [bookings, setBookings] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const { notify, confirm } = useFeedback();
-
-  useEffect(() => {
-    if (!token) return;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const data = await reservationsApi.getMyBookings(token);
-        setBookings(data || []);
-      } catch (err: any) {
-        notify({
-          tone: "error",
-          title: "Lỗi tải lịch sử",
-          description: err?.message || "Không thể tải lịch sử đặt bàn",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [token, notify]);
-
-  const handleCancel = async (maDonHang: string) => {
-    if (!token) return;
-    const shouldCancel = await confirm({
-      title: "Hủy đặt bàn",
-      description: "Bạn có chắc chắn muốn hủy đặt bàn này?",
-      confirmText: "Hủy đặt bàn",
-      cancelText: "Giữ lại",
-      tone: "danger",
-    });
-    if (!shouldCancel) return;
-    try {
-      await reservationsApi.cancelBooking(maDonHang, token);
-      setBookings((prev) =>
-        prev.map((b) =>
-          b.maDonHang === maDonHang || b.MaDonHang === maDonHang
-            ? { ...b, daHuy: true, coTheHuy: false }
-            : b
-        )
-      );
-      notify({
-        tone: "success",
-        title: "Đã gửi yêu cầu hủy",
-        description: "Nhân viên sẽ kiểm tra và xác nhận trong giây lát.",
-      });
-    } catch (err: any) {
-      notify({
-        tone: "error",
-        title: "Lỗi hủy đặt bàn",
-        description: err?.message || "Không thể hủy đặt bàn",
-      });
-    }
-  };
-
-  if (loading) return <div className="text-gray-500">Đang tải...</div>;
-  if (bookings.length === 0)
-    return <div className="text-gray-500">Chưa có lịch sử đặt bàn.</div>;
-
-  return (
-    <div className="space-y-3">
-      <h4 className="text-lg font-semibold text-gray-900">Lịch sử đặt bàn</h4>
-      {bookings.map((b: any) => {
-        const maDon = b.maDonHang || b.MaDonHang;
-        const tenBan = b.tenBan || b.TenBan;
-        const thoiGian = b.thoiGianBatDau || b.ThoiGianBatDau;
-        const thoiGianDuKien = b.thoiGianDuKien || b.ThoiGianDuKien;
-        const soNguoi = b.soLuongNguoi || b.SoLuongNguoi;
-        const trangThai = b.trangThai || b.TrangThai;
-        const daHuy = b.daHuy || b.DaHuy;
-        const coTheHuy = b.coTheHuy || b.CoTheHuy;
-
-        return (
-          <div key={maDon} className="border border-gray-200 rounded-lg p-4">
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="font-semibold text-gray-900">{tenBan}</div>
-                <div className="text-sm text-gray-600">
-                  Thời gian đặt: {new Date(thoiGian).toLocaleString("vi-VN")} ·{" "}
-                  {soNguoi} khách
-                </div>
-                {thoiGianDuKien && (
-                  <div className="text-sm text-blue-600 mt-1">
-                    Thời gian dự kiến:{" "}
-                    {new Date(thoiGianDuKien).toLocaleString("vi-VN")}
-                  </div>
-                )}
-                <div className="text-sm text-gray-700 mt-1">
-                  Trạng thái: {trangThai}
-                </div>
-              </div>
-              {coTheHuy && !daHuy && (
-                <div className="flex flex-col gap-2 items-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleCancel(maDon)}
-                    className="text-amber-600 border-amber-300 hover:bg-amber-50"
-                  >
-                    Yêu cầu hủy đơn
-                  </Button>
-                  <p className="text-[11px] text-amber-600">
-                    Nhà hàng sẽ xác nhận trước khi hủy
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
