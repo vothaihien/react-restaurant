@@ -1219,6 +1219,30 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       }
     }
 
+    const phienBanMonAns = sizes.map((size, index) => ({
+      MaPhienBan: size.recipe.versionId,
+      TenPhienBan: size.name,
+      Gia: size.price,
+      MaTrangThai: inStock ? "CON_HANG" : "HET_HANG",
+      IsShow: true,
+      ThuTu: index + 1,
+      CongThucNauAns: size.recipe.ingredients.map((ing) => ({
+        MaNguyenLieu: ing.ingredient.id,
+        SoLuongCanDung: (() => {
+          const normalized = normalizeIntegerQuantity(ing.quantity);
+          return normalized === "" ? 0 : (normalized as number);
+        })(),
+      })),
+    }));
+
+    const apiData = {
+      TenMonAn: name,
+      MaDanhMuc: matchedCategory?.id || categoryId || itemToEdit?.categoryId || null,
+      IsShow: true,
+      HinhAnhUrls: imageUrlsForPayload,
+      PhienBanMonAns: phienBanMonAns,
+    };
+
     if (itemToEdit) {
       await menuApi.updateDish(itemToEdit.id, apiData);
 
@@ -1241,31 +1265,6 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     } else {
       // Tạo món ăn mới qua API
       try {
-        // Chuyển đổi dữ liệu sang format API
-        const phienBanMonAns = sizes.map((size, index) => ({
-          MaPhienBan: size.recipe.versionId,
-          TenPhienBan: size.name,
-          Gia: size.price,
-          MaTrangThai: inStock ? "CON_HANG" : "HET_HANG",
-          IsShow: true,
-          ThuTu: index + 1,
-          CongThucNauAns: size.recipe.ingredients.map((ing) => ({
-            MaNguyenLieu: ing.ingredient.id,
-            SoLuongCanDung: (() => {
-              const normalized = normalizeIntegerQuantity(ing.quantity);
-              return normalized === "" ? 0 : (normalized as number);
-            })(),
-          })),
-        }));
-
-        const apiData = {
-          TenMonAn: name,
-          MaDanhMuc: matchedCategory?.id || categoryId || null,
-          IsShow: true,
-          HinhAnhUrls: imageUrlsForPayload,
-          PhienBanMonAns: phienBanMonAns,
-        };
-
         await menuApi.createDish(apiData);
 
         // Cũng thêm vào local state để hiển thị ngay
