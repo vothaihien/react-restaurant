@@ -1,23 +1,17 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { useAppContext } from "@/contexts/AppContext";
 import { useFeedback } from "@/contexts/FeedbackContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { tablesApi } from "@/api/tables";
 import { TableStatus } from "@/types/tables";
-import AuthBox from "@/pages/customer/components/AuthBox";
 import { formatVND } from "@/utils";
-import {
-  CONTACT_EMAIL_KEY,
-  CONTACT_NAME_KEY,
-} from "@/pages/customer/constants";
+import { khachHangService } from "@/services/khachHangService";
 
 const BookingTab: React.FC = () => {
   const { createReservation, getAvailableTables } = useAppContext() as any;
-  const { user, isAuthenticated } = useAuth();
   const { notify } = useFeedback();
 
   const [name, setName] = useState("");
@@ -27,9 +21,18 @@ const BookingTab: React.FC = () => {
   const [dateTime, setDateTime] = useState<Date | undefined>(undefined);
   const [notes, setNotes] = useState("");
   const [selectedTableIds, setSelectedTableIds] = useState<string[]>([]);
-  const [showAuthForBooking, setShowAuthForBooking] = useState(false);
   const [wantDeposit, setWantDeposit] = useState(false);
   const [depositAmount, setDepositAmount] = useState<number>(0);
+  const [customerId, setCustomerId] = useState<string | undefined>(undefined);
+  const [wantEmailNotification, setWantEmailNotification] = useState(false);
+  const [visitType, setVisitType] = useState<"first" | "returning">("first");
+  const [lookupPhone, setLookupPhone] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupStatus, setLookupStatus] = useState<
+    "idle" | "success" | "notfound" | "error"
+  >("idle");
+  const [lookupMessage, setLookupMessage] = useState("");
+  const [hasLookupAttempt, setHasLookupAttempt] = useState(false);
 
   // Tính tiền cọc tự động dựa trên số người (theo logic backend)
   const calculateDeposit = useMemo(() => {
@@ -52,6 +55,28 @@ const BookingTab: React.FC = () => {
     }
   }, [party, calculateDeposit]);
 
+  const prevVisitTypeRef = useRef<"first" | "returning">("first");
+
+  useEffect(() => {
+    if (visitType === "first") {
+      setCustomerId(undefined);
+      setLookupStatus("idle");
+      setLookupMessage("");
+      setHasLookupAttempt(false);
+      setLookupPhone("");
+      if (prevVisitTypeRef.current === "returning") {
+        setName("");
+        setPhone("");
+        setEmail("");
+        setNotes("");
+        setWantEmailNotification(false);
+      }
+    } else {
+      setLookupPhone((prev) => prev || phone);
+    }
+    prevVisitTypeRef.current = visitType;
+  }, [visitType, phone]);
+
   const [availableTables, setAvailableTables] = useState<
     Array<{
       id: string;
@@ -67,6 +92,7 @@ const BookingTab: React.FC = () => {
   const [tangs, setTangs] = useState<
     Array<{ maTang: string; tenTang: string }>
   >([]);
+  const [viewMode, setViewMode] = useState<"grid" | "grouped">("grid");
 
   useEffect(() => {
     const loadTangs = async () => {
@@ -114,50 +140,133 @@ const BookingTab: React.FC = () => {
     fetchTables();
   }, [dateTime, party, getAvailableTables, notify]);
 
-  useEffect(() => {
-    if (!user || user.type !== "customer") return;
-    setName((prev) => (prev ? prev : user.name || ""));
-    const fallbackEmail =
-      user.email ||
-      (user.identifier && user.identifier.includes("@")
-        ? user.identifier
-        : undefined);
-    if (fallbackEmail) setEmail((prev) => (prev ? prev : fallbackEmail));
-    const fallbackPhone =
-      user.phone ||
-      (user.identifier && !user.identifier.includes("@")
-        ? user.identifier
-        : undefined);
-    if (fallbackPhone) setPhone((prev) => (prev ? prev : fallbackPhone));
-  }, [user]);
-
-  useEffect(() => {
-    if (!name) {
-      const cachedName = localStorage.getItem(CONTACT_NAME_KEY);
-      if (cachedName) setName(cachedName);
+  const handleCustomerLookup = async () => {
+    if (!lookupPhone.trim()) {
+      notify({
+        tone: "warning",
+        title: "Thiếu số điện thoại",
+        description: "Vui lòng nhập số điện thoại để tra cứu khách hàng.",
+      });
+      return;
     }
-    if (!email) {
-      const cachedEmail = localStorage.getItem(CONTACT_EMAIL_KEY);
-      if (cachedEmail) setEmail(cachedEmail);
+    setLookupLoading(true);
+    setHasLookupAttempt(true);
+    try {
+      const result = await khachHangService.searchByPhone(lookupPhone.trim());
+      if (result.found) {
+        setCustomerId(result.maKhachHang);
+        setName((prev) => result.tenKhach || prev || "");
+        setPhone(lookupPhone.trim());
+        setEmail((prev) => result.email || prev || "");
+        setLookupStatus("success");
+        setLookupMessage(
+          result.message || "Đã tìm thấy khách hàng thân thiết."
+        );
+      } else {
+        setCustomerId(undefined);
+        setLookupStatus("notfound");
+        setLookupMessage(
+          result.message ||
+            "Không tìm thấy khách hàng. Bạn có thể tiếp tục nhập thông tin như khách mới."
+        );
+      }
+    } catch (error: any) {
+      setCustomerId(undefined);
+      setLookupStatus("error");
+      setLookupMessage(
+        error?.message || "Không thể tra cứu khách hàng. Vui lòng thử lại."
+      );
+    } finally {
+      setLookupLoading(false);
     }
-  }, [name, email]);
-
-  useEffect(() => {
-    if (name) localStorage.setItem(CONTACT_NAME_KEY, name);
-  }, [name]);
-
-  useEffect(() => {
-    if (email) localStorage.setItem(CONTACT_EMAIL_KEY, email);
-  }, [email]);
+  };
 
   const filteredTables = useMemo(() => {
-    if (!selectedTang || selectedTang.trim() === "") return availableTables;
-    const selectedMaTang = selectedTang.toString().trim();
-    return availableTables.filter((t) => {
-      const tableMaTang = (t.maTang || "").toString().trim();
-      return tableMaTang === selectedMaTang;
+    // Loại bỏ các bàn đã được đặt
+    let tables = availableTables.filter((t) => {
+      const status = (t.status || "").toLowerCase();
+      return (
+        status !== "đã đặt" &&
+        status !== "đã được đặt" &&
+        status !== "da dat" &&
+        status !== "da duoc dat"
+      );
     });
+
+    // Filter theo tầng nếu có chọn
+    if (selectedTang && selectedTang.trim() !== "") {
+      const selectedMaTang = selectedTang.toString().trim();
+      tables = tables.filter((t) => {
+        const tableMaTang = (t.maTang || "").toString().trim();
+        return tableMaTang === selectedMaTang;
+      });
+    }
+
+    return tables;
   }, [availableTables, selectedTang]);
+
+  // Nhóm bàn theo trạng thái
+  const groupedTables = useMemo(() => {
+    // Hàm chuẩn hóa trạng thái (định nghĩa bên trong useMemo)
+    const normalizeStatus = (status: string): string => {
+      const s = (status || "").toLowerCase();
+      if (
+        s === "đang trống" ||
+        s === "available" ||
+        s === "trống" ||
+        s === "trong"
+      ) {
+        return "Đang trống";
+      }
+      if (
+        s === "không đủ sức chứa" ||
+        s === "không đủ chỗ" ||
+        s === "suc chua nho" ||
+        s === "sức chứa nhỏ"
+      ) {
+        return "Không đủ sức chứa";
+      }
+      if (s === "bảo trì" || s === "bao tri" || s === "đang bảo trì") {
+        return "Bảo trì";
+      }
+      return status || "Khác";
+    };
+
+    const groups: Record<string, typeof filteredTables> = {};
+
+    filteredTables.forEach((table) => {
+      const status = table.status || "Khác";
+      const normalizedStatus = normalizeStatus(status);
+
+      if (!groups[normalizedStatus]) {
+        groups[normalizedStatus] = [];
+      }
+      groups[normalizedStatus].push(table);
+    });
+
+    // Sắp xếp các nhóm theo thứ tự ưu tiên
+    const statusOrder = ["Đang trống", "Không đủ sức chứa", "Bảo trì", "Khác"];
+
+    const sortedGroups: Array<{
+      status: string;
+      tables: typeof filteredTables;
+    }> = [];
+
+    statusOrder.forEach((status) => {
+      if (groups[status]) {
+        sortedGroups.push({ status, tables: groups[status] });
+      }
+    });
+
+    // Thêm các nhóm còn lại
+    Object.keys(groups).forEach((status) => {
+      if (!statusOrder.includes(status)) {
+        sortedGroups.push({ status, tables: groups[status] });
+      }
+    });
+
+    return sortedGroups;
+  }, [filteredTables]);
 
   const selectedTables = useMemo(
     () =>
@@ -181,26 +290,79 @@ const BookingTab: React.FC = () => {
   const hasEnoughCapacity =
     selectedTableIds.length > 0 && totalSelectedCapacity >= party;
 
+  // Helper function để render một bàn
+  const renderTableButton = (t: any) => {
+    const isAvailable =
+      t.status === "Đang trống" ||
+      t.status === "Available" ||
+      t.status === TableStatus.Empty;
+    const isCapacityLimited =
+      t.status === "Không đủ sức chứa" ||
+      t.status === "Không đủ chỗ" ||
+      t.status === "Suc chua nho" ||
+      t.status === "Sức chứa nhỏ";
+    const disabled = !(isAvailable || isCapacityLimited);
+    const selected = selectedTableIds.includes(t.id);
+
+    const statusDotClass = isAvailable
+      ? "bg-emerald-500"
+      : isCapacityLimited
+      ? "bg-amber-500"
+      : "bg-slate-400";
+
+    return (
+      <button
+        key={t.id}
+        disabled={disabled}
+        onClick={() => {
+          if (selected) {
+            setSelectedTableIds(selectedTableIds.filter((id) => id !== t.id));
+          } else {
+            setSelectedTableIds([...selectedTableIds, t.id]);
+          }
+        }}
+        className={`relative p-4 rounded-2xl border transition cursor-pointer bg-white/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col gap-2 overflow-hidden ${
+          selected ? "border-indigo-600 bg-indigo-50" : ""
+        } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+        title={
+          disabled
+            ? "Bàn không khả dụng"
+            : selected
+            ? "Bỏ chọn bàn này"
+            : isCapacityLimited
+            ? "Bàn nhỏ - bạn có thể chọn nhiều bàn để đủ chỗ"
+            : "Chọn bàn này"
+        }
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-col">
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+              <span className={`h-2.5 w-2.5 rounded-full ${statusDotClass}`} />
+              {t.name}
+            </span>
+            {t.tenTang && (
+              <span className="mt-0.5 text-[11px] uppercase tracking-wide text-gray-500">
+                {t.tenTang}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-xs font-medium">
+          <span className="text-emerald-600">{t.capacity} khách</span>
+        </div>
+      </button>
+    );
+  };
+
   const submitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone || !email || !dateTime) {
+    if (!name || !phone || !dateTime || (wantEmailNotification && !email)) {
       notify({
         tone: "warning",
         title: "Thiếu thông tin đặt bàn",
         description:
           "Vui lòng nhập Họ tên, Điện thoại, Email và chọn ngày giờ mong muốn.",
       });
-      return;
-    }
-
-    if (!isAuthenticated) {
-      notify({
-        tone: "warning",
-        title: "Cần đăng nhập để đặt bàn",
-        description:
-          "Vui lòng đăng nhập hoặc đăng ký bằng Email/SĐT để quản lý lịch sử và hủy đặt bàn của bạn.",
-      });
-      setShowAuthForBooking(true);
       return;
     }
 
@@ -219,17 +381,14 @@ const BookingTab: React.FC = () => {
       const reservationData: any = {
         customerName: name,
         phone,
-        email,
-        customerId:
-          user && "customerId" in user && user.type === "customer"
-            ? user.customerId
-            : undefined,
+        customerId: customerId,
         partySize: party,
         time: ts,
         source: "App",
         notes: notes || "",
         tableIds: tableIds.length > 0 ? tableIds : undefined,
         tienDatCoc: wantDeposit && depositAmount > 0 ? depositAmount : 0,
+        email: wantEmailNotification && email ? email : undefined,
       };
 
       const result = await createReservation(reservationData);
@@ -258,6 +417,13 @@ const BookingTab: React.FC = () => {
       setAvailableTables([]);
       setWantDeposit(false);
       setDepositAmount(0);
+      setCustomerId(undefined);
+      setVisitType("first");
+      setLookupPhone("");
+      setLookupStatus("idle");
+      setLookupMessage("");
+      setHasLookupAttempt(false);
+      setWantEmailNotification(false);
 
       const selectedTablesNames = selectedTableIds
         .map((id) => availableTables.find((t) => t.id === id)?.name || id)
@@ -289,35 +455,82 @@ const BookingTab: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (isAuthenticated && showAuthForBooking) {
-      setShowAuthForBooking(false);
-    }
-  }, [isAuthenticated, showAuthForBooking]);
-
   return (
     <div className="space-y-4">
-      {!isAuthenticated && (
-        <div className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="text-sm text-gray-800">
-            <div className="font-semibold text-indigo-900">
-              Đăng nhập bằng Email / SĐT để quản lý lịch sử & hủy đặt bàn của
-              bạn
-            </div>
-            <div className="text-xs sm:text-sm text-gray-700 mt-1">
-              Khi đăng nhập, mỗi lần đặt bàn sẽ được lưu lại, bạn có thể xem lại
-              và chủ động hủy trên mục Lịch sử.
-            </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Bạn đã từng ăn tại Viet Restaurant?</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setVisitType("returning")}
+              className={`rounded-2xl border px-4 py-3 text-left transition ${
+                visitType === "returning"
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-slate-200 hover:border-primary/60 hover:bg-primary/5"
+              }`}
+            >
+              <div className="text-base font-semibold">Đã từng ăn</div>
+              <p className="text-sm text-slate-600">
+                Tra cứu nhanh bằng số điện thoại để tự động điền thông tin.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisitType("first")}
+              className={`rounded-2xl border px-4 py-3 text-left transition ${
+                visitType === "first"
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-slate-200 hover:border-primary/60 hover:bg-primary/5"
+              }`}
+            >
+              <div className="text-base font-semibold">Lần đầu ăn</div>
+              <p className="text-sm text-slate-600">
+                Nhập thông tin đặt bàn đầy đủ như thông thường.
+              </p>
+            </button>
           </div>
-          <Button
-            variant="default"
-            className="sm:flex-shrink-0"
-            onClick={() => setShowAuthForBooking(true)}
-          >
-            Đăng nhập / Đăng ký nhanh
-          </Button>
-        </div>
-      )}
+
+          {visitType === "returning" && (
+            <div className="mt-5 space-y-3">
+              <p className="text-sm text-slate-600">
+                Nhập số điện thoại bạn từng dùng để đặt bàn, hệ thống sẽ tìm và
+                điền lại thông tin giúp bạn.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 items-start">
+                <Input
+                  placeholder="Nhập số điện thoại đã dùng trước đây"
+                  value={lookupPhone}
+                  onChange={(e) => setLookupPhone(e.target.value)}
+                  className="flex-1 min-w-[240px]"
+                />
+                <Button
+                  type="button"
+                  onClick={handleCustomerLookup}
+                  disabled={lookupLoading}
+                >
+                  {lookupLoading ? "Đang tra cứu..." : "Tra cứu khách hàng"}
+                </Button>
+              </div>
+              {hasLookupAttempt && lookupMessage && (
+                <div
+                  className={`rounded-xl border px-4 py-3 text-sm ${
+                    lookupStatus === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : lookupStatus === "notfound"
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : "border-red-200 bg-red-50 text-red-700"
+                  }`}
+                >
+                  {lookupMessage}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.7fr,1.3fr] gap-4">
         <div className="space-y-4">
@@ -398,10 +611,6 @@ const BookingTab: React.FC = () => {
                         <span className="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
                         <span>Bàn nhỏ - có thể chọn nhiều bàn</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full bg-slate-400"></span>
-                        <span>Bàn đã được đặt</span>
-                      </div>
                     </div>
                   </div>
                 </>
@@ -434,100 +643,103 @@ const BookingTab: React.FC = () => {
                           có sẵn cho {party} khách vào{" "}
                           {new Date(dateTime).toLocaleString("vi-VN")}
                         </div>
-                        {tangs.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700">
-                              Lọc theo tầng:
-                            </label>
-                            <select
-                              value={selectedTang}
-                              onChange={(e) => setSelectedTang(e.target.value)}
-                              className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                        <div className="flex items-center gap-3">
+                          {tangs.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <label className="text-sm font-medium text-gray-700">
+                                Lọc theo tầng:
+                              </label>
+                              <select
+                                value={selectedTang}
+                                onChange={(e) =>
+                                  setSelectedTang(e.target.value)
+                                }
+                                className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                              >
+                                <option value="">Tất cả tầng</option>
+                                {tangs.map((tang) => (
+                                  <option key={tang.maTang} value={tang.maTang}>
+                                    {tang.tenTang}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2 border border-gray-300 rounded-lg overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setViewMode("grid")}
+                              className={`px-3 py-1.5 text-sm font-medium transition ${
+                                viewMode === "grid"
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-white text-gray-700 hover:bg-gray-50"
+                              }`}
                             >
-                              <option value="">Tất cả tầng</option>
-                              {tangs.map((tang) => (
-                                <option key={tang.maTang} value={tang.maTang}>
-                                  {tang.tenTang}
-                                </option>
-                              ))}
-                            </select>
+                              Lưới
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setViewMode("grouped")}
+                              className={`px-3 py-1.5 text-sm font-medium transition ${
+                                viewMode === "grouped"
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-white text-gray-700 hover:bg-gray-50"
+                              }`}
+                            >
+                              Phân loại
+                            </button>
                           </div>
-                        )}
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
-                        {filteredTables.map((t: any) => {
-                          const isAvailable =
-                            t.status === "Đang trống" ||
-                            t.status === "Available" ||
-                            t.status === TableStatus.Empty;
-                          const isCapacityLimited =
-                            t.status === "Không đủ sức chứa" ||
-                            t.status === "Không đủ chỗ" ||
-                            t.status === "Suc chua nho" ||
-                            t.status === "Sức chứa nhỏ";
-                          const disabled = !(isAvailable || isCapacityLimited);
-                          const selected = selectedTableIds.includes(t.id);
+                      {viewMode === "grid" ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                          {filteredTables.map((t: any) => renderTableButton(t))}
+                        </div>
+                      ) : (
+                        <div className="space-y-6">
+                          {groupedTables.map((group) => {
+                            const getStatusColor = (status: string) => {
+                              if (status === "Đang trống")
+                                return "bg-emerald-100 border-emerald-300 text-emerald-800";
+                              if (status === "Không đủ sức chứa")
+                                return "bg-amber-100 border-amber-300 text-amber-800";
+                              if (status === "Bảo trì")
+                                return "bg-red-100 border-red-300 text-red-800";
+                              return "bg-gray-100 border-gray-300 text-gray-800";
+                            };
 
-                          const statusDotClass = isAvailable
-                            ? "bg-emerald-500"
-                            : isCapacityLimited
-                            ? "bg-amber-500"
-                            : "bg-slate-400";
+                            const getStatusIcon = (status: string) => {
+                              if (status === "Đang trống") return "✓";
+                              if (status === "Không đủ sức chứa") return "⚠";
+                              if (status === "Bảo trì") return "🔧";
+                              return "•";
+                            };
 
-                          return (
-                            <button
-                              key={t.id}
-                              disabled={disabled}
-                              onClick={() => {
-                                if (selected) {
-                                  setSelectedTableIds(
-                                    selectedTableIds.filter((id) => id !== t.id)
-                                  );
-                                } else {
-                                  setSelectedTableIds([
-                                    ...selectedTableIds,
-                                    t.id,
-                                  ]);
-                                }
-                              }}
-                              className={`relative p-4 rounded-2xl border transition cursor-pointer bg-white/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col gap-2 overflow-hidden ${
-                                selected ? "border-indigo-600 bg-indigo-50" : ""
-                              }`}
-                              title={
-                                disabled
-                                  ? "Bàn không khả dụng"
-                                  : selected
-                                  ? "Bỏ chọn bàn này"
-                                  : isCapacityLimited
-                                  ? "Bàn nhỏ - bạn có thể chọn nhiều bàn để đủ chỗ"
-                                  : "Chọn bàn này"
-                              }
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex flex-col">
-                                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900">
-                                    <span
-                                      className={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}
-                                    />
-                                    {t.name}
+                            return (
+                              <div key={group.status} className="space-y-3">
+                                <div
+                                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${getStatusColor(
+                                    group.status
+                                  )}`}
+                                >
+                                  <span className="text-lg font-semibold">
+                                    {getStatusIcon(group.status)}
                                   </span>
-                                  {t.tenTang && (
-                                    <span className="mt-0.5 text-[11px] uppercase tracking-wide text-gray-500">
-                                      {t.tenTang}
-                                    </span>
+                                  <h3 className="font-semibold text-sm">
+                                    {group.status} ({group.tables.length} bàn)
+                                  </h3>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                                  {group.tables.map((t: any) =>
+                                    renderTableButton(t)
                                   )}
                                 </div>
                               </div>
-                              <div className="mt-2 flex items-center justify-between text-xs font-medium">
-                                <span className="text-emerald-600">
-                                  {t.capacity} khách
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </>
                   )}
                 </CardContent>
@@ -567,17 +779,27 @@ const BookingTab: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={wantEmailNotification}
+                      onChange={(e) =>
+                        setWantEmailNotification(e.target.checked)
+                      }
+                      className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                    />
+                    Tôi muốn nhận email xác nhận
                   </label>
-                  <Input
-                    type="email"
-                    placeholder="Nhập email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
+                  {wantEmailNotification && (
+                    <Input
+                      type="email"
+                      placeholder="Nhập email để nhận thông báo"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -752,21 +974,6 @@ const BookingTab: React.FC = () => {
               </form>
             </CardContent>
           </Card>
-
-          {showAuthForBooking && !isAuthenticated && (
-            <Card className="border border-dashed border-indigo-300 bg-indigo-50/40">
-              <CardHeader>
-                <CardTitle>Đăng nhập / Đăng ký để hoàn tất đặt bàn</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-700 mb-3">
-                  Vui lòng xác thực Email hoặc Số điện thoại để có thể xem lại
-                  lịch sử và chủ động hủy đặt bàn sau này.
-                </p>
-                <AuthBox onSuccess={() => setShowAuthForBooking(false)} />
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>
