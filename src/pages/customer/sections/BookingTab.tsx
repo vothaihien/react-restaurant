@@ -92,6 +92,7 @@ const BookingTab: React.FC = () => {
   const [tangs, setTangs] = useState<
     Array<{ maTang: string; tenTang: string }>
   >([]);
+  const [viewMode, setViewMode] = useState<"grid" | "grouped">("grid");
 
   useEffect(() => {
     const loadTangs = async () => {
@@ -181,13 +182,91 @@ const BookingTab: React.FC = () => {
   };
 
   const filteredTables = useMemo(() => {
-    if (!selectedTang || selectedTang.trim() === "") return availableTables;
-    const selectedMaTang = selectedTang.toString().trim();
-    return availableTables.filter((t) => {
-      const tableMaTang = (t.maTang || "").toString().trim();
-      return tableMaTang === selectedMaTang;
+    // Loại bỏ các bàn đã được đặt
+    let tables = availableTables.filter((t) => {
+      const status = (t.status || "").toLowerCase();
+      return (
+        status !== "đã đặt" &&
+        status !== "đã được đặt" &&
+        status !== "da dat" &&
+        status !== "da duoc dat"
+      );
     });
+
+    // Filter theo tầng nếu có chọn
+    if (selectedTang && selectedTang.trim() !== "") {
+      const selectedMaTang = selectedTang.toString().trim();
+      tables = tables.filter((t) => {
+        const tableMaTang = (t.maTang || "").toString().trim();
+        return tableMaTang === selectedMaTang;
+      });
+    }
+
+    return tables;
   }, [availableTables, selectedTang]);
+
+  // Nhóm bàn theo trạng thái
+  const groupedTables = useMemo(() => {
+    // Hàm chuẩn hóa trạng thái (định nghĩa bên trong useMemo)
+    const normalizeStatus = (status: string): string => {
+      const s = (status || "").toLowerCase();
+      if (
+        s === "đang trống" ||
+        s === "available" ||
+        s === "trống" ||
+        s === "trong"
+      ) {
+        return "Đang trống";
+      }
+      if (
+        s === "không đủ sức chứa" ||
+        s === "không đủ chỗ" ||
+        s === "suc chua nho" ||
+        s === "sức chứa nhỏ"
+      ) {
+        return "Không đủ sức chứa";
+      }
+      if (s === "bảo trì" || s === "bao tri" || s === "đang bảo trì") {
+        return "Bảo trì";
+      }
+      return status || "Khác";
+    };
+
+    const groups: Record<string, typeof filteredTables> = {};
+
+    filteredTables.forEach((table) => {
+      const status = table.status || "Khác";
+      const normalizedStatus = normalizeStatus(status);
+
+      if (!groups[normalizedStatus]) {
+        groups[normalizedStatus] = [];
+      }
+      groups[normalizedStatus].push(table);
+    });
+
+    // Sắp xếp các nhóm theo thứ tự ưu tiên
+    const statusOrder = ["Đang trống", "Không đủ sức chứa", "Bảo trì", "Khác"];
+
+    const sortedGroups: Array<{
+      status: string;
+      tables: typeof filteredTables;
+    }> = [];
+
+    statusOrder.forEach((status) => {
+      if (groups[status]) {
+        sortedGroups.push({ status, tables: groups[status] });
+      }
+    });
+
+    // Thêm các nhóm còn lại
+    Object.keys(groups).forEach((status) => {
+      if (!statusOrder.includes(status)) {
+        sortedGroups.push({ status, tables: groups[status] });
+      }
+    });
+
+    return sortedGroups;
+  }, [filteredTables]);
 
   const selectedTables = useMemo(
     () =>
@@ -210,6 +289,70 @@ const BookingTab: React.FC = () => {
     party > 0 ? Math.max(party - totalSelectedCapacity, 0) : 0;
   const hasEnoughCapacity =
     selectedTableIds.length > 0 && totalSelectedCapacity >= party;
+
+  // Helper function để render một bàn
+  const renderTableButton = (t: any) => {
+    const isAvailable =
+      t.status === "Đang trống" ||
+      t.status === "Available" ||
+      t.status === TableStatus.Empty;
+    const isCapacityLimited =
+      t.status === "Không đủ sức chứa" ||
+      t.status === "Không đủ chỗ" ||
+      t.status === "Suc chua nho" ||
+      t.status === "Sức chứa nhỏ";
+    const disabled = !(isAvailable || isCapacityLimited);
+    const selected = selectedTableIds.includes(t.id);
+
+    const statusDotClass = isAvailable
+      ? "bg-emerald-500"
+      : isCapacityLimited
+      ? "bg-amber-500"
+      : "bg-slate-400";
+
+    return (
+      <button
+        key={t.id}
+        disabled={disabled}
+        onClick={() => {
+          if (selected) {
+            setSelectedTableIds(selectedTableIds.filter((id) => id !== t.id));
+          } else {
+            setSelectedTableIds([...selectedTableIds, t.id]);
+          }
+        }}
+        className={`relative p-4 rounded-2xl border transition cursor-pointer bg-white/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col gap-2 overflow-hidden ${
+          selected ? "border-indigo-600 bg-indigo-50" : ""
+        } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+        title={
+          disabled
+            ? "Bàn không khả dụng"
+            : selected
+            ? "Bỏ chọn bàn này"
+            : isCapacityLimited
+            ? "Bàn nhỏ - bạn có thể chọn nhiều bàn để đủ chỗ"
+            : "Chọn bàn này"
+        }
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-col">
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+              <span className={`h-2.5 w-2.5 rounded-full ${statusDotClass}`} />
+              {t.name}
+            </span>
+            {t.tenTang && (
+              <span className="mt-0.5 text-[11px] uppercase tracking-wide text-gray-500">
+                {t.tenTang}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-xs font-medium">
+          <span className="text-emerald-600">{t.capacity} khách</span>
+        </div>
+      </button>
+    );
+  };
 
   const submitBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,8 +388,7 @@ const BookingTab: React.FC = () => {
         notes: notes || "",
         tableIds: tableIds.length > 0 ? tableIds : undefined,
         tienDatCoc: wantDeposit && depositAmount > 0 ? depositAmount : 0,
-        email:
-          wantEmailNotification && email ? email : undefined,
+        email: wantEmailNotification && email ? email : undefined,
       };
 
       const result = await createReservation(reservationData);
@@ -469,10 +611,6 @@ const BookingTab: React.FC = () => {
                         <span className="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
                         <span>Bàn nhỏ - có thể chọn nhiều bàn</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full bg-slate-400"></span>
-                        <span>Bàn đã được đặt</span>
-                      </div>
                     </div>
                   </div>
                 </>
@@ -505,100 +643,103 @@ const BookingTab: React.FC = () => {
                           có sẵn cho {party} khách vào{" "}
                           {new Date(dateTime).toLocaleString("vi-VN")}
                         </div>
-                        {tangs.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <label className="text-sm font-medium text-gray-700">
-                              Lọc theo tầng:
-                            </label>
-                            <select
-                              value={selectedTang}
-                              onChange={(e) => setSelectedTang(e.target.value)}
-                              className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                        <div className="flex items-center gap-3">
+                          {tangs.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <label className="text-sm font-medium text-gray-700">
+                                Lọc theo tầng:
+                              </label>
+                              <select
+                                value={selectedTang}
+                                onChange={(e) =>
+                                  setSelectedTang(e.target.value)
+                                }
+                                className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                              >
+                                <option value="">Tất cả tầng</option>
+                                {tangs.map((tang) => (
+                                  <option key={tang.maTang} value={tang.maTang}>
+                                    {tang.tenTang}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2 border border-gray-300 rounded-lg overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setViewMode("grid")}
+                              className={`px-3 py-1.5 text-sm font-medium transition ${
+                                viewMode === "grid"
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-white text-gray-700 hover:bg-gray-50"
+                              }`}
                             >
-                              <option value="">Tất cả tầng</option>
-                              {tangs.map((tang) => (
-                                <option key={tang.maTang} value={tang.maTang}>
-                                  {tang.tenTang}
-                                </option>
-                              ))}
-                            </select>
+                              Lưới
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setViewMode("grouped")}
+                              className={`px-3 py-1.5 text-sm font-medium transition ${
+                                viewMode === "grouped"
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-white text-gray-700 hover:bg-gray-50"
+                              }`}
+                            >
+                              Phân loại
+                            </button>
                           </div>
-                        )}
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
-                        {filteredTables.map((t: any) => {
-                          const isAvailable =
-                            t.status === "Đang trống" ||
-                            t.status === "Available" ||
-                            t.status === TableStatus.Empty;
-                          const isCapacityLimited =
-                            t.status === "Không đủ sức chứa" ||
-                            t.status === "Không đủ chỗ" ||
-                            t.status === "Suc chua nho" ||
-                            t.status === "Sức chứa nhỏ";
-                          const disabled = !(isAvailable || isCapacityLimited);
-                          const selected = selectedTableIds.includes(t.id);
+                      {viewMode === "grid" ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                          {filteredTables.map((t: any) => renderTableButton(t))}
+                        </div>
+                      ) : (
+                        <div className="space-y-6">
+                          {groupedTables.map((group) => {
+                            const getStatusColor = (status: string) => {
+                              if (status === "Đang trống")
+                                return "bg-emerald-100 border-emerald-300 text-emerald-800";
+                              if (status === "Không đủ sức chứa")
+                                return "bg-amber-100 border-amber-300 text-amber-800";
+                              if (status === "Bảo trì")
+                                return "bg-red-100 border-red-300 text-red-800";
+                              return "bg-gray-100 border-gray-300 text-gray-800";
+                            };
 
-                          const statusDotClass = isAvailable
-                            ? "bg-emerald-500"
-                            : isCapacityLimited
-                            ? "bg-amber-500"
-                            : "bg-slate-400";
+                            const getStatusIcon = (status: string) => {
+                              if (status === "Đang trống") return "✓";
+                              if (status === "Không đủ sức chứa") return "⚠";
+                              if (status === "Bảo trì") return "🔧";
+                              return "•";
+                            };
 
-                          return (
-                            <button
-                              key={t.id}
-                              disabled={disabled}
-                              onClick={() => {
-                                if (selected) {
-                                  setSelectedTableIds(
-                                    selectedTableIds.filter((id) => id !== t.id)
-                                  );
-                                } else {
-                                  setSelectedTableIds([
-                                    ...selectedTableIds,
-                                    t.id,
-                                  ]);
-                                }
-                              }}
-                              className={`relative p-4 rounded-2xl border transition cursor-pointer bg-white/80 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex flex-col gap-2 overflow-hidden ${
-                                selected ? "border-indigo-600 bg-indigo-50" : ""
-                              }`}
-                              title={
-                                disabled
-                                  ? "Bàn không khả dụng"
-                                  : selected
-                                  ? "Bỏ chọn bàn này"
-                                  : isCapacityLimited
-                                  ? "Bàn nhỏ - bạn có thể chọn nhiều bàn để đủ chỗ"
-                                  : "Chọn bàn này"
-                              }
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex flex-col">
-                                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900">
-                                    <span
-                                      className={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}
-                                    />
-                                    {t.name}
+                            return (
+                              <div key={group.status} className="space-y-3">
+                                <div
+                                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${getStatusColor(
+                                    group.status
+                                  )}`}
+                                >
+                                  <span className="text-lg font-semibold">
+                                    {getStatusIcon(group.status)}
                                   </span>
-                                  {t.tenTang && (
-                                    <span className="mt-0.5 text-[11px] uppercase tracking-wide text-gray-500">
-                                      {t.tenTang}
-                                    </span>
+                                  <h3 className="font-semibold text-sm">
+                                    {group.status} ({group.tables.length} bàn)
+                                  </h3>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                                  {group.tables.map((t: any) =>
+                                    renderTableButton(t)
                                   )}
                                 </div>
                               </div>
-                              <div className="mt-2 flex items-center justify-between text-xs font-medium">
-                                <span className="text-emerald-600">
-                                  {t.capacity} khách
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </>
                   )}
                 </CardContent>
@@ -643,7 +784,9 @@ const BookingTab: React.FC = () => {
                     <input
                       type="checkbox"
                       checked={wantEmailNotification}
-                      onChange={(e) => setWantEmailNotification(e.target.checked)}
+                      onChange={(e) =>
+                        setWantEmailNotification(e.target.checked)
+                      }
                       className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                     />
                     Tôi muốn nhận email xác nhận
@@ -831,7 +974,6 @@ const BookingTab: React.FC = () => {
               </form>
             </CardContent>
           </Card>
-
         </div>
       </div>
     </div>
