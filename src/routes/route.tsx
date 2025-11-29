@@ -1,6 +1,8 @@
 import React from "react";
 import OrderManagement from 'src/pages/admin/OrdersManagement';
+import PromotionManagement from 'src/pages/admin/PromoteManagement';
 import { Routes, Route } from "react-router-dom";
+import CustomerManagement from "src/pages/admin/CustomerManagement";
 import {
   DashboardView,
   MenuView,
@@ -44,6 +46,7 @@ const AppRoutes: React.FC = () => {
         <Route path="/employees" element={<EmployeesView />} />
         <Route path="/reports" element={<ReportsView />} />
         <Route path="/settings" element={<SettingsView />} />
+        <Route path="/promotions" element={<PromotionManagement />} />
       </Route>
 
     </Routes>
