@@ -1,41 +1,29 @@
+
+
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://localhost:7008/api';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5555/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 10000,
 });
 
-// Interceptor để log lỗi chi tiết
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    console.error('API Error Details:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message
-    });
-    return Promise.reject(error);
-  }
-);
 
-// Types cho Khách Hàng
 export interface KhachHang {
-  MaKhachHang: string;
-  HoTen: string;
-  SoDienThoai: string;
-  Email?: string;
-  HinhAnh?: string;
-  SoLanAnTichLuy: number;
-  NoShowCount?: number;
-  NgayTao?: string;
-  TongChiTieu?: number;
-  LanCuoiDen?: string;
+  maKhachHang: string;
+  hoTen: string;
+  soDienThoai: string;
+  email?: string;
+  hinhAnh?: string;
+  soLanAnTichLuy: number;
+  noShowCount?: number;
+  ngayTao?: string;
+  tongChiTieu?: number;
+  lanCuoiDen?: string;
 }
 
 export interface KhachHangCreateModel {
@@ -53,157 +41,189 @@ export interface KhachHangUpdateModel {
 }
 
 export interface DonHang {
-  MaDonHang: string;
-  ThoiGianDatHang: string;
-  TienDatCoc?: number;
-  TrangThai: string;
-  SoLuongNguoiDK: number;
-  GhiChu?: string;
+  maDonHang: string;
+  thoiGianDatHang: string;
+  tienDatCoc?: number;
+  trangThai: string;
+  soLuongNguoiDK: number;
+  ghiChu?: string;
 }
 
+
 export interface DatBan {
-  MaDonHang: string;
-  TenBan: string;
-  ThoiGianDatHang: string;
-  TrangThai: string;
+  maDonHang: string;
+  tenBan: string;
+  thoiGianDatHang: string;
+  trangThai: string; 
 }
 
 export interface ThongKeKhachHang {
-  TongKhachHang: number;
-  KhachHangMoiThang: number;
-  KhachHangThanThiet: number;
-  SinhNhatThang: number;
+  tongKhachHang: number;
+  khachHangMoiThang: number;
+  khachHangThanThiet: number;
+  khachNoShow: number;
 }
 
 export interface DanhSachKhachHangResponse {
-  TotalRecords: number;
-  Page: number;
-  PageSize: number;
-  Data: KhachHang[];
+  totalRecords: number;
+  page: number;
+  pageSize: number;
+  data: KhachHang[];
 }
 
 export interface ApiResponse<T> {
-  Success: boolean;
-  Message: string;
-  Data?: T;
+  success: boolean;
+  message: string;
+  data?: T;
 }
+
 
 export interface ChiTietKhachHangResponse {
-  Profile: KhachHang;
-  DonHangs: DonHang[];
-  DatBans: DatBan[];
+  profile: { 
+      maKhachHang: string; 
+      hoTen: string; 
+      soDienThoai: string; 
+      email?: string; 
+      hinhAnh?: string; 
+      soLanAnTichLuy: number; 
+      noShowCount?: number; 
+      ngayTao?: string; 
+  };
+  donHangs: DonHang[]; 
+  datBans: DatBan[]; 
 }
 
-// API functions với xử lý lỗi chi tiết
 export const customerApi = {
-  // Lấy thống kê
+ 
   layThongKe: async (): Promise<ThongKeKhachHang> => {
     try {
-      console.log(' Calling API: /KhachHang/ThongKe');
       const response = await apiClient.get('/KhachHang/ThongKe');
-      console.log(' API Response:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('❌ API Error in layThongKe:', error);
-      // Trả về object mặc định nếu API fail
+      const data = response.data;
       return {
-        TongKhachHang: 0,
-        KhachHangMoiThang: 0,
-        KhachHangThanThiet: 0,
-        SinhNhatThang: 0
+        tongKhachHang: data.tongKhachHang || 0,
+        khachHangMoiThang: data.khachHangMoiThang || 0,
+        khachHangThanThiet: data.khachHangThanThiet || 0,
+        khachNoShow: data.khachNoShow || 0
+      };
+    } catch (error: any) {
+      console.error(' API Error in layThongKe:', error);
+      return {
+        tongKhachHang: 0,
+        khachHangMoiThang: 0,
+        khachHangThanThiet: 0,
+        khachNoShow: 0
       };
     }
   },
 
-  // Lấy danh sách khách hàng
   layDanhSach: async (search: string = '', page: number = 1, pageSize: number = 10): Promise<DanhSachKhachHangResponse> => {
     try {
-      console.log('Calling API: /KhachHang', { search, page, pageSize });
       const response = await apiClient.get('/KhachHang', {
         params: { search, page, pageSize }
       });
-      console.log('✅ API Response:', response.data);
-      return response.data;
-    } catch (error) {
+      return response.data; 
+    } catch (error: any) {
       console.error(' API Error in layDanhSach:', error);
-      // Trả về object mặc định nếu API fail
       return {
-        TotalRecords: 0,
-        Page: page,
-        PageSize: pageSize,
-        Data: []
+        totalRecords: 0,
+        page: page,
+        pageSize: pageSize,
+        data: []
       };
     }
   },
 
-  // Tìm kiếm khách hàng theo số điện thoại
-  timKiemTheoSdt: async (sdt: string): Promise<ApiResponse<any>> => {
-    try {
-      const response = await apiClient.get(`/KhachHang/TimKiem/${sdt}`);
-      return response.data;
-    } catch (error) {
-      console.error('API Error in timKiemTheoSdt:', error);
-      return {
-        Success: false,
-        Message: 'Lỗi kết nối API'
-      };
-    }
-  },
-
-  // Lấy chi tiết khách hàng
+  
   layChiTiet: async (id: string): Promise<ApiResponse<ChiTietKhachHangResponse>> => {
     try {
       const response = await apiClient.get(`/KhachHang/${id}`);
-      return response.data;
-    } catch (error) {
-      console.error('API Error in layChiTiet:', error);
+      
+      const apiData = response.data;
+      
+      if (apiData.success) {
+          const dataToReturn: ChiTietKhachHangResponse = {
+              profile: apiData.profile,
+              donHangs: apiData.donHangs,
+              datBans: apiData.datBans,
+          };
+
+          return {
+              success: apiData.success, 
+              message: apiData.message || 'Lấy chi tiết thành công',
+              data: dataToReturn
+          };
+      } else {
+         return {
+            success: false,
+            message: apiData.message || 'Lỗi xử lý API chi tiết khách hàng',
+            data: undefined
+         }
+      }
+      
+    } catch (error: any) {
+      console.error(' API Error in layChiTiet:', error);
+      
+      let errorMessage = 'Lỗi kết nối API hoặc server';
+      
+      if (error.response) {
+          console.log(`ChiTiet API returned Status: ${error.response.status}`);
+          
+
+          if (error.response.status === 404) {
+              errorMessage = error.response.data?.message || 'Khách hàng không tồn tại trong hệ thống (404)';
+          } else {
+              errorMessage = error.response.data?.message || `Lỗi Server (${error.response.status})`;
+          }
+      }
+      
       return {
-        Success: false,
-        Message: 'Lỗi kết nối API'
+        success: false,
+        message: errorMessage,
+        data: undefined 
       };
     }
   },
 
-  // Thêm khách hàng mới
   themKhachHang: async (model: KhachHangCreateModel): Promise<ApiResponse<KhachHang>> => {
     try {
       const response = await apiClient.post('/KhachHang', model);
       return response.data;
-    } catch (error) {
-      console.error('API Error in themKhachHang:', error);
-      return {
-        Success: false,
-        Message: 'Lỗi kết nối API'
-      };
+    } catch (error: any) {
+        console.error(' API Error in themKhachHang:', error);
+        // Backend trả về message ở dạng camelCase (thành công) hoặc message (lỗi)
+        const message = error.response?.data?.message || 'Lỗi kết nối API hoặc server';
+        return {
+            success: false,
+            message: message
+        };
     }
   },
 
-  // Cập nhật khách hàng
   capNhatKhachHang: async (id: string, model: KhachHangUpdateModel): Promise<ApiResponse<any>> => {
     try {
       const response = await apiClient.put(`/KhachHang/${id}`, model);
       return response.data;
-    } catch (error) {
-      console.error('API Error in capNhatKhachHang:', error);
-      return {
-        Success: false,
-        Message: 'Lỗi kết nối API'
-      };
+    } catch (error: any) {
+        console.error(' API Error in capNhatKhachHang:', error);
+        const message = error.response?.data?.message || 'Lỗi kết nối API hoặc server';
+        return {
+            success: false,
+            message: message
+        };
     }
   },
 
-  // Xuất Excel
-  xuatExcel: async (search: string = ''): Promise<ApiResponse<KhachHang[]>> => {
+  xuatExcel: async (search: string = ''): Promise<ApiResponse<any>> => {
     try {
       const response = await apiClient.get('/KhachHang/Export', {
         params: { search }
       });
       return response.data;
-    } catch (error) {
-      console.error('API Error in xuatExcel:', error);
+    } catch (error: any) {
+      console.error(' API Error in xuatExcel:', error);
       return {
-        Success: false,
-        Message: 'Lỗi kết nối API'
+        success: false,
+        message: 'Lỗi kết nối API'
       };
     }
   },
