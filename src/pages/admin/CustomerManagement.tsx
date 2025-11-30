@@ -12,10 +12,10 @@ const CustomerManagement = () => {
   const [customers, setCustomers] = useState<KhachHang[]>([]);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<ThongKeKhachHang>({
-    TongKhachHang: 0,
-    KhachHangMoiThang: 0,
-    KhachHangThanThiet: 0,
-    SinhNhatThang: 0
+    tongKhachHang: 0,
+    khachHangMoiThang: 0,
+    khachHangThanThiet: 0,
+    khachNoShow: 0
   });
   const [searchText, setSearchText] = useState('');
   const [pagination, setPagination] = useState({
@@ -27,22 +27,117 @@ const CustomerManagement = () => {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [formModalVisible, setFormModalVisible] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<KhachHang | null>(null);
-  const [activeTab, setActiveTab] = useState('profile'); // 'profile', 'orders', 'bookings'
+  const [activeTab, setActiveTab] = useState('profile');
   const [formData, setFormData] = useState({
     HoTen: '',
     SoDienThoai: '',
     Email: '',
     HinhAnh: ''
   });
+  const [error, setError] = useState<string | null>(null);
 
+  const formatPhone = (phone: string | undefined | null) => {
+    if (!phone) return '';
+    const safePhone = phone || '';
+    return safePhone.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3');
+  };
+
+  const formatCurrency = (amount: number | undefined | null) => {
+    return new Intl.NumberFormat('vi-VN', {
+      style: 'currency',
+      currency: 'VND'
+    }).format(amount || 0);
+  };
+
+  const formatDate = (dateString: string | undefined | null) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('vi-VN');
+  };
+
+  const getTimeAgo = (dateString: string | undefined | null) => {
+    if (!dateString) return 'Chưa có dữ liệu';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'N/A';
+    
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Hôm nay';
+    if (diffDays === 1) return 'Hôm qua';
+    if (diffDays < 7) return `${diffDays} ngày trước`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} tuần trước`;
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)} tháng trước`;
+    return `${Math.floor(diffDays / 365)} năm trước`;
+  };
+
+  const getStatusColor = (count: number) => {
+    if (count >= 5) return 'bg-yellow-100 text-yellow-800';
+    if (count >= 3) return 'bg-blue-100 text-blue-800';
+    return 'bg-green-100 text-green-800';
+  };
+  
+  const getAvatarAndNameDisplay = (customer: KhachHang) => {
+    const firstLetter = customer.hoTen ? customer.hoTen.charAt(0).toUpperCase() : 'K';
+    
+    const avatar = (
+      <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold flex-shrink-0">
+        {firstLetter}
+      </div>
+    );
+    
+   
+    if (customer.hinhAnh) {
+        return (
+            <div className="flex items-center">
+                <img 
+                    src={customer.hinhAnh} 
+                    alt={customer.hoTen} 
+                    className="w-10 h-10 rounded-full object-cover flex-shrink-0" 
+                    onError={(e) => {
+                        const target = e.target as HTMLImageElement; 
+                        const parent = target.parentElement;
+                        
+                        target.style.display = 'none'; 
+                        
+                        if (parent) {
+                            const tempDiv = document.createElement('div');
+                            
+                            parent.insertBefore(tempDiv, target as Node); 
+                            
+                            ReactDOM.render(avatar, tempDiv);
+                        }
+                    }} 
+                />
+                <div className="ml-4">
+                    <div className="text-sm font-medium text-gray-900">{customer.hoTen}</div>
+                    {customer.email && (<div className="text-sm text-gray-500">{customer.email}</div>)}
+                </div>
+            </div>
+        );
+    }
+    
+    return (
+      <div className="flex items-center">
+        {avatar}
+        <div className="ml-4">
+          <div className="text-sm font-medium text-gray-900">{customer.hoTen}</div>
+          {customer.email && (<div className="text-sm text-gray-500">{customer.email}</div>)}
+        </div>
+      </div>
+    );
+  };
+  
   // Lấy thống kê
   const fetchStats = async () => {
     try {
+      setError(null);
       const data = await customerApi.layThongKe();
       setStats(data);
     } catch (error) {
-      console.error('Lỗi khi lấy thống kê:', error);
-      alert('Lỗi khi tải thống kê');
+      console.error(' Lỗi khi lấy thống kê:', error);
+      setError('Lỗi khi tải thống kê khách hàng');
     }
   };
 
@@ -50,20 +145,25 @@ const CustomerManagement = () => {
   const fetchCustomers = async (page = 1, search = '') => {
     setLoading(true);
     try {
-      const response = await customerApi.layDanhSach(search, page, pagination.pageSize);
-      setCustomers(response.Data);
+      setError(null);
+      const dataResponse = await customerApi.layDanhSach(search, page, pagination.pageSize);
+      
+      const customerData = Array.isArray(dataResponse.data) ? dataResponse.data : [];
+      setCustomers(customerData);
+      
       setPagination(prev => ({
         ...prev,
-        current: page,
-        total: response.TotalRecords
+        current: dataResponse.page || page,
+        total: dataResponse.totalRecords || 0
       }));
     } catch (error) {
-      console.error('Lỗi khi lấy danh sách khách hàng:', error);
-      alert('Lỗi khi tải danh sách khách hàng');
+      console.error(' Lỗi khi lấy danh sách khách hàng:', error);
+      setError('Lỗi khi tải danh sách khách hàng');
+      setCustomers([]);
     }
     setLoading(false);
   };
-
+  
   useEffect(() => {
     fetchStats();
     fetchCustomers();
@@ -74,6 +174,7 @@ const CustomerManagement = () => {
     fetchCustomers(1, searchText);
   };
 
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -81,52 +182,27 @@ const CustomerManagement = () => {
       [name]: value
     }));
   };
-
-  const formatPhone = (phone: string) => {
-    if (!phone) return '';
-    return phone.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3');
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND'
-    }).format(amount || 0);
-  };
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('vi-VN');
-  };
-
-  const getTimeAgo = (dateString: string) => {
-    if (!dateString) return 'Chưa có dữ liệu';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Hôm nay';
-    if (diffDays === 1) return 'Hôm qua';
-    if (diffDays < 7) return `${diffDays} ngày trước`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} tuần trước`;
-    return `${Math.floor(diffDays / 30)} tháng trước`;
-  };
-
+  
   const showCustomerDetail = async (customer: KhachHang) => {
     try {
-      const response = await customerApi.layChiTiet(customer.MaKhachHang);
-      if (response.Success) {
-        setSelectedCustomer(response.Data);
+      setError(null);
+      
+      const response = await customerApi.layChiTiet(customer.maKhachHang); 
+      
+      if (response.success && response.data) {
+        console.log("SUCCESS: Mở modal với dữ liệu", response.data.profile.maKhachHang); 
+        setSelectedCustomer(response.data);
         setDetailModalVisible(true);
         setActiveTab('profile');
       } else {
-        alert('Không tìm thấy thông tin khách hàng');
+        console.error("FAILURE: API trả về không thành công. Message:", response.message);
+        
+        setSelectedCustomer(null);
+        setError(response.message || 'Không tìm thấy thông tin chi tiết khách hàng.'); 
       }
     } catch (error) {
       console.error('Lỗi khi lấy chi tiết khách hàng:', error);
-      alert('Lỗi khi tải thông tin chi tiết');
+      setError('Lỗi kết nối hoặc lỗi server khi tải chi tiết khách hàng.');
     }
   };
 
@@ -138,95 +214,91 @@ const CustomerManagement = () => {
       Email: '',
       HinhAnh: ''
     });
+    setError(null);
     setFormModalVisible(true);
   };
 
   const handleEditCustomer = (customer: KhachHang) => {
     setEditingCustomer(customer);
     setFormData({
-      HoTen: customer.HoTen,
-      SoDienThoai: customer.SoDienThoai,
-      Email: customer.Email || '',
-      HinhAnh: customer.HinhAnh || ''
+      HoTen: customer.hoTen,
+      SoDienThoai: customer.soDienThoai,
+      Email: customer.email || '',
+      HinhAnh: customer.hinhAnh || ''
     });
+    setError(null);
     setFormModalVisible(true);
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setError(null);
+      let apiResponse;
+
       if (editingCustomer) {
-        await customerApi.capNhatKhachHang(editingCustomer.MaKhachHang, formData as KhachHangUpdateModel);
-        alert('Cập nhật khách hàng thành công');
+        apiResponse = await customerApi.capNhatKhachHang(editingCustomer.maKhachHang, formData as KhachHangUpdateModel);
       } else {
-        await customerApi.themKhachHang(formData as KhachHangCreateModel);
-        alert('Thêm khách hàng thành công');
+        apiResponse = await customerApi.themKhachHang(formData as KhachHangCreateModel);
       }
       
-      setFormModalVisible(false);
-      fetchCustomers(pagination.current, searchText);
-      fetchStats();
+      if (apiResponse.success) {
+        alert(apiResponse.message || 'Thao tác thành công');
+        setFormModalVisible(false);
+        fetchCustomers(pagination.current, searchText);
+        fetchStats();
+      } else {
+         // Hiển thị lỗi từ API
+        setError(apiResponse.message || 'Lỗi xử lý nghiệp vụ');
+      }
     } catch (error: any) {
       console.error('Lỗi khi lưu khách hàng:', error);
-      if (error.response && error.response.data) {
-        alert(error.response.data.Message);
-      } else {
-        alert('Lỗi khi lưu thông tin khách hàng');
-      }
+      // Xử lý lỗi kết nối/server 500
+      setError(error.message || 'Lỗi kết nối API hoặc server');
     }
   };
 
   const handleExportExcel = async () => {
     try {
+      setError(null);
       const response = await customerApi.xuatExcel(searchText);
-      if (response.Success) {
-        // Tạo file Excel từ dữ liệu
-        console.log('Dữ liệu xuất Excel:', response.Data);
+      if (response.success) {
+        console.log('Dữ liệu xuất Excel:', response.data);
         alert('Dữ liệu đã sẵn sàng để xuất Excel');
       }
     } catch (error) {
       console.error('Lỗi khi xuất Excel:', error);
-      alert('Lỗi khi xuất dữ liệu Excel');
+      setError('Lỗi khi xuất dữ liệu Excel');
     }
   };
 
-  const getStatusColor = (count: number) => {
-    if (count >= 5) return 'bg-yellow-100 text-yellow-800';
-    if (count >= 3) return 'bg-blue-100 text-blue-800';
-    return 'bg-green-100 text-green-800';
-  };
-
-  const getAvatar = (customer: KhachHang) => {
-    if (customer.HinhAnh) {
-      return <img src={customer.HinhAnh} alt={customer.HoTen} className="w-10 h-10 rounded-full" />;
-    }
-    const firstLetter = customer.HoTen ? customer.HoTen.charAt(0).toUpperCase() : 'K';
-    return (
-      <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold">
-        {firstLetter}
-      </div>
-    );
-  };
 
   return (
     <div className="p-6">
+      {/* Hiển thị lỗi */}
+      {error && (
+        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+          {error}
+        </div>
+      )}
+
       {/* A. Thanh thống kê nhanh */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-gray-600 text-sm font-medium mb-2">Tổng số khách hàng</h3>
-          <p className="text-3xl font-bold text-green-600">{stats.TongKhachHang}</p>
+          <p className="text-3xl font-bold text-green-600">{stats.tongKhachHang}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-gray-600 text-sm font-medium mb-2">Khách hàng mới (Tháng này)</h3>
-          <p className="text-3xl font-bold text-blue-600">+{stats.KhachHangMoiThang}</p>
+          <p className="text-3xl font-bold text-blue-600">+{stats.khachHangMoiThang}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-gray-600 text-sm font-medium mb-2">Khách hàng thân thiết</h3>
-          <p className="text-3xl font-bold text-red-600">{stats.KhachHangThanThiet}</p>
+          <p className="text-3xl font-bold text-red-600">{stats.khachHangThanThiet}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-gray-600 text-sm font-medium mb-2">Sinh nhật trong tháng</h3>
-          <p className="text-3xl font-bold text-purple-600">{stats.SinhNhatThang}</p>
+          <h3 className="text-gray-600 text-sm font-medium mb-2">Khách No-Show</h3>
+          <p className="text-3xl font-bold text-purple-600">{stats.khachNoShow}</p>
         </div>
       </div>
 
@@ -262,7 +334,7 @@ const CustomerManagement = () => {
               onClick={handleExportExcel}
               className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 flex items-center gap-2"
             >
-              <span></span>
+              <span>📊</span>
               Xuất Excel
             </button>
           </div>
@@ -306,53 +378,52 @@ const CustomerManagement = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {customers.map((customer) => (
-                  <tr key={customer.MaKhachHang} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        {getAvatar(customer)}
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {customer.HoTen}
-                          </div>
-                          {customer.Email && (
-                            <div className="text-sm text-gray-500">{customer.Email}</div>
-                          )}
+                {customers && customers.length > 0 ? (
+                  customers.map((customer) => (
+                    <tr key={customer.maKhachHang} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        
+                        {getAvatarAndNameDisplay(customer)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {formatPhone(customer.soDienThoai)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(customer.soLanAnTichLuy)}`}>
+                          {customer.soLanAnTichLuy} lần
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {getTimeAgo(customer.lanCuoiDen)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {formatCurrency(customer.tongChiTieu)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => showCustomerDetail(customer)}
+                            className="text-blue-600 hover:text-blue-900 px-2 py-1 rounded hover:bg-blue-50"
+                          >
+                             Xem
+                          </button>
+                          <button
+                            onClick={() => handleEditCustomer(customer)}
+                            className="text-green-600 hover:text-green-900 px-2 py-1 rounded hover:bg-green-50"
+                          >
+                             Sửa
+                          </button>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatPhone(customer.SoDienThoai)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(customer.SoLanAnTichLuy)}`}>
-                        {customer.SoLanAnTichLuy} lần
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {getTimeAgo(customer.LanCuoiDen || '')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatCurrency(customer.TongChiTieu || 0)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => showCustomerDetail(customer)}
-                          className="text-blue-600 hover:text-blue-900 px-2 py-1 rounded hover:bg-blue-50"
-                        >
-                          👁️ Xem
-                        </button>
-                        <button
-                          onClick={() => handleEditCustomer(customer)}
-                          className="text-green-600 hover:text-green-900 px-2 py-1 rounded hover:bg-green-50"
-                        >
-                          
-                        </button>
-                      </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                      {!loading && "Không có khách hàng nào"}
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -415,7 +486,7 @@ const CustomerManagement = () => {
                       : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  Lịch sử đơn hàng
+                  Lịch sử đơn hàng ({selectedCustomer.donHangs?.length || 0})
                 </button>
                 <button
                   onClick={() => setActiveTab('bookings')}
@@ -425,49 +496,50 @@ const CustomerManagement = () => {
                       : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  Lịch sử đặt bàn
+                  Lịch sử đặt bàn ({selectedCustomer.datBans?.length || 0})
                 </button>
               </nav>
             </div>
 
             <div className="p-6">
+              {/* Sử dụng camelCase để truy cập các trường con */}
               {activeTab === 'profile' && (
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Mã khách hàng</label>
-                    <p className="text-gray-900">{selectedCustomer.Profile?.MaKhachHang}</p>
+                    <p className="text-gray-900">{selectedCustomer.profile?.maKhachHang}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Họ tên</label>
-                    <p className="text-gray-900">{selectedCustomer.Profile?.HoTen}</p>
+                    <p className="text-gray-900">{selectedCustomer.profile?.hoTen}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
-                    <p className="text-gray-900">{formatPhone(selectedCustomer.Profile?.SoDienThoai)}</p>
+                    <p className="text-gray-900">{formatPhone(selectedCustomer.profile?.soDienThoai)}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <p className="text-gray-900">{selectedCustomer.Profile?.Email || 'Chưa có'}</p>
+                    <p className="text-gray-900">{selectedCustomer.profile?.email || 'Chưa có'}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Số lần ăn</label>
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedCustomer.Profile?.SoLanAnTichLuy || 0)}`}>
-                      {selectedCustomer.Profile?.SoLanAnTichLuy || 0} lần
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedCustomer.profile?.soLanAnTichLuy || 0)}`}>
+                      {selectedCustomer.profile?.soLanAnTichLuy || 0} lần
                     </span>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Số lần No-show</label>
                     <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                      {selectedCustomer.Profile?.NoShowCount || 0} lần
+                      {selectedCustomer.profile?.noShowCount || 0} lần
                     </span>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Ngày tạo</label>
-                    <p className="text-gray-900">{formatDate(selectedCustomer.Profile?.NgayTao || '')}</p>
+                    <p className="text-gray-900">{formatDate(selectedCustomer.profile?.ngayTao)}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Khách hàng từ</label>
-                    <p className="text-gray-900">{getTimeAgo(selectedCustomer.Profile?.NgayTao || '')}</p>
+                    <p className="text-gray-900">{getTimeAgo(selectedCustomer.profile?.ngayTao)}</p>
                   </div>
                 </div>
               )}
@@ -475,28 +547,28 @@ const CustomerManagement = () => {
               {activeTab === 'orders' && (
                 <div>
                   <h3 className="text-lg font-medium mb-4">Lịch sử đơn hàng</h3>
-                  {selectedCustomer.DonHangs && selectedCustomer.DonHangs.length > 0 ? (
+                  {selectedCustomer.donHangs && selectedCustomer.donHangs.length > 0 ? (
                     <div className="space-y-4">
-                      {selectedCustomer.DonHangs.map((donHang) => (
-                        <div key={donHang.MaDonHang} className="border border-gray-200 rounded-lg p-4">
+                      {selectedCustomer.donHangs.map((donHang) => (
+                        <div key={donHang.maDonHang} className="border border-gray-200 rounded-lg p-4">
                           <div className="flex justify-between items-start">
                             <div>
-                              <p className="font-medium">Đơn hàng {donHang.MaDonHang}</p>
+                              <p className="font-medium">Đơn hàng {donHang.maDonHang}</p>
                               <p className="text-sm text-gray-600">
-                                Thời gian: {formatDate(donHang.ThoiGianDatHang)} | 
-                                Số người: {donHang.SoLuongNguoiDK} |
-                                Tiền cọc: {formatCurrency(donHang.TienDatCoc || 0)}
+                                Thời gian: {formatDate(donHang.thoiGianDatHang)} | 
+                                Số người: {donHang.soLuongNguoiDK} |
+                                Tiền cọc: {formatCurrency(donHang.tienDatCoc)}
                               </p>
-                              {donHang.GhiChu && (
-                                <p className="text-sm text-gray-600 mt-1">Ghi chú: {donHang.GhiChu}</p>
+                              {donHang.ghiChu && (
+                                <p className="text-sm text-gray-600 mt-1">Ghi chú: {donHang.ghiChu}</p>
                               )}
                             </div>
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              donHang.TrangThai === 'HOAN_TAT' ? 'bg-green-100 text-green-800' :
-                              donHang.TrangThai === 'HUY' ? 'bg-red-100 text-red-800' :
+                              donHang.trangThai === 'DA_HOAN_THANH' ? 'bg-green-100 text-green-800' :
+                              donHang.trangThai === 'DA_HUY' ? 'bg-red-100 text-red-800' :
                               'bg-yellow-100 text-yellow-800'
                             }`}>
-                              {donHang.TrangThai}
+                              {donHang.trangThai}
                             </span>
                           </div>
                         </div>
@@ -511,23 +583,23 @@ const CustomerManagement = () => {
               {activeTab === 'bookings' && (
                 <div>
                   <h3 className="text-lg font-medium mb-4">Lịch sử đặt bàn</h3>
-                  {selectedCustomer.DatBans && selectedCustomer.DatBans.length > 0 ? (
+                  {selectedCustomer.datBans && selectedCustomer.datBans.length > 0 ? (
                     <div className="space-y-4">
-                      {selectedCustomer.DatBans.map((datBan) => (
-                        <div key={datBan.MaDonHang} className="border border-gray-200 rounded-lg p-4">
+                      {selectedCustomer.datBans.map((datBan) => (
+                        <div key={datBan.maDonHang} className="border border-gray-200 rounded-lg p-4">
                           <div className="flex justify-between items-start">
                             <div>
-                              <p className="font-medium">Bàn {datBan.TenBan} - Đơn {datBan.MaDonHang}</p>
+                              <p className="font-medium">Bàn {datBan.tenBan} - Đơn {datBan.maDonHang}</p>
                               <p className="text-sm text-gray-600">
-                                Thời gian: {formatDate(datBan.ThoiGianDatHang)}
+                                Thời gian: {formatDate(datBan.thoiGianDatHang)}
                               </p>
                             </div>
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              datBan.TrangThai === 'HOAN_TAT' ? 'bg-green-100 text-green-800' :
-                              datBan.TrangThai === 'HUY' ? 'bg-red-100 text-red-800' :
+                              datBan.trangThai === 'DA_HOAN_THANH' ? 'bg-green-100 text-green-800' :
+                              datBan.trangThai === 'DA_HUY' ? 'bg-red-100 text-red-800' :
                               'bg-yellow-100 text-yellow-800'
                             }`}>
-                              {datBan.TrangThai}
+                              {datBan.trangThai}
                             </span>
                           </div>
                         </div>
@@ -542,7 +614,11 @@ const CustomerManagement = () => {
 
             <div className="px-6 py-4 border-t border-gray-200">
               <button
-                onClick={() => setDetailModalVisible(false)}
+                onClick={() => {
+                    setDetailModalVisible(false);
+                    setSelectedCustomer(null);
+                    setError(null);
+                }}
                 className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
               >
                 Đóng
@@ -552,7 +628,7 @@ const CustomerManagement = () => {
         </div>
       )}
 
-      {/* Modal thêm/sửa khách hàng */}
+
       {formModalVisible && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg w-full max-w-md">
@@ -561,6 +637,12 @@ const CustomerManagement = () => {
                 {editingCustomer ? 'Sửa thông tin khách hàng' : 'Thêm khách hàng mới'}
               </h2>
             </div>
+            
+            {error && (
+              <div className="mx-6 mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
+                {error}
+              </div>
+            )}
             
             <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
               <div>
@@ -632,7 +714,10 @@ const CustomerManagement = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormModalVisible(false)}
+                  onClick={() => {
+                    setFormModalVisible(false);
+                    setError(null); // Xóa lỗi khi đóng form
+                  }}
                   className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
                 >
                   Hủy
@@ -645,5 +730,7 @@ const CustomerManagement = () => {
     </div>
   );
 };
+
+import ReactDOM from 'react-dom';
 
 export default CustomerManagement;
