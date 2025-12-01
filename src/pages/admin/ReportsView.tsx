@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { formatVND } from "@/utils"; // Giữ lại hàm format tiền của bạn
-import { reportsApi } from "@/api/other"; // API cho biểu đồ doanh thu
-
+import { formatVND } from "@/utils";
+import { reportsApi } from "@/api/other";
 import dashboardService, { TimeRange } from "@/services/dashboardService";
-
 import { DashboardStat } from "@/models/DashboardStat";
-
+import { useTheme } from "@/contexts/ThemeContext"; // Import theme context
 import {
   BarChart,
   Bar,
@@ -15,11 +13,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-
-const IconDoanhThu = () => <span className="text-2xl">💰</span>;
-const IconDonHang = () => <span className="text-2xl">✅</span>;
-const IconBanPhucVu = () => <span className="text-2xl">🍽️</span>;
-const IconKhachHang = () => <span className="text-2xl">👥</span>;
+import { DollarSign, CheckCircle2, Utensils, Users, Calendar } from "lucide-react"; // Dùng Lucide Icon
 
 interface MonthlyRevenue {
   thang: number;
@@ -27,6 +21,11 @@ interface MonthlyRevenue {
 }
 
 const StatisticsDashboard: React.FC = () => {
+  const { theme } = useTheme(); // Lấy theme hiện tại
+  
+  // Logic kiểm tra Dark Mode để chỉnh màu biểu đồ
+  const isDarkMode = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
   const [stats, setStats] = useState<DashboardStat>({
     tongDoanhThu: 0,
     soDonHoanThanh: 0,
@@ -50,9 +49,8 @@ const StatisticsDashboard: React.FC = () => {
         const data = await dashboardService.getDashboardStats(timeRange);
         setStats(data);
       } catch (err) {
-        console.error("Lỗi tải thống kê 4 thẻ:", err);
-        console.log("Lỗi: ", err);
-        setStatsError("Lỗi tải dữ liệu thống kê.");
+        console.error("Lỗi tải thống kê:", err);
+        setStatsError("Không thể tải dữ liệu.");
       } finally {
         setLoadingStats(false);
       }
@@ -67,15 +65,14 @@ const StatisticsDashboard: React.FC = () => {
       setMonthlyError(null);
       try {
         const data = await reportsApi.getRevenueByMonth(year);
-
         const normalizedData = (data || []).map((item: any) => ({
           thang: item.thang || item.Thang,
           doanhThu: item.doanhThu || item.DoanhThu || 0,
         }));
         setMonthly(normalizedData);
       } catch (err) {
-        console.error("Lỗi tải biểu đồ tháng:", err);
-        setMonthlyError("Lỗi tải dữ liệu biểu đồ.");
+        console.error("Lỗi tải biểu đồ:", err);
+        setMonthlyError("Lỗi tải biểu đồ.");
         setMonthly([]);
       } finally {
         setLoadingMonthly(false);
@@ -89,12 +86,20 @@ const StatisticsDashboard: React.FC = () => {
     return new Intl.NumberFormat("vi-VN").format(val);
   };
 
+  const formatYAxis = (tick: any) => {
+    return new Intl.NumberFormat("vi-VN", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(tick);
+  };
+
+  // Nút filter đổi màu theo theme
   const getFilterButtonClass = (range: TimeRange): string => {
     const baseClass = "px-4 py-2 rounded-lg font-medium text-sm transition-all";
     if (timeRange === range) {
-      return `${baseClass} bg-gray-800 text-white shadow-md`;
+      return `${baseClass} bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none`;
     }
-    return `${baseClass} bg-gray-200 text-gray-700 hover:bg-gray-300`;
+    return `${baseClass} text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700`;
   };
 
   const renderStatCard = (
@@ -102,192 +107,171 @@ const StatisticsDashboard: React.FC = () => {
     value: string,
     icon: React.ReactNode,
     subtext?: string,
-    isLoading: boolean = false
+    isLoading: boolean = false,
+    colorClass: string = "bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400"
   ) => {
     return (
-      <div className="bg-white p-5 rounded-xl shadow-md border border-gray-100 flex items-center space-x-4">
-        <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+      <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center space-x-4 transition-colors duration-300">
+        <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${colorClass}`}>
           {icon}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-500 truncate">{title}</p>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{title}</p>
           {isLoading ? (
-            <div className="h-7 bg-gray-200 rounded-md w-3/4 animate-pulse mt-1"></div>
+            <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded-md w-3/4 animate-pulse mt-1"></div>
           ) : (
-            <p className="text-2xl font-bold text-gray-900">{value}</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-0.5">{value}</p>
           )}
-          {subtext && <p className="text-xs text-gray-400 mt-1">{subtext}</p>}
+          {subtext && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{subtext}</p>}
         </div>
       </div>
     );
   };
 
-  const totalYearRevenue = useMemo(() => {
-    return monthly.reduce((acc, month) => acc + month.doanhThu, 0);
-  }, [monthly]);
-
-  const formatYAxis = (tick) => {
-    return new Intl.NumberFormat("vi-VN", {
-      notation: "compact",
-      maximumFractionDigits: 1,
-    }).format(tick);
-  };
-
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6 md:p-8 space-y-6">
+    // CONTAINER CHÍNH: Đổi bg-gray-900 cứng thành bg-gray-50 dark:bg-gray-900
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white p-6 md:p-8 space-y-8 transition-colors duration-300">
+      
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Bảng điều khiển</h1>
-          <p className="text-gray-400">
-            Chào mừng trở lại, xem tổng quan nhà hàng của bạn.
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Bảng điều khiển</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">
+            Tổng quan tình hình kinh doanh của nhà hàng.
           </p>
         </div>
-        <div className="flex space-x-2 p-1 bg-gray-800 rounded-lg">
-          <button
-            onClick={() => setTimeRange("TODAY")}
-            className={getFilterButtonClass("TODAY")}
-            disabled={loadingStats}
-          >
+        
+        {/* TIME FILTER */}
+        <div className="flex p-1 bg-gray-200 dark:bg-gray-800 rounded-xl">
+          <button onClick={() => setTimeRange("TODAY")} className={getFilterButtonClass("TODAY")} disabled={loadingStats}>
             Hôm nay
           </button>
-          <button
-            onClick={() => setTimeRange("WEEK")}
-            className={getFilterButtonClass("WEEK")}
-            disabled={loadingStats}
-          >
+          <button onClick={() => setTimeRange("WEEK")} className={getFilterButtonClass("WEEK")} disabled={loadingStats}>
             Tuần này
           </button>
-          <button
-            onClick={() => setTimeRange("MONTH")}
-            className={getFilterButtonClass("MONTH")}
-            disabled={loadingStats}
-          >
+          <button onClick={() => setTimeRange("MONTH")} className={getFilterButtonClass("MONTH")} disabled={loadingStats}>
             Tháng này
           </button>
         </div>
       </div>
 
       {statsError && (
-        <div className="text-red-400 bg-red-900 p-3 rounded-lg">
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-xl border border-red-100 dark:border-red-800">
           {statsError}
         </div>
       )}
+
+      {/* STAT CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {renderStatCard(
-          "Tổng doanh thu",
+          "Doanh thu",
           formatVND(stats.tongDoanhThu),
-          <IconDoanhThu />,
-          timeRange === "TODAY"
-            ? "Trong hôm nay"
-            : timeRange === "WEEK"
-            ? "Trong tuần này"
-            : "Trong tháng này",
-          loadingStats
+          <DollarSign className="w-6 h-6" />,
+          timeRange === "TODAY" ? "Hôm nay" : timeRange === "WEEK" ? "Tuần này" : "Tháng này",
+          loadingStats,
+          "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
         )}
         {renderStatCard(
-          "Số đơn đã hoàn thành",
+          "Đơn hoàn thành",
           formatNumber(stats.soDonHoanThanh),
-          <IconDonHang />,
-          "Số đơn đã thanh toán thành công",
-          loadingStats
+          <CheckCircle2 className="w-6 h-6" />,
+          "Đã thanh toán",
+          loadingStats,
+          "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
         )}
         {renderStatCard(
-          "Số bàn đang phục vụ",
+          "Bàn đang phục vụ",
           formatNumber(stats.soBanPhucVu),
-          <IconBanPhucVu />,
-          "Số bàn đang có khách (real-time)",
-          loadingStats
+          <Utensils className="w-6 h-6" />,
+          "Real-time",
+          loadingStats,
+          "bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
         )}
         {renderStatCard(
-          "Tổng số khách hàng",
+          "Khách hàng",
           formatNumber(stats.tongKhachHang),
-          <IconKhachHang />,
-          "Số lượt khách đã phục vụ",
-          loadingStats
+          <Users className="w-6 h-6" />,
+          "Lượt khách",
+          loadingStats,
+          "bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
         )}
       </div>
 
-      {monthlyError && (
-        <div className="text-red-400 bg-red-900 p-3 rounded-lg text-center">
-          {monthlyError}
-        </div>
-      )}
-
-      {/* Xử lý Loading (Kiểu mới - Skeleton cho biểu đồ) */}
-      {loadingMonthly && (
-        <div
-          className="bg-gray-700 p-4 rounded-lg animate-pulse"
-          style={{ height: 350 }}
-        >
-          <div className="h-full bg-gray-600 rounded"></div>
-        </div>
-      )}
-
-      {/* Hiển thị biểu đồ khi có dữ liệu */}
-      {!loadingMonthly && !monthlyError && monthly.length > 0 && (
-        // Recharts cần set chiều cao cho container
-        <div style={{ width: "100%", height: 350 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={monthly} // Dữ liệu của bạn
-              margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
-            >
-              {/* Lưới nền (màu xám mờ) */}
-              <CartesianGrid strokeDasharray="3 3" stroke="#555" />
-
-              {/* Trục X (Tháng) */}
-              <XAxis
-                dataKey="thang"
-                stroke="#9ca3af" // Màu text-gray-400
-                tickFormatter={(thang) => `T${thang}`} // Hiển thị: T1, T2...
-              />
-
-              {/* Trục Y (Doanh thu) */}
-              <YAxis
-                stroke="#9ca3af" // Màu text-gray-400
-                tickFormatter={formatYAxis} // Dùng hàm format ngắn gọn
-              />
-
-              {/* Tooltip khi hover (hiển thị số tiền đầy đủ) */}
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#374151", // Màu bg-gray-700
-                  border: "none",
-                  borderRadius: "8px",
-                }}
-                labelStyle={{ color: "#fff" }}
-                formatter={(value) => [formatVND(Number(value)), "Doanh thu"]} 
-              />
-
+      {/* CHART SECTION */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors duration-300">
+        <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Biểu đồ doanh thu năm {year}</h3>
             
-              <Bar
-                dataKey="doanhThu"
-                fill="#4ade80" 
-                name="Doanh thu"
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+            <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
+                <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                <input
+                    type="number"
+                    value={year}
+                    onChange={(e) => setYear(parseInt(e.target.value) || new Date().getFullYear())}
+                    className="bg-transparent border-none focus:ring-0 w-16 text-sm font-semibold text-gray-700 dark:text-gray-200 text-center"
+                />
+            </div>
         </div>
-      )}
-      <div className="flex justify-end items-center gap-2 pt-4 border-t border-gray-700">
-        <label htmlFor="year-select" className="text-sm text-gray-400">
-          Chọn năm:
-        </label>
-        <input
-          id="year-select"
-          type="number"
-          value={year}
-          onChange={(e) =>
-            setYear(parseInt(e.target.value) || new Date().getFullYear())
-          }
-          className="bg-gray-900 border border-gray-600 text-white rounded-lg px-3 py-1 w-28 text-center"
-        />
+
+        {monthlyError && (
+            <div className="text-center py-10 text-red-500 dark:text-red-400">{monthlyError}</div>
+        )}
+
+        {loadingMonthly && (
+            <div className="h-[350px] w-full bg-gray-100 dark:bg-gray-700/50 rounded-xl animate-pulse"></div>
+        )}
+
+        {!loadingMonthly && !monthlyError && (
+            <div style={{ width: "100%", height: 350 }}>
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                {/* Lưới: Sáng thì màu xám nhạt, Tối thì màu xám đậm */}
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? "#374151" : "#e5e7eb"} />
+                
+                <XAxis
+                    dataKey="thang"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: isDarkMode ? "#9ca3af" : "#6b7280", fontSize: 12 }}
+                    dy={10}
+                    tickFormatter={(thang) => `T${thang}`}
+                />
+                
+                <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: isDarkMode ? "#9ca3af" : "#6b7280", fontSize: 12 }}
+                    tickFormatter={formatYAxis}
+                />
+                
+                <Tooltip
+                    cursor={{ fill: isDarkMode ? "#1f2937" : "#f3f4f6" }}
+                    contentStyle={{
+                        backgroundColor: isDarkMode ? "#1f2937" : "#ffffff",
+                        borderColor: isDarkMode ? "#374151" : "#e5e7eb",
+                        borderRadius: "12px",
+                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                        color: isDarkMode ? "#f3f4f6" : "#111827"
+                    }}
+                    itemStyle={{ color: isDarkMode ? "#fff" : "#000" }} // Màu chữ giá trị
+                    labelStyle={{ color: isDarkMode ? "#9ca3af" : "#6b7280", marginBottom: "0.25rem" }} // Màu chữ tiêu đề (Tháng)
+                    formatter={(value: any) => [formatVND(Number(value)), "Doanh thu"]}
+                />
+                
+                <Bar
+                    dataKey="doanhThu"
+                    fill="#6366f1" // Màu Indigo-500
+                    radius={[6, 6, 0, 0]}
+                    barSize={40}
+                    // Gradient cho cột đẹp hơn (Optional)
+                />
+                </BarChart>
+            </ResponsiveContainer>
+            </div>
+        )}
       </div>
     </div>
   );
 };
 
 export default StatisticsDashboard;
-
-

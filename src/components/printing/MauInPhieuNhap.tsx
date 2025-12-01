@@ -21,8 +21,8 @@ export const MauInPhieuNhap = React.forwardRef<HTMLDivElement, Props>((props, re
                     <p className="italic mt-1">Mã phiếu: <strong>{data.maNhapHang}</strong></p>
                 </div>
                 <div className="text-right text-sm">
-                    <p className="font-bold">NHÀ HÀNG CỦA HIẾU</p>
-                    <p>ĐC: 123 Đường ABC, Quận 1, TP.HCM</p>
+                    <p className="font-bold">NHÀ HÀNG Viet Restaurant</p>
+                    <p>ĐC: 140 Lê Trọng Tấn, Q. Tân Phú, TP.HCM</p>
                     <p>Ngày in: {new Date().toLocaleDateString('vi-VN')}</p>
                 </div>
             </div>

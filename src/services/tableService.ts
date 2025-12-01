@@ -55,6 +55,16 @@ export const tableService = {
     return rawResponse as unknown as any[];
   },
 
+  getDashboardTableStatusManager: async (dateTime: string) => {
+    const rawResponse = await axiosClient.get(
+      "/BanAnsAPI/GetManagerTableStatus",
+      {
+        params: { dateTime: dateTime },
+      }
+    );
+    return rawResponse as unknown as any[];
+  },
+
   // 4. Lấy danh sách tầng
   getTangs: async () => {
     const rawResponse = await axiosClient.get("/TangAPI");
