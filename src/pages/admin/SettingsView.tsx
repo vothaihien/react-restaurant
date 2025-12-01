@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFeedback } from "@/contexts/FeedbackContext";
+import { useTheme } from "@/contexts/ThemeContext"; // Import hook theme
 import { tablesApi } from "@/api/tables";
 import { employeesApi } from "@/api/employees";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Building2, Info, Palette, Type } from "lucide-react";
+import { Users, Building2, Info, Palette, Type, Sun, Moon, Laptop } from "lucide-react";
 
 interface TableData {
   maBan: string;
@@ -23,7 +24,7 @@ interface TangData {
 }
 
 interface UISettings {
-  theme: "light" | "dark" | "auto";
+  // theme: "light" | "dark" | "auto"; // Theme giờ do Context quản lý
   primaryColor: string;
   fontSize: "small" | "medium" | "large";
 }
@@ -31,29 +32,28 @@ interface UISettings {
 const SettingsView: React.FC = () => {
   const { user } = useAuth();
   const { notify } = useFeedback();
+  const { theme, setTheme } = useTheme(); // Hook theme mới
+
   const [tables, setTables] = useState<TableData[]>([]);
   const [tangs, setTangs] = useState<TangData[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // UI Settings state
+  // UI Settings state (Chỉ giữ lại Color và FontSize, Theme do context lo)
   const [uiSettings, setUiSettings] = useState<UISettings>(() => {
     const saved = localStorage.getItem("ui_settings");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Chỉ lấy các field cần thiết
         return {
-          theme: parsed.theme || "light",
           primaryColor: parsed.primaryColor || "indigo",
           fontSize: parsed.fontSize || "medium",
         };
       } catch {
-        // Fallback to default
+        // Fallback
       }
     }
     return {
-      theme: "light",
       primaryColor: "indigo",
       fontSize: "medium",
     };
@@ -61,6 +61,8 @@ const SettingsView: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    // Apply color/font settings on mount
+    applyUISettings(uiSettings);
   }, []);
 
   const loadData = async () => {
@@ -93,7 +95,7 @@ const SettingsView: React.FC = () => {
     // Áp dụng ngay lập tức
     applyUISettings(newSettings);
 
-    // Dispatch event để các component khác có thể cập nhật
+    // Dispatch event để Sidebar cập nhật màu (nếu cần)
     window.dispatchEvent(
       new CustomEvent("ui-settings-changed", { detail: newSettings })
     );
@@ -107,23 +109,6 @@ const SettingsView: React.FC = () => {
 
   const applyUISettings = (settings: UISettings) => {
     const root = document.documentElement;
-
-    // Áp dụng theme
-    if (settings.theme === "dark") {
-      root.classList.add("dark");
-    } else if (settings.theme === "light") {
-      root.classList.remove("dark");
-    } else {
-      // Auto - theo system preference
-      const prefersDark = window.matchMedia(
-        "(prefers-color-scheme: dark)"
-      ).matches;
-      if (prefersDark) {
-        root.classList.add("dark");
-      } else {
-        root.classList.remove("dark");
-      }
-    }
 
     // Áp dụng màu chủ đạo
     const colorMap: Record<string, { primary: string; ring: string }> = {
@@ -161,171 +146,74 @@ const SettingsView: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Cài đặt Hệ thống</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white transition-colors">Cài đặt Hệ thống</h1>
       </div>
 
       {loading && (
-        <div className="text-center py-8 text-gray-500">
+        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
           Đang tải thông tin...
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Thông tin hệ thống */}
-        <Card>
+        
+        {/* === CARD 1: CẤU HÌNH GIAO DIỆN === */}
+        <Card className="dark:bg-gray-800 dark:border-gray-700 transition-colors duration-200">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Info className="w-5 h-5" />
-              Thông tin Hệ thống
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                <span className="text-sm font-medium text-gray-700">
-                  Phiên bản:
-                </span>
-                <span className="text-sm text-gray-900">1.0.0</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                <span className="text-sm font-medium text-gray-700">
-                  Tổng số bàn:
-                </span>
-                <span className="text-sm text-gray-900 font-semibold">
-                  {tables.length}
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                <span className="text-sm font-medium text-gray-700">
-                  Số tầng:
-                </span>
-                <span className="text-sm text-gray-900 font-semibold">
-                  {tangs.length}
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                <span className="text-sm font-medium text-gray-700">
-                  Tổng số nhân viên:
-                </span>
-                <span className="text-sm text-gray-900 font-semibold">
-                  {employees.length}
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-2">
-                <span className="text-sm font-medium text-gray-700">
-                  URL API:
-                </span>
-                <span className="text-sm text-gray-600">
-                  http://localhost:5555
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Thông tin người dùng */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Thông tin Người dùng
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {user && user.type === "admin" ? (
-              <div className="space-y-3">
-                <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                  <span className="text-sm font-medium text-gray-700">
-                    Họ tên:
-                  </span>
-                  <span className="text-sm text-gray-900">{user.name}</span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                  <span className="text-sm font-medium text-gray-700">
-                    Mã nhân viên:
-                  </span>
-                  <span className="text-sm text-gray-900">
-                    {user.employeeId}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                  <span className="text-sm font-medium text-gray-700">
-                    Vai trò:
-                  </span>
-                  <span className="text-sm text-gray-900 font-semibold">
-                    {user.tenVaiTro || "Nhân viên"}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-sm font-medium text-gray-700">
-                    Loại tài khoản:
-                  </span>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                    {user.tenVaiTro || "Nhân viên"}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-4 text-gray-500">
-                <p>Không có thông tin người dùng</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Danh sách tầng */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="w-5 h-5" />
-              Danh sách Tầng
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {tangs.length > 0 ? (
-              <div className="space-y-3">
-                {tangs.map((tang) => {
-                  const tablesInTang = tables.filter(
-                    (t) => t.maTang === tang.maTang
-                  );
-                  return (
-                    <div
-                      key={tang.maTang}
-                      className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
-                    >
-                      <div>
-                        <div className="font-semibold text-gray-900">
-                          {tang.tenTang}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {tablesInTang.length} bàn
-                        </div>
-                      </div>
-                      <div className="text-sm text-gray-500">{tang.maTang}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-4 text-gray-500">
-                <p>Chưa có tầng nào</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Cấu hình Giao diện */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 dark:text-white">
               <Palette className="w-5 h-5" />
               Cấu hình Giao diện
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Primary Color */}
+            
+            {/* 1.1 Chế độ Sáng/Tối (Dùng Context) */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                Chế độ hiển thị
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  onClick={() => setTheme("light")}
+                  className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${
+                    theme === "light"
+                      ? "border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-gray-700 dark:text-indigo-400"
+                      : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+                  }`}
+                >
+                  <Sun className="w-5 h-5" />
+                  <span className="font-medium">Sáng</span>
+                </button>
+
+                <button
+                  onClick={() => setTheme("dark")}
+                  className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${
+                    theme === "dark"
+                      ? "border-indigo-600 bg-gray-800 text-indigo-400"
+                      : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+                  }`}
+                >
+                  <Moon className="w-5 h-5" />
+                  <span className="font-medium">Tối</span>
+                </button>
+
+                <button
+                  onClick={() => setTheme("system")}
+                  className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${
+                    theme === "system"
+                      ? "border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-gray-700 dark:text-indigo-400"
+                      : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+                  }`}
+                >
+                  <Laptop className="w-5 h-5" />
+                  <span className="font-medium">Hệ thống</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 1.2 Primary Color */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 <Palette className="w-4 h-4 inline mr-1" />
                 Màu chủ đạo
               </label>
@@ -338,8 +226,8 @@ const SettingsView: React.FC = () => {
                     }
                     className={`flex items-center gap-2 p-3 rounded-lg border-2 transition ${
                       uiSettings.primaryColor === color.value
-                        ? "bg-opacity-10"
-                        : "border-gray-200 hover:border-gray-300"
+                        ? "bg-opacity-10 dark:bg-gray-700"
+                        : "border-gray-200 dark:border-gray-700 hover:border-gray-300"
                     }`}
                     style={
                       uiSettings.primaryColor === color.value
@@ -351,15 +239,15 @@ const SettingsView: React.FC = () => {
                     }
                   >
                     <div className={`w-6 h-6 rounded-full ${color.color}`} />
-                    <span className="text-sm text-gray-700">{color.label}</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{color.label}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Font Size */}
+            {/* 1.3 Font Size */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 <Type className="w-4 h-4 inline mr-1" />
                 Cỡ chữ
               </label>
@@ -371,7 +259,7 @@ const SettingsView: React.FC = () => {
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                       uiSettings.fontSize === size
                         ? "text-white"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
                     }`}
                     style={
                       uiSettings.fontSize === size
@@ -390,12 +278,153 @@ const SettingsView: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* === CARD 2: THÔNG TIN HỆ THỐNG === */}
+        <Card className="dark:bg-gray-800 dark:border-gray-700 transition-colors duration-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 dark:text-white">
+              <Info className="w-5 h-5" />
+              Thông tin Hệ thống
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Phiên bản:
+                </span>
+                <span className="text-sm text-gray-900 dark:text-white">1.0.0</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Tổng số bàn:
+                </span>
+                <span className="text-sm text-gray-900 dark:text-white font-semibold">
+                  {tables.length}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Số tầng:
+                </span>
+                <span className="text-sm text-gray-900 dark:text-white font-semibold">
+                  {tangs.length}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-200 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Tổng số nhân viên:
+                </span>
+                <span className="text-sm text-gray-900 dark:text-white font-semibold">
+                  {employees.length}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  URL API:
+                </span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  http://localhost:5555
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* === CARD 3: THÔNG TIN NGƯỜI DÙNG === */}
+        <Card className="dark:bg-gray-800 dark:border-gray-700 transition-colors duration-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 dark:text-white">
+              <Users className="w-5 h-5" />
+              Thông tin Người dùng
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {user && user.type === "admin" ? (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center py-2 border-b border-gray-200 dark:border-gray-700">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Họ tên:
+                  </span>
+                  <span className="text-sm text-gray-900 dark:text-white">{user.name}</span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-gray-200 dark:border-gray-700">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Mã nhân viên:
+                  </span>
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    {user.employeeId}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-gray-200 dark:border-gray-700">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Vai trò:
+                  </span>
+                  <span className="text-sm text-gray-900 dark:text-white font-semibold">
+                    {user.tenVaiTro || "Nhân viên"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Loại tài khoản:
+                  </span>
+                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200">
+                    {user.tenVaiTro || "Nhân viên"}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+                <p>Không có thông tin người dùng</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* === CARD 4: DANH SÁCH TẦNG === */}
+        <Card className="dark:bg-gray-800 dark:border-gray-700 transition-colors duration-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 dark:text-white">
+              <Building2 className="w-5 h-5" />
+              Danh sách Tầng
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {tangs.length > 0 ? (
+              <div className="space-y-3">
+                {tangs.map((tang) => {
+                  const tablesInTang = tables.filter(
+                    (t) => t.maTang === tang.maTang
+                  );
+                  return (
+                    <div
+                      key={tang.maTang}
+                      className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                    >
+                      <div>
+                        <div className="font-semibold text-gray-900 dark:text-white">
+                          {tang.tenTang}
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">
+                          {tablesInTang.length} bàn
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">{tang.maTang}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+                <p>Chưa có tầng nào</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
       </div>
     </div>
   );
 };
 
 export default SettingsView;
-
-
-

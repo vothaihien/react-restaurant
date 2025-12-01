@@ -1,344 +1,319 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { useAppContext } from "@/contexts/AppContext";
-import TableCard from "@/components/tables/TableCard";
-import OrderModal from "@/components/orders/OrderModal";
-import PaymentModal from "@/components/orders/PaymentModal";
-import OrderDetailModal from "@/components/orders/OrderDetailModal";
+import React, { useState, useEffect } from 'react';
+import { 
+  Search, Filter, Armchair, Users, Clock, 
+  MoreHorizontal, RotateCcw, Utensils, Loader2, Calendar, User
+} from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { tableService } from '@/services/tableService'; 
 
-// *** CÁC IMPORT NÂNG CẤP (MUI, Service...) ***
-import { tableService, Tang } from "@/services/tableService";
-import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import dayjs, { Dayjs } from "dayjs";
-import {
-  TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Box,
-  CircularProgress,
-  Chip,
-} from "@mui/material";
-import {
-  CheckCircle,
-  AccessTime,
-  CalendarMonth,
-  HelpOutline,
-} from "@mui/icons-material";
-import { orderService } from "@/services/orderService";
-import { Table, TableStatus } from "@/types";
-import { FALLBACK_TILE_IMAGE } from "@/utils/placeholders";
+// --- INTERFACE ---
+interface TableData {
+  maBan: string;
+  tenBan: string;
+  sucChua: number;
+  maTrangThai: string; 
+  tenTrangThai?: string; // Tên hiển thị (Trống, Đang phục vụ...)
+  maTang?: string;
+  tenTang?: string;
+  thoiGianVao?: string; 
+}
 
-// ==========================================================
-// === COMPONENT CHÚ THÍCH (STATUS LEGEND) ===
-// ==========================================================
-const StatusLegend: React.FC = () => (
-  <Box
-    sx={{
-      display: "flex",
-      gap: 2,
-      flexWrap: "wrap",
-      mb: 2,
-      p: 2,
-      bgcolor: "grey.100",
-      borderRadius: 1,
-    }}
-  >
-    <Chip
-      icon={<CheckCircle />}
-      label="Trống"
-      color="success"
-      variant="outlined"
-    />
-    <Chip
-      icon={<AccessTime />}
-      label="Đang phục vụ"
-      color="error"
-      variant="outlined"
-    />
-    <Chip
-      icon={<CalendarMonth />}
-      label="Đã đặt"
-      color="warning"
-      variant="outlined"
-    />
-    <Chip
-      icon={<HelpOutline />}
-      label="Bảo trì"
-      color="default"
-      variant="outlined"
-    />
-  </Box>
-);
+interface TangData {
+  maTang: string;
+  tenTang: string;
+}
 
-// ==========================================================
-// === COMPONENT CHÍNH: DASHBOARD VIEW ===
-// ==========================================================
 const DashboardView: React.FC = () => {
-  // 1. Lấy dữ liệu từ Context (ĐÃ SỬA LỖI 1: Thêm setOrders vào đây)
-  const { menuItems, categories, getOrderForTable, orders, setOrders } =
-    useAppContext();
+  const { user } = useAuth();
+  
+  // State Data
+  const [tables, setTables] = useState<TableData[]>([]);
+  const [tangs, setTangs] = useState<TangData[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  // --- STATE BỘ LỌC ---
+  const [selectedFloor, setSelectedFloor] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedPeople, setSelectedPeople] = useState<string>(''); // Thêm lọc theo số người
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // State Thời gian
+  const [selectedTime, setSelectedTime] = useState<string>(() => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 16);
+  });
 
-  // 2. Các State quản lý UI
-  const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
-  const [selectedTable, setSelectedTable] = useState<Table | null>(null);
-
-  // State Modal
-  const [isOrderModalOpen, setOrderModalOpen] = useState(false);
-  const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
-
-  // State Dữ liệu Bàn & Tầng
-  const [loading, setLoading] = useState(true);
-  const [tables, setTables] = useState<Table[]>([]);
-  const [tangs, setTangs] = useState<Tang[]>([]);
-  const [selectedTang, setSelectedTang] = useState<string>("ALL");
-  const [selectedDateTime, setSelectedDateTime] = useState<Dayjs | null>(
-    dayjs()
-  );
-
-  // -----------------------------------------------------------
-  // 3. CÁC EFFECT (Tải dữ liệu)
-  // -----------------------------------------------------------
-
-  // Fetch danh sách Tầng
+  // --- GỌI API ---
   useEffect(() => {
-    const fetchTangs = async () => {
-      try {
-        const tangsData = await tableService.getTangs();
-        setTangs(tangsData);
-      } catch (error) {
-        console.error("Lỗi tải danh sách tầng:", error);
-      }
-    };
-    fetchTangs();
-  }, []);
-
-  // Fetch danh sách Bàn theo thời gian
-  useEffect(() => {
-    if (!selectedDateTime) {
-      setTables([]);
-      return;
-    }
-
-    const fetchTables = async () => {
+    const fetchData = async () => {
       setLoading(true);
       try {
-        // Gọi API lấy trạng thái bàn
-        const banAnData = await tableService.getDashboardTableStatus(
-          selectedDateTime.toISOString()
-        );
-
-        // Map dữ liệu từ API sang định dạng Table của Frontend
-        const mappedTables: Table[] = banAnData.map((banAn: any) => ({
-          id: banAn.maBan,
-          name: banAn.tenBan,
-          capacity: banAn.sucChua,
-          status: banAn.tenTrangThai,
-          maTang: banAn.maTang,
-          orderId: null,
-        }));
-
-        setTables(mappedTables);
+        console.log("Gọi API Dashboard lúc:", selectedTime);
+        const [tablesData, tangsData] = await Promise.all([
+          tableService.getDashboardTableStatusManager(selectedTime).catch(err => []),
+          tableService.getTangs().catch(err => [])
+        ]);
+        setTables(tablesData || []);
+        setTangs(tangsData || []);
       } catch (error) {
-        console.error("Lỗi tải sơ đồ bàn:", error);
-        setTables([]);
+        console.error("Lỗi hệ thống:", error);
       } finally {
         setLoading(false);
       }
     };
+    fetchData();
+  }, [selectedTime]); 
 
-    fetchTables();
-  }, [selectedDateTime]);
-
-  // [ĐÃ SỬA LỖI 2] Đồng bộ Order ID từ Context vào Dashboard
-  useEffect(() => {
-    if (tables.length > 0 && orders.length > 0) {
-      setTables((prevTables) =>
-        prevTables.map((table) => {
-          const matchedOrder = orders.find((o) => o.tableId === table.id);
-          if (matchedOrder) {
-            return {
-              ...table,
-              orderId: matchedOrder.id,
-              status: TableStatus.Occupied,
-            };
-          }
-          return table;
-        })
-      );
+  // --- LOGIC LỌC CLIENT-SIDE (Đầy đủ Tầng, Trạng thái, Số người) ---
+  const filteredTables = tables.filter(t => {
+    // 1. Lọc Tầng
+    const matchFloor = selectedFloor === 'all' || t.maTang === selectedFloor;
+    
+    // 2. Lọc Trạng Thái
+    // Lưu ý: So sánh với tenTrangThai hoặc logic map của bạn
+    let matchStatus = true;
+    if (selectedStatus !== 'all') {
+        // Chuẩn hóa chuỗi để so sánh (bỏ dấu, lowercase nếu cần)
+        // Ở đây mình so sánh tương đối dựa trên text hiển thị từ API trả về
+        if (selectedStatus === 'trong') matchStatus = t.tenTrangThai === 'Trống';
+        else if (selectedStatus === 'dang_phuc_vu') matchStatus = t.tenTrangThai === 'Đang phục vụ' || t.tenTrangThai === 'Chờ thanh toán';
+        else if (selectedStatus === 'dat_truoc') matchStatus = t.tenTrangThai === 'Đã đặt';
+        else if (selectedStatus === 'bao_tri') matchStatus = t.tenTrangThai === 'Bảo trì';
     }
-  }, [orders, tables.length]);
 
-  // Logic lọc Bàn theo Tầng
-  const filteredTables = useMemo(() => {
-    if (selectedTang === "ALL") {
-      return tables;
-    }
-    return tables.filter((table: any) => table.maTang === selectedTang);
-  }, [tables, selectedTang]);
+    // 3. Lọc Số Người (Sức chứa >= Số người chọn)
+    const matchPeople = selectedPeople === '' || t.sucChua >= parseInt(selectedPeople);
 
-  // Logic lọc Món ăn theo Danh mục
-  const displayedDishes = useMemo(() => {
-    if (selectedCategory === "ALL") {
-      return menuItems;
-    }
-    return menuItems.filter((item) => item.categoryId === selectedCategory);
-  }, [selectedCategory, menuItems]);
+    // 4. Tìm kiếm tên bàn
+    const matchSearch = (t.tenBan || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return matchFloor && matchStatus && matchPeople && matchSearch;
+  });
 
-  useEffect(() => {
-    if (tables.length > 0 && orders.length > 0) {
-      setTables((prevTables) =>
-        prevTables.map((table) => {
-          // Tìm đơn hàng mà bàn này CÓ THAM GIA
-          const matchedOrder = orders.find((o) => {
-            // Kiểm tra xem bàn này có phải bàn chính (tableId) của đơn hàng không
-            if (o.tableId === table.id) return true;
-            return false;
-          });
-
-          if (matchedOrder) {
-            return {
-              ...table,
-              orderId: matchedOrder.id,
-              status: TableStatus.Occupied,
-            };
-          }
-
-          return String(table.status).toLowerCase().includes("trống")
-            ? { ...table, orderId: null }
-            : table;
-        })
-      );
-    }
-  }, [orders, tables.length]);
-
-  // Lấy đơn hàng hiện tại của bàn đang chọn
-  const currentOrder = selectedTable
-    ? getOrderForTable(selectedTable.id)
-    : undefined;
-
-  // -----------------------------------------------------------
-  // CÁC HÀM XỬ LÝ SỰ KIỆN
-  // -----------------------------------------------------------
-  const handleTableClick = (table: Table) => {
-    setSelectedTable(table);
-    const statusStr = String(table.status || "")
-      .trim()
-      .toLowerCase();
-    const isOccupied =
-      statusStr.includes("đang phục vụ") ||
-      statusStr.includes("occupied") ||
-      statusStr.includes("đang ăn") ||
-      (table.orderId && table.orderId.length > 0);
-
-    if (isOccupied) {
-      setOrderModalOpen(true);
+  // --- HELPER STYLE ---
+  const getStatusStyle = (statusName: string | undefined) => {
+    // Dựa vào tenTrangThai trả về từ API
+    const s = statusName || 'Trống';
+    
+    if (s === 'Đang phục vụ' || s === 'Chờ thanh toán') {
+        return {
+          cardBorder: 'border-rose-200 dark:border-rose-900',
+          bg: 'bg-white dark:bg-gray-800',
+          iconBg: 'bg-rose-100 dark:bg-rose-900/50',
+          iconColor: 'text-rose-600 dark:text-rose-400',
+          badge: 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300',
+          label: s
+        };
+    } else if (s === 'Đã đặt') {
+        return {
+          cardBorder: 'border-orange-200 dark:border-orange-900',
+          bg: 'bg-white dark:bg-gray-800',
+          iconBg: 'bg-orange-100 dark:bg-orange-900/50',
+          iconColor: 'text-orange-600 dark:text-orange-400',
+          badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
+          label: 'Đã đặt trước'
+        };
+    } else if (s === 'Bảo trì') {
+        return {
+          cardBorder: 'border-gray-200 dark:border-gray-700',
+          bg: 'bg-gray-50 dark:bg-gray-800/50',
+          iconBg: 'bg-gray-200 dark:bg-gray-700',
+          iconColor: 'text-gray-500 dark:text-gray-400',
+          badge: 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+          label: 'Bảo trì'
+        };
     } else {
-      alert(
-        `${table.name} đang trống. Vui lòng tạo đơn mới (Check-in) trước khi gọi món!`
-      );
+        return {
+          cardBorder: 'border-emerald-200 dark:border-emerald-900',
+          bg: 'bg-white dark:bg-gray-800',
+          iconBg: 'bg-emerald-100 dark:bg-emerald-900/50',
+          iconColor: 'text-emerald-600 dark:text-emerald-400',
+          badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300',
+          label: 'Bàn trống'
+        };
     }
   };
 
-  const handleOpenPayment = () => {
-    setOrderModalOpen(false);
-    setPaymentModalOpen(true);
-  };
-
-  const closeAllModals = () => {
-    setSelectedTable(null);
-    setOrderModalOpen(false);
-    setPaymentModalOpen(false);
-  };
-
-  // -----------------------------------------------------------
-  // 5. GIAO DIỆN (RENDER)
-  // -----------------------------------------------------------
   return (
-    <div className="p-4 bg-gray-50 min-h-screen flex flex-col gap-6">
-      {/* === KHỐI 1: BỘ LỌC BÀN & CHÚ THÍCH === */}
-      <div>
-        <Box
-          sx={{
-            p: 2,
-            mb: 2,
-            display: "flex",
-            gap: 2,
-            flexWrap: "wrap",
-            backgroundColor: "white",
-            borderRadius: 1,
-            boxShadow: 1,
-          }}
-        >
-          <FormControl sx={{ minWidth: 200 }} size="small">
-            <InputLabel>Lọc theo tầng</InputLabel>
-            <Select
-              value={selectedTang}
-              label="Lọc theo tầng"
-              onChange={(e) => setSelectedTang(e.target.value)}
-            >
-              <MenuItem value="ALL">Tất cả các tầng</MenuItem>
-              {tangs.map((tang) => (
-                <MenuItem key={tang.maTang} value={tang.maTang}>
-                  {tang.tenTang}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6 transition-colors duration-300">
+      
+      {/* HEADER */}
+      <div className="mb-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div>
+                <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Sơ đồ bàn</h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Trạng thái lúc: <span className="font-semibold text-indigo-600 dark:text-indigo-400">{new Date(selectedTime).toLocaleString('vi-VN')}</span>
+                </p>
+            </div>
+            
+            {/* Legend */}
+            <div className="flex gap-3 text-xs font-medium bg-white dark:bg-gray-800 p-2 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div> Trống
+                </div>
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400">
+                    <div className="w-2 h-2 rounded-full bg-rose-500"></div> Phục vụ
+                </div>
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400">
+                    <div className="w-2 h-2 rounded-full bg-orange-500"></div> Đã đặt
+                </div>
+            </div>
+        </div>
 
-          <LocalizationProvider dateAdapter={AdapterDayjs}>
-            <DateTimePicker
-              label="Xem trạng thái lúc"
-              value={selectedDateTime}
-              onChange={(newValue) => setSelectedDateTime(newValue)}
-              slots={{ textField: TextField }}
-              slotProps={{
-                textField: { size: "small", sx: { minWidth: 250 } },
-              }}
-              enableAccessibleFieldDOMStructure={false}
-            />
-          </LocalizationProvider>
-        </Box>
+        {/* TOOLBAR */}
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col xl:flex-row gap-4 items-center justify-between transition-colors duration-300">
+            <div className="flex flex-wrap gap-3 w-full xl:w-auto items-center">
+                
+                {/* 1. Chọn ngày giờ */}
+                <div className="relative group">
+                    <Calendar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 z-10" />
+                    <input 
+                        type="datetime-local"
+                        className="pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white transition-colors cursor-pointer hover:bg-white dark:hover:bg-gray-600 min-w-[200px]"
+                        value={selectedTime}
+                        onChange={(e) => setSelectedTime(e.target.value)}
+                    />
+                </div>
 
-        <StatusLegend />
+                <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 hidden md:block mx-1"></div>
+
+                {/* 2. Lọc Tầng */}
+                <div className="relative group">
+                    <Filter className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-hover:text-indigo-500 z-10" />
+                    <select 
+                        className="pl-9 pr-8 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white cursor-pointer hover:bg-white dark:hover:bg-gray-600 appearance-none"
+                        value={selectedFloor}
+                        onChange={(e) => setSelectedFloor(e.target.value)}
+                    >
+                        <option value="all">Tất cả các tầng</option>
+                        {tangs.map(t => <option key={t.maTang} value={t.maTang}>{t.tenTang}</option>)}
+                    </select>
+                </div>
+
+                {/* 3. Lọc Trạng Thái */}
+                <select 
+                    className="pl-4 pr-8 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white cursor-pointer hover:bg-white dark:hover:bg-gray-600"
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                >
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="trong">Bàn trống</option>
+                    <option value="dang_phuc_vu">Đang phục vụ</option>
+                    <option value="dat_truoc">Đã đặt trước</option>
+                    <option value="bao_tri">Bảo trì</option>
+                </select>
+
+                {/* 4. MỚI: Lọc Số Người */}
+                <div className="relative group w-28">
+                    <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 z-10" />
+                    <input 
+                        type="number" 
+                        min="1"
+                        placeholder="Số người"
+                        className="w-full pl-9 pr-2 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white"
+                        value={selectedPeople}
+                        onChange={(e) => setSelectedPeople(e.target.value)}
+                    />
+                </div>
+            </div>
+
+            {/* 5. Tìm kiếm */}
+            <div className="relative w-full md:w-64 group mt-3 md:mt-0">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500" />
+                <input 
+                    type="text" 
+                    placeholder="Tìm tên bàn..." 
+                    className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white dark:placeholder-gray-400"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                />
+            </div>
+        </div>
       </div>
 
-      {/* === KHỐI 2: SƠ ĐỒ BÀN === */}
-      <div>
-        <h2 className="text-xl font-bold mb-3 text-gray-800">Sơ đồ bàn</h2>
+      {/* VIEW DANH SÁCH BÀN */}
+      {loading ? (
+         <div className="flex h-64 items-center justify-center">
+            <div className="text-center">
+                <Loader2 className="w-10 h-10 animate-spin text-indigo-600 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400">Đang tải dữ liệu...</p>
+            </div>
+         </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
+            {filteredTables.map((table) => {
+                const style = getStatusStyle(table.tenTrangThai); // Dùng tenTrangThai để style
+                return (
+                    <div 
+                        key={table.maBan}
+                        className={`relative group flex flex-col items-center p-4 rounded-2xl border ${style.bg} ${style.cardBorder} hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer shadow-sm`}
+                    >
+                        <div className="w-full flex justify-between items-start mb-3">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-white">{table.tenBan}</h3>
+                                <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">{table.tenTang}</p>
+                            </div>
+                            <button className="text-gray-300 hover:text-indigo-500 dark:text-gray-600 dark:hover:text-indigo-400">
+                                <MoreHorizontal className="w-5 h-5" />
+                            </button>
+                        </div>
 
-        {loading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", my: 5 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {filteredTables.map((table) => (
-              <TableCard
-                key={table.id}
-                table={table}
-                onClick={() => handleTableClick(table)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-3 ${style.iconBg} ${style.iconColor}`}>
+                            {(style.label === 'Đang phục vụ' || style.label === 'Chờ thanh toán') ? (
+                                <Utensils className="w-8 h-8 animate-pulse" />
+                            ) : (
+                                <Armchair className="w-8 h-8" />
+                            )}
+                        </div>
 
-      <hr className="border-gray-300" />
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-4 ${style.badge}`}>
+                            {style.label}
+                        </span>
 
-      {/* === KHỐI 4: CÁC MODAL === */}
-      {selectedTable && isOrderModalOpen && (
-        <OrderModal
-          table={selectedTable}
-          order={currentOrder}
-          onClose={closeAllModals}
-          onOpenPayment={handleOpenPayment}
-        />
+                        <div className="w-full border-t border-gray-100 dark:border-gray-700 pt-3 flex justify-between items-center">
+                            <div className="flex items-center text-gray-500 dark:text-gray-400">
+                                <Users className="w-4 h-4 mr-1.5" />
+                                <span className="text-sm font-semibold">{table.sucChua}</span>
+                            </div>
+                            
+                            {(style.label === 'Đang phục vụ') && table.thoiGianVao ? (
+                                <div className="flex items-center text-indigo-500 dark:text-indigo-400">
+                                    <Clock className="w-4 h-4 mr-1.5" />
+                                    <span className="text-xs font-bold">{table.thoiGianVao.slice(11, 16)}</span>
+                                </div>
+                            ) : (
+                                <div className="text-xs text-gray-300 dark:text-gray-600">--:--</div>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
       )}
 
-      {selectedTable && isPaymentModalOpen && currentOrder && (
-        <PaymentModal order={currentOrder} onClose={closeAllModals} />
+      {!loading && filteredTables.length === 0 && (
+          <div className="text-center py-20">
+              <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
+                  <Search className="w-10 h-10" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">Không tìm thấy bàn nào</h3>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">
+                 {selectedPeople ? `Không có bàn nào đủ chỗ cho ${selectedPeople} người.` : 'Thử thay đổi bộ lọc hoặc tìm kiếm từ khóa khác.'}
+              </p>
+              <button 
+                onClick={() => {
+                    setSearchQuery(''); 
+                    setSelectedStatus('all'); 
+                    setSelectedFloor('all');
+                    setSelectedPeople('');
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 mx-auto"
+              >
+                  <RotateCcw className="w-4 h-4" /> Đặt lại bộ lọc
+              </button>
+          </div>
       )}
     </div>
   );

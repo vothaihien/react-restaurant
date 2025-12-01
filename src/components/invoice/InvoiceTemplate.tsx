@@ -18,8 +18,8 @@ export const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceProps>((p
     <div ref={ref} className="p-8 bg-white text-black font-sans max-w-[80mm] mx-auto text-sm">
       {/* Header */}
       <div className="text-center mb-4 border-b border-dashed border-black pb-4">
-        <h1 className="text-xl font-bold uppercase">POS PRO RESTAURANT</h1>
-        <p className="text-xs">Đ/c: 123 Đường ABC, Quận 1, TP.HCM</p>
+        <h1 className="text-xl font-bold uppercase">Viet Restaurant</h1>
+        <p className="text-xs">Địa chỉ: 140 Lê Trọng Tấn, Q. Tân Phú, TP.HCM</p>
         <p className="text-xs">Hotline: 1900 1234</p>
         <h2 className="text-lg font-bold mt-4 uppercase">HÓA ĐƠN THANH TOÁN</h2>
         <p className="text-xs">Số phiếu: {order.maDonHang}</p>
