@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { 
     Package, History, Plus, Printer, Save, CheckCircle, 
-    Trash2, Search, Filter, RefreshCcw, Truck, ShoppingCart 
+    Trash2, Search, Filter, RefreshCcw, Truck, ShoppingCart ,
+    AlertTriangle, Boxes
 } from 'lucide-react';
 
 // --- IMPORT TYPES & SERVICES (Giữ nguyên) ---
@@ -21,13 +22,16 @@ const InventoryScreen = () => {
     const { user } = useAuth();
     
     // --- STATE QUẢN LÝ ---
-    const [activeTab, setActiveTab] = useState<1 | 2>(1);
+    const [activeTab, setActiveTab] = useState<1 | 2 | 3>(1);
     const [editingId, setEditingId] = useState<string | null>(null);
 
     // Dữ liệu
     const [suppliers, setSuppliers] = useState<NhaCungCap[]>([]);
     const [ingredients, setIngredients] = useState<NguyenLieuNCC[]>([]);
     const [historyList, setHistoryList] = useState<PhieuNhapHistory[]>([]); 
+
+    const [stockList, setStockList] = useState<any[]>([]);
+    const [loadingStock, setLoadingStock] = useState(false);
 
     // Form nhập liệu
     const [selectedSupplier, setSelectedSupplier] = useState<NhaCungCap | null>(null);
@@ -47,7 +51,21 @@ const InventoryScreen = () => {
     useEffect(() => {
         fetchSuppliers();
         fetchHistory();
+        fetchStock();
     }, []);
+
+
+    const fetchStock = async () => {
+        setLoadingStock(true);
+        try {
+            const data = await InventoryService.getStockList();
+            setStockList(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.error("Lỗi tải tồn kho:", err);
+        } finally {
+            setLoadingStock(false);
+        }
+    };
 
     useEffect(() => {
         fetchHistory();
@@ -228,6 +246,7 @@ const InventoryScreen = () => {
         } catch (err: any) {
             alert("Lỗi: " + (err.response?.data?.message || err.message));
         }
+        fetchStock();
     };
 
     // --- RENDER ---
@@ -273,6 +292,18 @@ const InventoryScreen = () => {
                 >
                     <History className="w-5 h-5" />
                     Lịch sử nhập hàng
+                </button>
+
+                <button 
+                    onClick={() => setActiveTab(3)}
+                    className={`flex items-center gap-2 pb-3 px-4 font-semibold transition-colors border-b-2 ${
+                        activeTab === 3
+                        ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' 
+                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                >
+                    <Boxes className="w-5 h-5" />
+                    Danh sách tồn kho
                 </button>
             </div>
 
@@ -588,6 +619,54 @@ const InventoryScreen = () => {
                                             </div>
                                         </td>
                                     </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 3 && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
+                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                            <Package className="w-5 h-5 text-indigo-600" /> Trạng thái kho hiện tại
+                        </h3>
+                        <button onClick={fetchStock} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full"><RefreshCcw className="w-5 h-5" /></button>
+                    </div>
+                    
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-gray-100 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 uppercase text-xs font-bold">
+                                <tr>
+                                    <th className="p-4">Mã NL</th>
+                                    <th className="p-4">Tên Nguyên Liệu</th>
+                                    <th className="p-4 text-center">ĐVT</th>
+                                    <th className="p-4 text-right">Số lượng tồn</th>
+                                    <th className="p-4 text-center">Trạng thái</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {loadingStock ? (
+                                    <tr><td colSpan={5} className="p-8 text-center">Đang tải dữ liệu...</td></tr>
+                                ) : stockList.length > 0 ? (
+                                    stockList.map((item) => (
+                                        <tr key={item.maNguyenLieu} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                                            <td className="p-4 font-mono text-gray-500">{item.maNguyenLieu}</td>
+                                            <td className="p-4 font-bold text-gray-900 dark:text-white">{item.tenNguyenLieu}</td>
+                                            <td className="p-4 text-center">{item.donViTinh}</td>
+                                            <td className={`p-4 text-right font-bold text-lg ${item.soLuongTon <= 10 ? 'text-red-600' : 'text-green-600'}`}>
+                                                {item.soLuongTon}
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                {item.trangThai === 'HET_HANG' && <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold">Hết hàng</span>}
+                                                {item.trangThai === 'SAP_HET' && <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-bold flex items-center justify-center gap-1"><AlertTriangle className="w-3 h-3"/> Sắp hết</span>}
+                                                {item.trangThai === 'CON_HANG' && <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">Ổn định</span>}
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr><td colSpan={5} className="p-8 text-center text-gray-500">Kho đang trống</td></tr>
                                 )}
                             </tbody>
                         </table>

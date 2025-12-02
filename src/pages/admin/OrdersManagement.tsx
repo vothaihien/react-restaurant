@@ -104,16 +104,29 @@ const OrderManagement: React.FC = () => {
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
   const fetchOrders = async () => {
-    setLoading(true);
-    try {
-      const data = await ordersApi.getOrders();
-      setOrders(data);
-    } catch (error: any) {
-      console.error("Lỗi tải đơn hàng:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setLoading(true);
+    try {
+      // Gọi API lấy danh sách
+      // Lưu ý: Đảm bảo ordersApi.getOrders() gọi đúng API trả về Full List
+      const rawData: any[] = await ordersApi.getOrders();
+      
+      // MAP DỮ LIỆU ĐỂ HIỂN THỊ ĐÚNG CỘT
+      const mappedData = rawData.map(item => ({
+        ...item,
+        // Ưu tiên tên người nhận, nếu không có thì lấy tên từ object Khách Hàng (nếu API trả về lồng nhau)
+        hoTenKhachHang: item.tenNguoiNhan || item.maKhachHangNavigation?.hoTen || item.hoTenKhachHang || "Khách vãng lai",
+        soDienThoaiKhach: item.sdtNguoiNhan || item.maKhachHangNavigation?.soDienThoai || item.soDienThoaiKhach || "",
+        // Đảm bảo tiền cọc lấy đúng field
+        tienDatCoc: item.tienDatCoc || 0 
+      }));
+
+      setOrders(mappedData);
+    } catch (error: any) {
+      console.error("Lỗi tải đơn hàng:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -126,12 +139,28 @@ const OrderManagement: React.FC = () => {
   const fetchOrderDetails = async (orderId: string) => {
     setDetailLoading(true);
     try {
+      // Gọi API lấy chi tiết (API này trả về full thông tin: cọc, tên khách, món ăn...)
       const data = await donHangService.getMyBookingDetail({
         maDonHang: orderId,
       });
-      setRawOrderDetails(data?.monAns || []);
+
+      // --- SỬA Ở ĐÂY ---
+      // Cập nhật ngược lại selectedOrder với dữ liệu đầy đủ vừa lấy về
+      if (data) {
+        setSelectedOrder((prev) => ({
+            ...prev!, // Giữ các trường cũ
+            ...data,  // Ghi đè bằng dữ liệu chi tiết mới (bao gồm tienDatCoc, tenNguoiDat...)
+            // Map lại tên field nếu Back-end trả về lệch tên với Front-end
+            hoTenKhachHang: data.tenNguoiDat || data.tenNguoiNhan || prev?.hoTenKhachHang, 
+            soDienThoaiKhach: data.sdtNguoiDat || data.sdtNguoiNhan || prev?.soDienThoaiKhach,
+            tienDatCoc: data.tienDatCoc // Đảm bảo trường này được cập nhật
+        }));
+        
+        setRawOrderDetails(data.monAns || []);
+      }
     } catch (error: any) {
-      alert("Lỗi tải chi tiết");
+      alert("Lỗi tải chi tiết đơn hàng");
+      console.error(error);
     } finally {
       setDetailLoading(false);
     }
@@ -478,11 +507,17 @@ const OrderManagement: React.FC = () => {
                   <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Thông tin đặt</p>
                   <p className="font-bold">{formatDate(selectedOrder.thoiGianDatHang)}</p>
                   <p className="text-sm">Số lượng: <span className="font-bold">{selectedOrder.soLuongNguoiDK} người</span></p>
-                  <div className="mt-2 flex md:justify-end">
+                  {/* <div className="mt-2 flex md:justify-end"><p className="font-bold text-lg">
+                        {(selectedOrder as any).tenNguoiDat || selectedOrder.tenNguoiNhan || selectedOrder.hoTenKhachHang || "Khách vãng lai"}
+                    </p>
+                    <p className="text-sm flex items-center gap-1">
+                        <span className="text-gray-400">📞</span> 
+                        {(selectedOrder as any).sdtNguoiDat || selectedOrder.sdtNguoiNhan || selectedOrder.soDienThoaiKhach || "Không có SĐT"}
+                    </p>
                     <span className={`px-2 py-1 rounded text-xs font-bold border ${getStatusColor(selectedOrder.maTrangThaiDonHang)}`}>
                         {selectedOrder.tenTrangThai}
                     </span>
-                  </div>
+                  </div> */}
                 </div>
               </div>
 
@@ -524,7 +559,7 @@ const OrderManagement: React.FC = () => {
                   </div>
                   <div className="flex justify-between text-gray-600 dark:text-gray-400">
                     <span>Đã đặt cọc:</span>
-                    <span className="text-red-500">-{formatCurrency(selectedOrder.tienDatCoc || 0)}</span>
+                    <span className="text-red-500">-{formatCurrency((selectedOrder as any).tienDatCoc || 0)}</span>
                   </div>
                   <div className="flex justify-between text-xl font-bold text-indigo-600 dark:text-indigo-400 border-t border-gray-200 dark:border-gray-700 pt-3 mt-2">
                     <span>Cần thanh toán:</span>
