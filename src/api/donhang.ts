@@ -13,41 +13,73 @@ const getToken = (): string | undefined => {
   return undefined;
 };
 
+// 1. Interface cho DANH SÁCH đơn hàng (Khớp với API GetOrders / GetActiveBookings)
 export interface Order {
   maDonHang: string;
   maNhanVien?: string;
   maKhachHang: string;
   maTrangThaiDonHang: string;
-  tenTrangThai: string;
+  tenTrangThai: string; // API trả về 'trangThai' hoặc 'tenTrangThai' tùy endpoint, nên check lại JSON
+  trangThai?: string;   // Thêm cái này dự phòng nếu API trả về 'trangThai'
   thoiGianDatHang: string;
   tgDatDuKien?: string;
-  tgNhanBan?: string;
+  tgNhanBan?: string;   // Dùng cho Booking
+  thoiGianNhanBan?: string; // API GetActiveBookings trả về cái này
   thanhToan: boolean;
   thoiGianKetThuc?: string;
-  soLuongNguoiDK: number;
+  soLuongNguoiDK: number; // API trả về soLuong hoặc soLuongNguoiDK
+  soNguoi?: number;       // Thêm dự phòng
   tienDatCoc: number;
   ghiChu?: string;
-  tenNguoiNhan?: string;
+  
+  // --- THÔNG TIN KHÁCH HÀNG (QUAN TRỌNG) ---
+  // API GetActiveBookings trả về 'tenNguoiNhan' (đã gộp logic ?? HoTen)
+  tenNguoiNhan?: string; 
   sdtNguoiNhan?: string;
   emailNguoiNhan?: string;
-  hoTenKhachHang: string;
-  soDienThoaiKhach: string;
+  
+  // API GetOrders thường trả về object khách hàng
+  hoTenKhachHang?: string;
+  soDienThoaiKhach?: string;
   emailKhachHang?: string;
+
   tenNhanVien?: string;
-  danhSachBan?: string;
+  danhSachBan?: string; // Hoặc listMaBan, banAn
+  listMaBan?: string[];
+  banAn?: string[];
   tongTien: number;
 }
 
-export interface OrderDetail {
-  maChiTietDonHang: number;
+// 2. Interface cho CHI TIẾT Đơn Hàng (Khớp với API GetMyBookingDetail)
+// Đây là cái bạn đang thiếu để hiển thị đúng trong Modal
+export interface BookingDetail {
   maDonHang: string;
-  maPhienBan: string;
-  maCongThuc: string;
-  soLuong: number;
-  tenMonAn: string;
+  thoiGianDat: string;
+  tenBan: string;
+  thoiGianNhanBan: string;
+  thoiGianKetThuc?: string;
+  soNguoi: number;
+  ghiChu?: string;
+  
+  // --- KHỚP VỚI C# ChiTietDatBanDto ---
+  tienDatCoc: number;      // Khớp với TienDatCoc
+  trangThai: string;
+  tenNguoiDat: string;     // Khớp với TenNguoiDat (C#)
+  sdtNguoiDat: string;     // Khớp với SDTNguoiDat (C#)
+  
+  monAns: MonAnDatDto[];
+}
+
+export interface MonAnDatDto {
+  tenMon: string;
   tenPhienBan: string;
-  gia: number;
-  thanhTien: number;
+  soLuong: number;
+  donGia: number;
+  hinhAnh: string;
+  maBan: string;
+  tenBan: string;
+  ghiChu: string;
+  thanhTien?: number; // Frontend tự tính hoặc API trả về
 }
 
 export interface OrderStats {
