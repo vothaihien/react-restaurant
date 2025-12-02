@@ -62,7 +62,23 @@ export const tableService = {
         params: { dateTime: dateTime },
       }
     );
-    return rawResponse as unknown as any[];
+    // Map từ PascalCase (backend) sang camelCase (frontend)
+    const data = rawResponse as unknown as any[];
+    return data.map((item: any) => ({
+      maBan: item.MaBan || item.maBan,
+      tenBan: item.TenBan || item.tenBan,
+      sucChua: item.SucChua || item.sucChua,
+      maTang: item.MaTang || item.maTang,
+      tenTang: item.TenTang || item.tenTang,
+      trangThaiHienThi: item.TrangThaiHienThi || item.trangThaiHienThi || item.tenTrangThai,
+      tenTrangThai: item.TrangThaiHienThi || item.trangThaiHienThi || item.tenTrangThai,
+      ghiChu: item.GhiChu || item.ghiChu,
+      maTrangThai: item.MaTrangThaiGoc || item.maTrangThaiGoc || item.maTrangThai,
+      // Extract mã đơn hàng từ GhiChu nếu có
+      maDonHang: item.GhiChu?.match(/Đơn #([A-Z0-9]+)/)?.[1] || 
+                 item.ghiChu?.match(/Đơn #([A-Z0-9]+)/)?.[1] ||
+                 item.MaDonHang || item.maDonHang,
+    }));
   },
 
   // 4. Lấy danh sách tầng

@@ -11,11 +11,14 @@ interface TableData {
   maBan: string;
   tenBan: string;
   sucChua: number;
-  maTrangThai: string; 
+  maTrangThai?: string; 
   tenTrangThai?: string; // Tên hiển thị (Trống, Đang phục vụ...)
+  trangThaiHienThi?: string; // Trạng thái từ API GetManagerTableStatus
   maTang?: string;
   tenTang?: string;
-  thoiGianVao?: string; 
+  thoiGianVao?: string;
+  ghiChu?: string; // Thông tin hóa đơn, khách hàng
+  maDonHang?: string; // Mã đơn hàng nếu có
 }
 
 interface TangData {
@@ -71,48 +74,60 @@ const DashboardView: React.FC = () => {
     const matchFloor = selectedFloor === 'all' || t.maTang === selectedFloor;
     
     // 2. Lọc Trạng Thái
-    // Lưu ý: So sánh với tenTrangThai hoặc logic map của bạn
+    // Sử dụng trangThaiHienThi nếu có, nếu không thì dùng tenTrangThai
+    const statusToCheck = t.trangThaiHienThi || t.tenTrangThai || '';
     let matchStatus = true;
     if (selectedStatus !== 'all') {
-        // Chuẩn hóa chuỗi để so sánh (bỏ dấu, lowercase nếu cần)
-        // Ở đây mình so sánh tương đối dựa trên text hiển thị từ API trả về
-        if (selectedStatus === 'trong') matchStatus = t.tenTrangThai === 'Trống';
-        else if (selectedStatus === 'dang_phuc_vu') matchStatus = t.tenTrangThai === 'Đang phục vụ' || t.tenTrangThai === 'Chờ thanh toán';
-        else if (selectedStatus === 'dat_truoc') matchStatus = t.tenTrangThai === 'Đã đặt';
-        else if (selectedStatus === 'bao_tri') matchStatus = t.tenTrangThai === 'Bảo trì';
+        if (selectedStatus === 'trong') {
+          matchStatus = statusToCheck === 'Trống' || statusToCheck === 'Đang trống';
+        } else if (selectedStatus === 'dang_phuc_vu') {
+          matchStatus = statusToCheck === 'Đang phục vụ' || 
+                       statusToCheck === 'Chờ thanh toán' || 
+                       statusToCheck === 'Đang phục vụ (Walk-in/Cũ)';
+        } else if (selectedStatus === 'dat_truoc') {
+          matchStatus = statusToCheck.includes('Đã đặt') || 
+                       statusToCheck === 'Đã đặt (Sắp đến)' || 
+                       statusToCheck === 'Đã đặt (Quá giờ)';
+        } else if (selectedStatus === 'bao_tri') {
+          matchStatus = statusToCheck === 'Bảo trì';
+        }
     }
 
     // 3. Lọc Số Người (Sức chứa >= Số người chọn)
     const matchPeople = selectedPeople === '' || t.sucChua >= parseInt(selectedPeople);
 
-    // 4. Tìm kiếm tên bàn
-    const matchSearch = (t.tenBan || '').toLowerCase().includes(searchQuery.toLowerCase());
+    // 4. Tìm kiếm tên bàn hoặc thông tin hóa đơn
+    const searchText = searchQuery.toLowerCase();
+    const matchSearch = searchText === '' || 
+      (t.tenBan || '').toLowerCase().includes(searchText) ||
+      (t.ghiChu || '').toLowerCase().includes(searchText) ||
+      (t.maDonHang || '').toLowerCase().includes(searchText);
     
     return matchFloor && matchStatus && matchPeople && matchSearch;
   });
 
   // --- HELPER STYLE ---
   const getStatusStyle = (statusName: string | undefined) => {
-    // Dựa vào tenTrangThai trả về từ API
+    // Dựa vào trangThaiHienThi hoặc tenTrangThai trả về từ API
     const s = statusName || 'Trống';
     
-    if (s === 'Đang phục vụ' || s === 'Chờ thanh toán') {
+    if (s === 'Đang phục vụ' || s === 'Chờ thanh toán' || s === 'Đang phục vụ (Walk-in/Cũ)') {
         return {
           cardBorder: 'border-rose-200 dark:border-rose-900',
           bg: 'bg-white dark:bg-gray-800',
           iconBg: 'bg-rose-100 dark:bg-rose-900/50',
           iconColor: 'text-rose-600 dark:text-rose-400',
           badge: 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300',
-          label: s
+          label: s.includes('Chờ thanh toán') ? 'Chờ thanh toán' : 'Đang phục vụ'
         };
-    } else if (s === 'Đã đặt') {
+    } else if (s.includes('Đã đặt') || s === 'Đã đặt (Sắp đến)' || s === 'Đã đặt (Quá giờ)') {
         return {
           cardBorder: 'border-orange-200 dark:border-orange-900',
           bg: 'bg-white dark:bg-gray-800',
           iconBg: 'bg-orange-100 dark:bg-orange-900/50',
           iconColor: 'text-orange-600 dark:text-orange-400',
           badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
-          label: 'Đã đặt trước'
+          label: s.includes('Sắp đến') ? 'Đã đặt (Sắp đến)' : s.includes('Quá giờ') ? 'Đã đặt (Quá giờ)' : 'Đã đặt trước'
         };
     } else if (s === 'Bảo trì') {
         return {
@@ -244,18 +259,23 @@ const DashboardView: React.FC = () => {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
             {filteredTables.map((table) => {
-                const style = getStatusStyle(table.tenTrangThai); // Dùng tenTrangThai để style
+                // Sử dụng trangThaiHienThi nếu có, nếu không thì dùng tenTrangThai
+                const statusDisplay = table.trangThaiHienThi || table.tenTrangThai || 'Trống';
+                const style = getStatusStyle(statusDisplay);
+                const hasOrder = table.ghiChu && (statusDisplay.includes('phục vụ') || statusDisplay.includes('đặt'));
+                
                 return (
                     <div 
                         key={table.maBan}
                         className={`relative group flex flex-col items-center p-4 rounded-2xl border ${style.bg} ${style.cardBorder} hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer shadow-sm`}
+                        title={table.ghiChu || ''} // Tooltip hiển thị thông tin hóa đơn
                     >
                         <div className="w-full flex justify-between items-start mb-3">
-                            <div>
-                                <h3 className="text-lg font-bold text-gray-800 dark:text-white">{table.tenBan}</h3>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-white truncate">{table.tenBan}</h3>
                                 <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">{table.tenTang}</p>
                             </div>
-                            <button className="text-gray-300 hover:text-indigo-500 dark:text-gray-600 dark:hover:text-indigo-400">
+                            <button className="text-gray-300 hover:text-indigo-500 dark:text-gray-600 dark:hover:text-indigo-400 flex-shrink-0 ml-2">
                                 <MoreHorizontal className="w-5 h-5" />
                             </button>
                         </div>
@@ -268,9 +288,18 @@ const DashboardView: React.FC = () => {
                             )}
                         </div>
 
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-4 ${style.badge}`}>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-2 ${style.badge}`}>
                             {style.label}
                         </span>
+
+                        {/* Hiển thị thông tin hóa đơn nếu có */}
+                        {hasOrder && (
+                            <div className="w-full mb-2 px-2 py-1 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                                <p className="text-[9px] text-indigo-700 dark:text-indigo-300 font-medium truncate text-center">
+                                    {table.ghiChu}
+                                </p>
+                            </div>
+                        )}
 
                         <div className="w-full border-t border-gray-100 dark:border-gray-700 pt-3 flex justify-between items-center">
                             <div className="flex items-center text-gray-500 dark:text-gray-400">
@@ -278,7 +307,7 @@ const DashboardView: React.FC = () => {
                                 <span className="text-sm font-semibold">{table.sucChua}</span>
                             </div>
                             
-                            {(style.label === 'Đang phục vụ') && table.thoiGianVao ? (
+                            {(style.label === 'Đang phục vụ' || style.label === 'Chờ thanh toán') && table.thoiGianVao ? (
                                 <div className="flex items-center text-indigo-500 dark:text-indigo-400">
                                     <Clock className="w-4 h-4 mr-1.5" />
                                     <span className="text-xs font-bold">{table.thoiGianVao.slice(11, 16)}</span>

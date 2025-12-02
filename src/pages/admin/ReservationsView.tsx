@@ -56,18 +56,36 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({ onBookingSucc
 
   // --- TÌM BÀN TRỐNG ---
   const fetchAvailableTables = useCallback(async () => {
+    // Validation: Đảm bảo có đủ thông tin trước khi gọi API
+    if (!bookingDate || !bookingTime || partySize < 1) {
+      setAvailableTables([]);
+      return;
+    }
+    
     setLoadingTables(true);
     try {
       const dateTimeStr = `${bookingDate}T${bookingTime}:00`;
       const tables = await tableService.getTablesByTime(dateTimeStr, partySize);
-      setAvailableTables(Array.isArray(tables) ? tables : []);
+      
+      // Lọc chỉ lấy bàn có trạng thái "Đang trống" hoặc "Trong"
+      const available = Array.isArray(tables) ? tables.filter((t: any) => {
+        const status = (t.tenTrangThai || '').toLowerCase();
+        return status.includes('trống') || status.includes('trong') || status === 'dang trong';
+      }) : [];
+      
+      setAvailableTables(available);
     } catch (error) {
       console.error("Lỗi tải bàn trống:", error);
       setAvailableTables([]);
+      notify({ 
+        tone: "error", 
+        title: "Lỗi", 
+        description: "Không thể tải danh sách bàn trống. Vui lòng thử lại." 
+      });
     } finally {
       setLoadingTables(false);
     }
-  }, [bookingDate, bookingTime, partySize]);
+  }, [bookingDate, bookingTime, partySize, notify]);
 
   useEffect(() => {
     fetchAvailableTables();
@@ -118,14 +136,43 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({ onBookingSucc
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validation cơ bản
     if (!name || (!isWalkInGuest && !phone) || selectedTables.length === 0) {
       return notify({ tone: "warning", title: "Thiếu thông tin", description: "Vui lòng nhập đủ thông tin và chọn bàn!" });
     }
 
+    // Validation số người
+    const totalCapacity = selectedTables.reduce((sum, table) => sum + (table.sucChua || 0), 0);
+    if (partySize > totalCapacity) {
+      return notify({ 
+        tone: "warning", 
+        title: "Số người vượt quá sức chứa", 
+        description: `Tổng sức chứa của các bàn đã chọn là ${totalCapacity} người, nhưng bạn đã chọn ${partySize} người.` 
+      });
+    }
+
+    // Validation thời gian
+    const dateTimeStr = `${bookingDate}T${bookingTime}:00`;
+    const bookingDateTime = new Date(dateTimeStr);
+    const now = new Date();
+    
+    // Cho phép đặt bàn trong quá khứ (để xử lý walk-in hoặc đặt lại)
+    // Nhưng không cho phép đặt quá xa trong tương lai (ví dụ: > 30 ngày)
+    const maxDaysAhead = 30;
+    const maxDateTime = new Date();
+    maxDateTime.setDate(maxDateTime.getDate() + maxDaysAhead);
+    
+    if (bookingDateTime > maxDateTime) {
+      return notify({ 
+        tone: "warning", 
+        title: "Thời gian không hợp lệ", 
+        description: `Chỉ có thể đặt bàn trong vòng ${maxDaysAhead} ngày tới.` 
+      });
+    }
+
     setSubmitting(true);
     try {
-      const dateTimeStr = `${bookingDate}T${bookingTime}:00`;
-      
       // FIX LỖI Ở ĐÂY: Thêm (user as any) để TypeScript không bắt bẻ employeeId
       const maNhanVien = (user as any)?.employeeId || "";
 
@@ -134,7 +181,7 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({ onBookingSucc
         HoTenKhach: name,
         SoDienThoaiKhach: isWalkInGuest ? "" : phone,
         Email: email || null,
-        ThoiGianDatHang: new Date(dateTimeStr).toISOString(),
+        ThoiGianDatHang: bookingDateTime.toISOString(),
         SoLuongNguoi: partySize,
         MaNhanVien: maNhanVien, 
       };
@@ -147,7 +194,8 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({ onBookingSucc
       setIsWalkInGuest(false); setIsCustomerFound(false); setLoyaltyMessage(null);
       onBookingSuccess();
     } catch (error: any) {
-      notify({ tone: "error", title: "Thất bại", description: error.message || "Không thể tạo đặt bàn" });
+      const errorMessage = error.response?.data?.message || error.message || "Không thể tạo đặt bàn";
+      notify({ tone: "error", title: "Thất bại", description: errorMessage });
     } finally {
       setSubmitting(false);
     }
@@ -351,6 +399,34 @@ const ReservationsView: React.FC = () => {
   }, [fetchData]);
 
   const handleAction = async (action: 'CHECKIN' | 'CANCEL' | 'NOSHOW', maDonHang: string) => {
+    // Tìm đơn hàng để kiểm tra thời gian
+    const order = orders.find(o => o.maDonHang === maDonHang);
+    
+    if (action === 'CHECKIN' && order) {
+      const bookingTime = dayjs(order.thoiGianNhanBan);
+      const now = dayjs();
+      const hoursDiff = bookingTime.diff(now, 'hour', true);
+      
+      // Cảnh báo nếu check-in quá sớm (> 2 giờ trước giờ đặt)
+      if (hoursDiff > 2) {
+        if (!window.confirm(
+          `Khách đặt bàn lúc ${bookingTime.format('HH:mm DD/MM/YYYY')}, hiện tại là ${now.format('HH:mm DD/MM/YYYY')}.\n` +
+          `Check-in sớm hơn ${Math.round(hoursDiff)} giờ. Bạn có chắc muốn tiếp tục?`
+        )) return;
+      }
+      
+      // Cảnh báo nếu check-in quá muộn (> 30 phút sau giờ đặt)
+      if (hoursDiff < -0.5) {
+        if (!window.confirm(
+          `Khách đặt bàn lúc ${bookingTime.format('HH:mm DD/MM/YYYY')}, đã quá ${Math.round(Math.abs(hoursDiff) * 60)} phút.\n` +
+          `Bạn có muốn đánh dấu là No-show thay vì Check-in?`
+        )) {
+          // Nếu người dùng chọn không, có thể đề xuất No-show
+          return;
+        }
+      }
+    }
+    
     const confirmMsg = 
         action === 'CHECKIN' ? "Xác nhận khách đã đến?" :
         action === 'CANCEL' ? "Hủy đơn đặt bàn này?" : "Xác nhận khách không đến (No-show)?";
@@ -363,7 +439,8 @@ const ReservationsView: React.FC = () => {
       notify({ tone: "success", title: "Thành công", description: "Cập nhật trạng thái xong." });
       fetchData();
     } catch (error: any) {
-      notify({ tone: "error", title: "Lỗi", description: error.message });
+      const errorMessage = error.response?.data?.message || error.message || "Lỗi cập nhật trạng thái";
+      notify({ tone: "error", title: "Lỗi", description: errorMessage });
     }
   };
 
@@ -448,7 +525,10 @@ const ReservationsView: React.FC = () => {
                                         {dayjs(order.thoiGianNhanBan).format("HH:mm")}
                                     </td>
                                     <td className="p-4 text-gray-800 dark:text-gray-200">
-                                        {order.banAn.join(", ")}
+                                        {order.banAn && order.banAn.length > 0 
+                                            ? order.banAn.join(", ") 
+                                            : <span className="text-gray-400 italic">Chưa xếp bàn</span>
+                                        }
                                     </td>
                                     <td className="p-4 text-center">
                                         {renderStatusBadge(order.maTrangThai)}
