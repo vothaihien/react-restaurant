@@ -37,6 +37,14 @@ const InventoryService = {
   updateReceipt: (maPhieu: string, data: NhapKhoPayload) => {
     return axiosClient.put(`/InventoryAPI/update?maPhieu=${maPhieu}`, data);
   },
+
+  getStockList: async () => {
+        const response = await axiosClient.get('/InventoryAPI/stock');
+        return response as unknown as any[];
+    },
+
+
+    
 };
 
 export default InventoryService;
