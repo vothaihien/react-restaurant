@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatVND } from "@/utils";
 import { menuApi } from "@/api/menu";
+import { BASE_URL } from "@/utils/api";
 import HomeTab from "@/pages/customer/sections/HomeTab";
 import BookingTab from "@/pages/customer/sections/BookingTab";
 import MenuTab from "@/pages/customer/sections/MenuTab";
@@ -47,6 +48,10 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
     "khungGio" | "eMenu" | "all"
   >("khungGio");
 
+  // State để load menu items cho phần "all" nếu menuItems từ context rỗng
+  const [allMenuItems, setAllMenuItems] = useState<any[]>([]);
+  const [loadingAllMenuItems, setLoadingAllMenuItems] = useState(false);
+
   // Load categories from API
   useEffect(() => {
     const loadCategories = async () => {
@@ -72,10 +77,78 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
     loadCategories();
   }, []);
 
+  // Load menu items cho phần "all" nếu menuItems từ context rỗng
+  useEffect(() => {
+    const loadAllMenuItems = async () => {
+      // Chỉ load nếu menuItems từ context rỗng và đang ở tab menu
+      if (menuItems && menuItems.length > 0) {
+        setAllMenuItems([]);
+        return;
+      }
+
+      // Nếu menuItems rỗng, tự load từ API
+      if (menuViewMode === "all" && menuItems.length === 0) {
+        setLoadingAllMenuItems(true);
+        try {
+          const data = await menuApi.getDishes();
+          
+          // Map dữ liệu từ API sang format MenuItem
+          const mapped: any[] = (Array.isArray(data) ? data : []).map((m: any) => {
+            const imgs: string[] = (
+              m.hinhAnhMonAns ||
+              m.HinhAnhMonAns ||
+              []
+            ).map((h: any) => {
+              const url = h.urlHinhAnh || h.URLHinhAnh || h.url || h.URL;
+              return url?.startsWith("http") ? url : `${BASE_URL}/${url}`;
+            });
+
+            const tenDanhMuc =
+              m.maDanhMucNavigation?.tenDanhMuc ||
+              m.MaDanhMucNavigation?.TenDanhMuc ||
+              m.tenDanhMuc ||
+              m.TenDanhMuc ||
+              "";
+
+            const sizes = (m.phienBanMonAns || m.PhienBanMonAns || []).map(
+              (p: any) => ({
+                id: p.maPhienBan || p.MaPhienBan || "",
+                name: p.tenPhienBan || p.TenPhienBan || "",
+                price: Number(p.gia || p.Gia) || 0,
+                recipe: { id: "", name: "", ingredients: [] },
+              })
+            );
+
+            return {
+              id: m.maMonAn || m.MaMonAn || "",
+              name: m.tenMonAn || m.TenMonAn || "",
+              description: m.moTa || m.MoTa || "",
+              categoryId: m.maDanhMuc || m.MaDanhMuc || "",
+              category: tenDanhMuc,
+              imageUrls: imgs,
+              inStock: m.isShow !== false,
+              sizes,
+            };
+          });
+          
+          setAllMenuItems(mapped);
+        } catch (error: any) {
+          console.warn("Không thể tải món ăn từ API cho phần all:", error);
+          setAllMenuItems([]);
+        } finally {
+          setLoadingAllMenuItems(false);
+        }
+      }
+    };
+    loadAllMenuItems();
+  }, [menuViewMode, menuItems]);
+
   // Menu - only show items in stock (default to true if undefined)
   // Also map category name from categoriesFromApi if category is missing
+  // Sử dụng allMenuItems nếu menuItems từ context rỗng
   const availableMenuItems = useMemo(() => {
-    const items = (menuItems || [])
+    const sourceItems = (menuItems && menuItems.length > 0) ? menuItems : allMenuItems;
+    const items = (sourceItems || [])
       .filter((m: any) => {
         // Show item if inStock is true or undefined (default to showing)
         const shouldShow = m.inStock !== false;
@@ -94,7 +167,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
         return m;
       });
     return items;
-  }, [menuItems, categoriesFromApi]);
+  }, [menuItems, allMenuItems, categoriesFromApi]);
   // Use categories from API, fallback to extracting from menu items
   const categories = useMemo<string[]>(() => {
     if (categoriesFromApi.length > 0) {
@@ -226,6 +299,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
 
         <TabsContent value="menu">
           <MenuTab
+            menuViewMode={menuViewMode}
             setMenuViewMode={setMenuViewMode}
             loadingCategories={loadingCategories}
             categories={categories}
@@ -243,7 +317,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
             startIndex={startIndex}
             endIndex={endIndex}
             availableMenuItems={availableMenuItems}
-            menuItemsCount={menuItems?.length || 0}
+            menuItemsCount={(menuItems?.length || 0) + (allMenuItems.length > 0 ? allMenuItems.length : 0)}
           />
         </TabsContent>
 
