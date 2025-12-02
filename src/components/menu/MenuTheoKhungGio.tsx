@@ -47,15 +47,60 @@ const MenuTheoKhungGio: React.FC = () => {
   const loadMenu = async () => {
     setLoading(true);
     try {
-      const data = await menuApi.getMenuHienTai();
-      setMenuData(data);
-      setTimeRemaining(data.timeRemaining || 0);
+      const response = await menuApi.getMenuHienTai();
+      
+      // Xử lý response: API trả về { success: true, khungGio, tenKhungGio, data: [...] }
+      let menuData: MenuData | null = null;
+      
+      if (response && typeof response === "object") {
+        // Nếu response có success và data
+        if ((response as any).success && (response as any).data) {
+          menuData = {
+            success: (response as any).success,
+            khungGio: (response as any).khungGio || "",
+            tenKhungGio: (response as any).tenKhungGio || "",
+            isNgayLe: (response as any).isNgayLe || false,
+            timeRemaining: (response as any).timeRemaining || 0,
+            nextTimeSlot: (response as any).nextTimeSlot || "",
+            data: Array.isArray((response as any).data) ? (response as any).data : [],
+          };
+        } else {
+          // Nếu response là object trực tiếp (không có wrapper)
+          menuData = {
+            success: true,
+            khungGio: (response as any).khungGio || "",
+            tenKhungGio: (response as any).tenKhungGio || "",
+            isNgayLe: (response as any).isNgayLe || false,
+            timeRemaining: (response as any).timeRemaining || 0,
+            nextTimeSlot: (response as any).nextTimeSlot || "",
+            data: Array.isArray((response as any).data) ? (response as any).data : [],
+          };
+        }
+      }
+      
+      if (menuData) {
+        setMenuData(menuData);
+        setTimeRemaining(menuData.timeRemaining || 0);
+      } else {
+        console.warn("MenuTheoKhungGio: Không có dữ liệu menu từ API", response);
+        setMenuData({
+          success: false,
+          khungGio: "",
+          tenKhungGio: "",
+          isNgayLe: false,
+          timeRemaining: 0,
+          nextTimeSlot: "",
+          data: [],
+        });
+      }
     } catch (error: any) {
+      console.error("Lỗi tải menu theo khung giờ:", error);
       notify({
         tone: "error",
         title: "Lỗi tải menu",
         description: error?.message || "Không thể tải menu hiện tại",
       });
+      setMenuData(null);
     } finally {
       setLoading(false);
     }

@@ -70,7 +70,7 @@ const EMenuView: React.FC = () => {
           selectedCategory || undefined
         );
 
-        // Xử lý response: API trả về { success: true, data: [...] } hoặc có thể là array trực tiếp
+        // Xử lý response: API trả về { success: true, data: [...] }
         let data: any[] = [];
         if (Array.isArray(response)) {
           data = response;
@@ -80,7 +80,14 @@ const EMenuView: React.FC = () => {
             data = response.data;
           } else if (Array.isArray((response as any).Data)) {
             data = (response as any).Data;
+          } else if ((response as any).success && Array.isArray((response as any).data)) {
+            data = (response as any).data;
           }
+        }
+        
+        // Nếu không có dữ liệu, log để debug
+        if (data.length === 0) {
+          console.warn("EMenuView: Không có dữ liệu món ăn từ API", response);
         }
 
         // Map dữ liệu từ API sang format MonAnItem
