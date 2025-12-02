@@ -93,31 +93,31 @@ export interface OrderStats {
 export const ordersApi = {
   // Lấy tất cả đơn hàng
   getOrders: () => 
-    request<Order[]>("/api/DonHangsAPI", { token: getToken() }), // ✨ Đã sửa URL
+    request<Order[]>("/api/DonHangsAPI", { token: getToken() }),
 
   // Lấy đơn hàng theo trạng thái
   getOrdersByStatus: (status: string) => 
-    request<Order[]>(`/api/DonHangsAPI/status/${status}`, { token: getToken() }), // ✨ Đã sửa URL
+    request<Order[]>(`/api/DonHangsAPI/status/${status}`, { token: getToken() }),
 
-  // Lấy chi tiết đơn hàng
+  // Lấy chi tiết đơn hàng (Sử dụng Interface BookingDetail mới)
   getOrderDetail: (orderId: string) =>
-    request<OrderDetail[]>(`/api/DonHangsAPI/${orderId}/details`, { token: getToken() }), // ✨ Đã sửa URL
+    request<BookingDetail>(`/api/DonHangsAPI/GetMyBookingDetail?maDonHang=${orderId}`, { token: getToken() }),
 
   // Lấy thống kê đơn hàng
   getOrderStats: () =>
-    request<OrderStats>("/api/DonHangsAPI/stats", { token: getToken() }), // ✨ Đã sửa URL
+    request<OrderStats>("/api/DonHangsAPI/stats", { token: getToken() }),
 
   // Cập nhật trạng thái đơn hàng
   updateOrderStatus: (orderId: string, status: string) =>
-    request<{ message: string }>(`/api/DonHangsAPI/status/${orderId}`, { // ✨ Đã sửa URL
+    request<{ message: string }>(`/api/DatBanAPI/CapNhatTrangThai/${orderId}`, { 
       method: "PUT",
-      body: { maTrangThaiDonHang: status },
+      body: JSON.stringify(status), // Gửi chuỗi raw string vì API nhận [FromBody] string
       token: getToken(),
     }),
 
   // Xóa đơn hàng
   deleteOrder: (orderId: string) =>
-    request<{ message: string }>(`/api/DonHangsAPI/${orderId}`, { // ✨ Đã sửa URL
+    request<{ message: string }>(`/api/DonHangsAPI/${orderId}`, {
       method: "DELETE",
       token: getToken(),
     }),
