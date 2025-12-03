@@ -4,10 +4,12 @@ import { ordersApi, Order, OrderStats } from "@/api/donhang";
 import { orderService } from "@/services/orderService"; 
 import { useReactToPrint } from "react-to-print";
 import { InvoiceTemplate } from "@/components/invoice/InvoiceTemplate";
+import OrderModal from '@/components/orders/OrderModal'; // Import OrderModal
 import { 
   ClipboardList, CheckCircle, Clock, XCircle, 
-  Printer, Eye, CreditCard, Play, AlertCircle 
-} from "lucide-react"; // Thêm icon cho sinh động
+  Printer, Eye, CreditCard, Play, AlertCircle,
+  PlusCircle // Import icon thêm món
+} from "lucide-react"; 
 
 type TabType = "all" | "pending" | "active" | "completed" | "cancelled";
 
@@ -30,7 +32,10 @@ const OrderManagement: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<OrderStats | null>(null);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null); // Modal xem chi tiết / thanh toán
+  const [orderToOrdering, setOrderToOrdering] = useState<Order | null>(null); // Modal gọi món
+  
   const [rawOrderDetails, setRawOrderDetails] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -50,6 +55,16 @@ const OrderManagement: React.FC = () => {
     fetchOrders();
     fetchStats();
   }, []);
+
+  // --- HÀM CALLBACK KHI GỌI MÓN THÀNH CÔNG ---
+  const handleOrderSuccess = () => {
+    fetchOrders(); // Cập nhật lại danh sách để thấy tổng tiền mới
+    fetchStats();
+    // Nếu đang mở chi tiết đơn hàng đó, cũng reload lại chi tiết
+    if (selectedOrder && orderToOrdering && selectedOrder.maDonHang === orderToOrdering.maDonHang) {
+        fetchOrderDetails(selectedOrder.maDonHang);
+    }
+  };
 
   const handlePaymentAndPrint = async (order: Order) => {
     if (!window.confirm(`Xác nhận thanh toán và in hóa đơn cho đơn ${order.maDonHang}?`)) return;
@@ -104,29 +119,24 @@ const OrderManagement: React.FC = () => {
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
   const fetchOrders = async () => {
-    setLoading(true);
-    try {
-      // Gọi API lấy danh sách
-      // Lưu ý: Đảm bảo ordersApi.getOrders() gọi đúng API trả về Full List
-      const rawData: any[] = await ordersApi.getOrders();
+    setLoading(true);
+    try {
+      const rawData: any[] = await ordersApi.getOrders();
       
-      // MAP DỮ LIỆU ĐỂ HIỂN THỊ ĐÚNG CỘT
-      const mappedData = rawData.map(item => ({
+      const mappedData = rawData.map(item => ({
         ...item,
-        // Ưu tiên tên người nhận, nếu không có thì lấy tên từ object Khách Hàng (nếu API trả về lồng nhau)
         hoTenKhachHang: item.tenNguoiNhan || item.maKhachHangNavigation?.hoTen || item.hoTenKhachHang || "Khách vãng lai",
         soDienThoaiKhach: item.sdtNguoiNhan || item.maKhachHangNavigation?.soDienThoai || item.soDienThoaiKhach || "",
-        // Đảm bảo tiền cọc lấy đúng field
         tienDatCoc: item.tienDatCoc || 0 
       }));
 
-      setOrders(mappedData);
-    } catch (error: any) {
-      console.error("Lỗi tải đơn hàng:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      setOrders(mappedData);
+    } catch (error: any) {
+      console.error("Lỗi tải đơn hàng:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -139,21 +149,17 @@ const OrderManagement: React.FC = () => {
   const fetchOrderDetails = async (orderId: string) => {
     setDetailLoading(true);
     try {
-      // Gọi API lấy chi tiết (API này trả về full thông tin: cọc, tên khách, món ăn...)
       const data = await donHangService.getMyBookingDetail({
         maDonHang: orderId,
       });
 
-      // --- SỬA Ở ĐÂY ---
-      // Cập nhật ngược lại selectedOrder với dữ liệu đầy đủ vừa lấy về
       if (data) {
         setSelectedOrder((prev) => ({
-            ...prev!, // Giữ các trường cũ
-            ...data,  // Ghi đè bằng dữ liệu chi tiết mới (bao gồm tienDatCoc, tenNguoiDat...)
-            // Map lại tên field nếu Back-end trả về lệch tên với Front-end
+            ...prev!, 
+            ...data, 
             hoTenKhachHang: data.tenNguoiDat || data.tenNguoiNhan || prev?.hoTenKhachHang, 
             soDienThoaiKhach: data.sdtNguoiDat || data.sdtNguoiNhan || prev?.soDienThoaiKhach,
-            tienDatCoc: data.tienDatCoc // Đảm bảo trường này được cập nhật
+            tienDatCoc: data.tienDatCoc 
         }));
         
         setRawOrderDetails(data.monAns || []);
@@ -166,7 +172,6 @@ const OrderManagement: React.FC = () => {
     }
   };
 
-  // --- Gom nhóm món ăn ---
   const groupedDetails: TableGroup[] = useMemo(() => {
     if (!rawOrderDetails.length) return [];
     const groups: { [key: string]: TableGroup } = {};
@@ -279,15 +284,26 @@ const OrderManagement: React.FC = () => {
           </>
         )}
 
-        {/* HỦY KHI ĐANG PHỤC VỤ */}
+        {/* ĐANG PHỤC VỤ: GỌI MÓN & HỦY */}
         {["CHO_THANH_TOAN"].includes(order.maTrangThaiDonHang) && (
-          <button
-            onClick={() => handleUpdateStatus(order.maDonHang, "DA_HUY")}
-            className={`${btnClass} bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600`}
-            title="Hủy đơn đang phục vụ"
-          >
-             {size === "small" ? <XCircle className={iconSize} /> : <> <XCircle className={iconSize} /> Hủy </>}
-          </button>
+          <>
+            {/* NÚT GỌI MÓN MỚI THÊM */}
+            <button
+                onClick={() => setOrderToOrdering(order)}
+                className={`${btnClass} bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400`}
+                title="Gọi thêm món"
+            >
+                {size === "small" ? <PlusCircle className={iconSize} /> : <><PlusCircle className={iconSize} /> Gọi món</>}
+            </button>
+
+            <button
+                onClick={() => handleUpdateStatus(order.maDonHang, "DA_HUY")}
+                className={`${btnClass} bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600`}
+                title="Hủy đơn đang phục vụ"
+            >
+                {size === "small" ? <XCircle className={iconSize} /> : <> <XCircle className={iconSize} /> Hủy </>}
+            </button>
+          </>
         )}
       </div>
     );
@@ -338,8 +354,7 @@ const OrderManagement: React.FC = () => {
   );
 
   return (
-    // CONTAINER CHÍNH: Hỗ trợ Dark Mode
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen transition-colors duration-300">
+    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen transition-colors duration-300 font-sans">
       
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
@@ -405,7 +420,7 @@ const OrderManagement: React.FC = () => {
                             <div className="text-xs text-gray-500 dark:text-gray-400">{order.soDienThoaiKhach}</div>
                         </td>
                         <td className="px-6 py-4 text-blue-600 dark:text-blue-400 font-medium">
-                            {formatDate(order.tgNhanBan)}
+                            {formatDate(order.tgNhanBan || "")}
                         </td>
                         <td className="px-6 py-4 text-gray-500 dark:text-gray-400 text-xs">
                             {formatDate(order.thoiGianDatHang)}
@@ -438,7 +453,7 @@ const OrderManagement: React.FC = () => {
                                         <CreditCard className="w-5 h-5" />
                                     </button>
                                 )}
-
+                                
                                 {renderActionButtons(order, "small")}
                             </div>
                         </td>
@@ -507,17 +522,11 @@ const OrderManagement: React.FC = () => {
                   <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Thông tin đặt</p>
                   <p className="font-bold">{formatDate(selectedOrder.thoiGianDatHang)}</p>
                   <p className="text-sm">Số lượng: <span className="font-bold">{selectedOrder.soLuongNguoiDK} người</span></p>
-                  {/* <div className="mt-2 flex md:justify-end"><p className="font-bold text-lg">
-                        {(selectedOrder as any).tenNguoiDat || selectedOrder.tenNguoiNhan || selectedOrder.hoTenKhachHang || "Khách vãng lai"}
-                    </p>
-                    <p className="text-sm flex items-center gap-1">
-                        <span className="text-gray-400">📞</span> 
-                        {(selectedOrder as any).sdtNguoiDat || selectedOrder.sdtNguoiNhan || selectedOrder.soDienThoaiKhach || "Không có SĐT"}
-                    </p>
+                  <div className="mt-2 flex md:justify-end">
                     <span className={`px-2 py-1 rounded text-xs font-bold border ${getStatusColor(selectedOrder.maTrangThaiDonHang)}`}>
                         {selectedOrder.tenTrangThai}
                     </span>
-                  </div> */}
+                  </div>
                 </div>
               </div>
 
@@ -603,6 +612,16 @@ const OrderManagement: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* --- MODAL GỌI MÓN --- */}
+      {orderToOrdering && (
+        <OrderModal
+           maDonHang={orderToOrdering.maDonHang}
+           tenDonHang={`${orderToOrdering.hoTenKhachHang} - ${orderToOrdering.danhSachBan}`}
+           onClose={() => setOrderToOrdering(null)}
+           onSuccess={handleOrderSuccess}
+        />
       )}
 
       {/* COMPONENT ẨN ĐỂ IN */}
