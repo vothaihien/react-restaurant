@@ -1,5 +1,5 @@
 // src/services/donHangService.ts
-import axiosClient from "@/api/axiosClient"; // Đảm bảo đường dẫn import đúng
+import axiosClient from "@/api/axiosClient"; 
 
 // Interface này dùng cho component DatBanView mới
 export interface DonHangActive {
@@ -12,37 +12,41 @@ export interface DonHangActive {
   banAn: string[]; // List tên bàn
 }
 
+// --- THÊM INTERFACE CHO PAYLOAD GỌI MÓN ---
+export interface AddItemsToOrderPayload {
+  maDonHang: string;
+  items: {
+    maMonAn: string;
+    maPhienBan: string;
+    soLuong: number;
+    ghiChu: string;
+  }[];
+}
+
 export const donHangService = {
   // 1. Lấy danh sách đơn hàng active theo ngày
   getActiveBookings: async (ngay: string) => {
-    // Axios tự động chuyển object params thành ?ngay=...
-    // Lưu ý: Đã bỏ '/api' ở đầu path vì baseURL đã có sẵn
     const rawResponse = await axiosClient.get(
       "/DonHangsAPI/GetActiveBookings",
       {
         params: { ngay },
       }
     );
-
-    // Ép kiểu Double Casting để tránh lỗi TypeScript
     return rawResponse as unknown as DonHangActive[];
   },
 
-  // 2. Lấy chi tiết đơn hàng (Dùng cho cả việc click vào bàn để xem)
+  // 2. Lấy chi tiết đơn hàng
   getMyBookingDetail: async (params: {
     maDonHang?: string;
     maBan?: string;
     dateTime?: string;
   }) => {
-    // Không cần new URLSearchParams() nữa, Axios lo hết
     const rawResponse = await axiosClient.get(
       "/DonHangsAPI/GetMyBookingDetail",
       {
         params: params,
       }
     );
-
-    // Ép kiểu (dùng any vì bạn đang để any, nếu có interface chi tiết thì thay vào)
     return rawResponse as unknown as any;
   },
 
@@ -51,8 +55,18 @@ export const donHangService = {
     const rawResponse = await axiosClient.get(
       "/DonHangsAPI/get-customers-to-call"
     );
-
-    // Ép kiểu về mảng
     return rawResponse as unknown as any[];
+  },
+
+  // --- 4. THÊM MỚI: GỌI MÓN VÀO ĐƠN HÀNG (API Mới) ---
+  addItemsToOrder: async (payload: AddItemsToOrderPayload) => {
+    // Gọi đến API [HttpPost("ThemMonVaoDon")] trong DonHangsAPIController
+    const rawResponse = await axiosClient.post(
+      "/DonHangsAPI/ThemMonVaoDon", 
+      payload
+    );
+    
+    // Trả về kết quả (message, tongTien mới)
+    return rawResponse as unknown as { message: string; tongTien: number };
   },
 };
