@@ -11,8 +11,18 @@ export const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceProps>((p
 
   if (!order) return null;
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
-  const formatDate = (date: string) => date ? new Date(date).toLocaleString('vi-VN') : '-';
+  const formatCurrency = (val: number | null | undefined) => {
+    const num = val ?? 0;
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num);
+  };
+  const formatDate = (date: string | null | undefined) => {
+    if (!date) return '-';
+    try {
+      return new Date(date).toLocaleString('vi-VN');
+    } catch {
+      return '-';
+    }
+  };
 
   return (
     <div ref={ref} className="p-8 bg-white text-black font-sans max-w-[80mm] mx-auto text-sm">
@@ -22,19 +32,19 @@ export const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceProps>((p
         <p className="text-xs">Địa chỉ: 140 Lê Trọng Tấn, Q. Tân Phú, TP.HCM</p>
         <p className="text-xs">Hotline: 1900 1234</p>
         <h2 className="text-lg font-bold mt-4 uppercase">HÓA ĐƠN THANH TOÁN</h2>
-        <p className="text-xs">Số phiếu: {order.maDonHang}</p>
-        <p className="text-xs">Ngày: {formatDate(order.thoiGianDatHang)}</p>
+        <p className="text-xs">Số phiếu: {order.maDonHang || order.MaDonHang || '---'}</p>
+        <p className="text-xs">Ngày: {formatDate(order.thoiGianDatHang || order.ThoiGianDatHang || order.ThoiGianDat)}</p>
       </div>
 
       {/* Thông tin */}
       <div className="mb-4 text-xs">
         <div className="flex justify-between">
           <span>Khách hàng:</span>
-          <span className="font-bold">{order.hoTenKhachHang}</span>
+          <span className="font-bold">{order.hoTenKhachHang || order.HoTenKhachHang || order.tenNguoiDat || order.TenNguoiDat || '---'}</span>
         </div>
         <div className="flex justify-between">
           <span>Thu ngân:</span>
-          <span>{order.tenNhanVien || 'Admin'}</span>
+          <span>{order.tenNhanVien || order.TenNhanVien || 'Admin'}</span>
         </div>
       </div>
 
@@ -48,25 +58,41 @@ export const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceProps>((p
           </tr>
         </thead>
         <tbody>
-          {groupedItems.map((group, gIdx) => (
-            <React.Fragment key={gIdx}>
-              {/* Tên bàn */}
-              <tr className="bg-gray-100">
-                <td colSpan={3} className="py-1 font-bold italic pt-2">{group.tenBan}</td>
-              </tr>
-              {/* Món ăn */}
-              {group.items.map((item: any, i: number) => (
-                <tr key={i} className="border-b border-dotted border-gray-300">
-                  <td className="py-1">
-                    <div>{item.tenMon}</div>
-                    <div className="text-[10px] text-gray-500">({item.tenPhienBan})</div>
-                  </td>
-                  <td className="text-center py-1 align-top">{item.soLuong}</td>
-                  <td className="text-right py-1 align-top">{formatCurrency(item.thanhTien)}</td>
+          {groupedItems && groupedItems.length > 0 ? groupedItems.map((group, gIdx) => {
+            const tenBan = group.tenBan || group.TenBan || 'Chung';
+            const items = group.items || group.Items || [];
+            
+            return (
+              <React.Fragment key={gIdx}>
+                {/* Tên bàn */}
+                <tr className="bg-gray-100">
+                  <td colSpan={3} className="py-1 font-bold italic pt-2">{tenBan}</td>
                 </tr>
-              ))}
-            </React.Fragment>
-          ))}
+                {/* Món ăn */}
+                {items.map((item: any, i: number) => {
+                  const tenMon = item.tenMon || item.TenMon || 'Món không xác định';
+                  const tenPhienBan = item.tenPhienBan || item.TenPhienBan || '';
+                  const soLuong = item.soLuong ?? item.SoLuong ?? 0;
+                  const thanhTien = item.thanhTien ?? item.ThanhTien ?? (item.donGia ?? item.DonGia ?? 0) * soLuong;
+                  
+                  return (
+                    <tr key={i} className="border-b border-dotted border-gray-300">
+                      <td className="py-1">
+                        <div>{tenMon}</div>
+                        {tenPhienBan && <div className="text-[10px] text-gray-500">({tenPhienBan})</div>}
+                      </td>
+                      <td className="text-center py-1 align-top">{soLuong}</td>
+                      <td className="text-right py-1 align-top">{formatCurrency(thanhTien)}</td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            );
+          }) : (
+            <tr>
+              <td colSpan={3} className="text-center py-2 text-gray-500">Không có món nào</td>
+            </tr>
+          )}
         </tbody>
       </table>
 
@@ -78,11 +104,11 @@ export const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceProps>((p
         </div>
         <div className="flex justify-between text-xs mt-1">
           <span>Đã đặt cọc:</span>
-          <span>{formatCurrency(order.tienDatCoc || 0)}</span>
+          <span>{formatCurrency(order.tienDatCoc ?? order.TienDatCoc ?? 0)}</span>
         </div>
         <div className="flex justify-between text-sm font-bold mt-2 border-t border-dotted pt-2">
           <span>CẦN THANH TOÁN:</span>
-          <span>{formatCurrency(totalAmount - (order.tienDatCoc || 0))}</span>
+          <span>{formatCurrency(Math.max(0, totalAmount - (order.tienDatCoc ?? order.TienDatCoc ?? 0)))}</span>
         </div>
       </div>
 

@@ -85,7 +85,7 @@ const CustomerPortalView: React.FC = () => {
         const fetchTables = async () => {
             setLoadingTables(true);
             try {
-                const tables = await getAvailableTables(dateTime.getTime(), party);
+                const tables = await getAvailableTables(dateTime.getTime(), party, customerId);
                 console.log('Fetched tables (raw):', tables);
                 console.log('Tables with tầng info:', tables?.map((t: any) => ({
                     id: t.id,

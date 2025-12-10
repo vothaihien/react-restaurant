@@ -8,7 +8,7 @@ import OrderModal from '@/components/orders/OrderModal'; // Import OrderModal
 import { 
   ClipboardList, CheckCircle, Clock, XCircle, 
   Printer, Eye, CreditCard, Play, AlertCircle,
-  PlusCircle // Import icon thêm món
+  PlusCircle, MoreVertical // Import icon thêm món và dropdown
 } from "lucide-react"; 
 
 type TabType = "all" | "pending" | "active" | "completed" | "cancelled";
@@ -41,6 +41,7 @@ const OrderManagement: React.FC = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null); // Quản lý dropdown mở/đóng
 
   // --- Cấu hình in ---
   const invoiceRef = useRef<HTMLDivElement>(null);
@@ -110,6 +111,7 @@ const OrderManagement: React.FC = () => {
     }
     setFilteredOrders(filtered);
     setCurrentPage(1);
+    setOpenDropdownId(null); // Đóng dropdown khi chuyển tab
   }, [activeTab, orders]);
 
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -154,15 +156,21 @@ const OrderManagement: React.FC = () => {
       });
 
       if (data) {
+        // Xử lý cả PascalCase và camelCase từ backend
+        const tenNguoiDat = data.tenNguoiDat || data.TenNguoiDat || data.tenNguoiNhan || data.TenNguoiNhan;
+        const sdtNguoiDat = data.sdtNguoiDat || data.SDTNguoiDat || data.sdtNguoiNhan || data.SDTNguoiNhan;
+        const tienDatCoc = data.tienDatCoc ?? data.TienDatCoc ?? 0;
+        const monAns = data.monAns || data.MonAns || [];
+        
         setSelectedOrder((prev) => ({
             ...prev!, 
             ...data, 
-            hoTenKhachHang: data.tenNguoiDat || data.tenNguoiNhan || prev?.hoTenKhachHang, 
-            soDienThoaiKhach: data.sdtNguoiDat || data.sdtNguoiNhan || prev?.soDienThoaiKhach,
-            tienDatCoc: data.tienDatCoc 
+            hoTenKhachHang: tenNguoiDat || prev?.hoTenKhachHang, 
+            soDienThoaiKhach: sdtNguoiDat || prev?.soDienThoaiKhach,
+            tienDatCoc: tienDatCoc
         }));
         
-        setRawOrderDetails(data.monAns || []);
+        setRawOrderDetails(monAns);
       }
     } catch (error: any) {
       alert("Lỗi tải chi tiết đơn hàng");
@@ -173,31 +181,38 @@ const OrderManagement: React.FC = () => {
   };
 
   const groupedDetails: TableGroup[] = useMemo(() => {
-    if (!rawOrderDetails.length) return [];
+    if (!rawOrderDetails || !Array.isArray(rawOrderDetails) || rawOrderDetails.length === 0) return [];
     const groups: { [key: string]: TableGroup } = {};
 
     rawOrderDetails.forEach((item) => {
-      const banKey = item.tenBan || "Mang về";
+      // Xử lý cả PascalCase và camelCase từ backend
+      const banKey = item.tenBan || item.TenBan || "Mang về";
       if (!groups[banKey])
         groups[banKey] = { tenBan: banKey, items: [], totalAmount: 0 };
 
+      const tenMon = item.tenMon || item.TenMon || item.tenMonAn || item.TenMonAn || 'Món không xác định';
+      const tenPhienBan = item.tenPhienBan || item.TenPhienBan || '';
+      
       const existingItem = groups[banKey].items.find(
         (i) =>
-          i.tenMon === (item.tenMon || item.tenMonAn) &&
-          i.tenPhienBan === item.tenPhienBan
+          i.tenMon === tenMon &&
+          i.tenPhienBan === tenPhienBan
       );
-      const itemPrice = item.donGia || item.gia || 0;
-      const itemTotal = itemPrice * item.soLuong;
+      
+      // Xử lý giá: ưu tiên donGia, sau đó DonGia, sau đó gia
+      const itemPrice = item.donGia ?? item.DonGia ?? item.gia ?? item.Gia ?? 0;
+      const itemSoLuong = item.soLuong ?? item.SoLuong ?? 0;
+      const itemTotal = itemPrice * itemSoLuong;
 
       if (existingItem) {
-        existingItem.soLuong += item.soLuong;
+        existingItem.soLuong += itemSoLuong;
         existingItem.thanhTien += itemTotal;
       } else {
         groups[banKey].items.push({
-          tenMon: item.tenMon || item.tenMonAn,
-          tenPhienBan: item.tenPhienBan,
+          tenMon,
+          tenPhienBan,
           donGia: itemPrice,
-          soLuong: item.soLuong,
+          soLuong: itemSoLuong,
           thanhTien: itemTotal,
         });
       }
@@ -214,6 +229,7 @@ const OrderManagement: React.FC = () => {
 
   const handleViewDetails = (order: Order) => {
     setSelectedOrder(order);
+    setOpenDropdownId(null); // Đóng dropdown khi mở modal
     fetchOrderDetails(order.maDonHang);
   };
 
@@ -238,75 +254,185 @@ const OrderManagement: React.FC = () => {
     }
   };
 
-  const renderActionButtons = (order: Order, size: "small" | "large" = "small") => {
-    const btnClass = size === "small" ? "p-1.5 rounded-lg" : "px-4 py-2 rounded-lg font-medium flex items-center gap-2";
-    const iconSize = size === "small" ? "w-4 h-4" : "w-5 h-5";
+  // Component dropdown menu cho các thao tác
+  const ActionDropdown = ({ order }: { order: Order }) => {
+    const isOpen = openDropdownId === order.maDonHang;
+    const actions: Array<{ label: string; icon: React.ReactNode; onClick: () => void; className: string }> = [];
+
+    // Tạo danh sách thao tác dựa trên trạng thái
+    if (order.maTrangThaiDonHang === "CHO_XAC_NHAN") {
+      actions.push(
+        {
+          label: "Duyệt đơn",
+          icon: <CheckCircle className="w-4 h-4" />,
+          onClick: () => {
+            handleUpdateStatus(order.maDonHang, "DA_XAC_NHAN");
+            setOpenDropdownId(null);
+          },
+          className: "text-green-700 dark:text-green-400"
+        },
+        {
+          label: "Hủy đơn",
+          icon: <XCircle className="w-4 h-4" />,
+          onClick: () => {
+            handleUpdateStatus(order.maDonHang, "DA_HUY");
+            setOpenDropdownId(null);
+          },
+          className: "text-red-700 dark:text-red-400"
+        }
+      );
+    } else if (order.maTrangThaiDonHang === "DA_XAC_NHAN") {
+      actions.push(
+        {
+          label: "Vào bàn",
+          icon: <Play className="w-4 h-4" />,
+          onClick: () => {
+            handleUpdateStatus(order.maDonHang, "CHO_THANH_TOAN");
+            setOpenDropdownId(null);
+          },
+          className: "text-blue-700 dark:text-blue-400"
+        },
+        {
+          label: "Hủy đơn",
+          icon: <XCircle className="w-4 h-4" />,
+          onClick: () => {
+            handleUpdateStatus(order.maDonHang, "DA_HUY");
+            setOpenDropdownId(null);
+          },
+          className: "text-red-700 dark:text-red-400"
+        }
+      );
+    } else if (order.maTrangThaiDonHang === "CHO_THANH_TOAN") {
+      actions.push(
+        {
+          label: "Gọi món",
+          icon: <PlusCircle className="w-4 h-4" />,
+          onClick: () => {
+            setOrderToOrdering(order);
+            setOpenDropdownId(null);
+          },
+          className: "text-orange-700 dark:text-orange-400"
+        },
+        {
+          label: "Hủy đơn",
+          icon: <XCircle className="w-4 h-4" />,
+          onClick: () => {
+            handleUpdateStatus(order.maDonHang, "DA_HUY");
+            setOpenDropdownId(null);
+          },
+          className: "text-gray-700 dark:text-gray-400"
+        }
+      );
+    }
+
+    if (actions.length === 0) return null;
 
     return (
-      <div className="flex gap-2">
-        {/* DUYỆT */}
-        {order.maTrangThaiDonHang === "CHO_XAC_NHAN" && (
+      <div className="relative">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpenDropdownId(isOpen ? null : order.maDonHang);
+          }}
+          className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          title="Thao tác"
+        >
+          <MoreVertical className="w-5 h-5" />
+        </button>
+        
+        {isOpen && (
           <>
-            <button
-              onClick={() => handleUpdateStatus(order.maDonHang, "DA_XAC_NHAN")}
-              className={`${btnClass} bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50`}
-              title="Duyệt đơn"
-            >
-              {size === "small" ? <CheckCircle className={iconSize} /> : <> <CheckCircle className={iconSize} /> Duyệt đơn </>}
-            </button>
-            <button
-              onClick={() => handleUpdateStatus(order.maDonHang, "DA_HUY")}
-              className={`${btnClass} bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50`}
-              title="Hủy đơn"
-            >
-              {size === "small" ? <XCircle className={iconSize} /> : <> <XCircle className={iconSize} /> Hủy đơn </>}
-            </button>
-          </>
-        )}
-
-        {/* VÀO BÀN */}
-        {["DA_XAC_NHAN"].includes(order.maTrangThaiDonHang) && (
-          <>
-            <button
-              onClick={() => handleUpdateStatus(order.maDonHang, "CHO_THANH_TOAN")}
-              className={`${btnClass} bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50`}
-              title="Khách vào bàn"
-            >
-               {size === "small" ? <Play className={iconSize} /> : <> <Play className={iconSize} /> Vào bàn </>}
-            </button>
-            <button
-              onClick={() => handleUpdateStatus(order.maDonHang, "DA_HUY")}
-              className={`${btnClass} bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50`}
-              title="Hủy đơn"
-            >
-               {size === "small" ? <XCircle className={iconSize} /> : <> <XCircle className={iconSize} /> Hủy </>}
-            </button>
-          </>
-        )}
-
-        {/* ĐANG PHỤC VỤ: GỌI MÓN & HỦY */}
-        {["CHO_THANH_TOAN"].includes(order.maTrangThaiDonHang) && (
-          <>
-            {/* NÚT GỌI MÓN MỚI THÊM */}
-            <button
-                onClick={() => setOrderToOrdering(order)}
-                className={`${btnClass} bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400`}
-                title="Gọi thêm món"
-            >
-                {size === "small" ? <PlusCircle className={iconSize} /> : <><PlusCircle className={iconSize} /> Gọi món</>}
-            </button>
-
-            <button
-                onClick={() => handleUpdateStatus(order.maDonHang, "DA_HUY")}
-                className={`${btnClass} bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600`}
-                title="Hủy đơn đang phục vụ"
-            >
-                {size === "small" ? <XCircle className={iconSize} /> : <> <XCircle className={iconSize} /> Hủy </>}
-            </button>
+            {/* Overlay để đóng dropdown khi click bên ngoài */}
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setOpenDropdownId(null)}
+            />
+            {/* Dropdown menu */}
+            <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 py-1">
+              {actions.map((action, idx) => (
+                <button
+                  key={idx}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    action.onClick();
+                  }}
+                  className={`w-full px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${action.className}`}
+                >
+                  {action.icon}
+                  {action.label}
+                </button>
+              ))}
+            </div>
           </>
         )}
       </div>
     );
+  };
+
+  const renderActionButtons = (order: Order, size: "small" | "large" = "small") => {
+    const btnClass = size === "large" ? "px-4 py-2 rounded-lg font-medium flex items-center gap-2" : "";
+    const iconSize = size === "large" ? "w-5 h-5" : "w-4 h-4";
+
+    // Cho modal (large), giữ nguyên layout cũ
+    if (size === "large") {
+      return (
+        <div className="flex gap-2">
+          {order.maTrangThaiDonHang === "CHO_XAC_NHAN" && (
+            <>
+              <button
+                onClick={() => handleUpdateStatus(order.maDonHang, "DA_XAC_NHAN")}
+                className={`${btnClass} bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50`}
+              >
+                <CheckCircle className={iconSize} /> Duyệt đơn
+              </button>
+              <button
+                onClick={() => handleUpdateStatus(order.maDonHang, "DA_HUY")}
+                className={`${btnClass} bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50`}
+              >
+                <XCircle className={iconSize} /> Hủy đơn
+              </button>
+            </>
+          )}
+
+          {["DA_XAC_NHAN"].includes(order.maTrangThaiDonHang) && (
+            <>
+              <button
+                onClick={() => handleUpdateStatus(order.maDonHang, "CHO_THANH_TOAN")}
+                className={`${btnClass} bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50`}
+              >
+                <Play className={iconSize} /> Vào bàn
+              </button>
+              <button
+                onClick={() => handleUpdateStatus(order.maDonHang, "DA_HUY")}
+                className={`${btnClass} bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50`}
+              >
+                <XCircle className={iconSize} /> Hủy
+              </button>
+            </>
+          )}
+
+          {["CHO_THANH_TOAN"].includes(order.maTrangThaiDonHang) && (
+            <>
+              <button
+                onClick={() => setOrderToOrdering(order)}
+                className={`${btnClass} bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400`}
+              >
+                <PlusCircle className={iconSize} /> Gọi món
+              </button>
+              <button
+                onClick={() => handleUpdateStatus(order.maDonHang, "DA_HUY")}
+                className={`${btnClass} bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600`}
+              >
+                <XCircle className={iconSize} /> Hủy
+              </button>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    // Cho bảng (small), dùng dropdown
+    return <ActionDropdown order={order} />;
   };
 
   const formatCurrency = (val: number) =>
@@ -400,6 +526,7 @@ const OrderManagement: React.FC = () => {
                 <th className="px-6 py-4">Mã đơn</th>
                 <th className="px-6 py-4">Khách hàng</th>
                 <th className="px-6 py-4">Ngày nhận bàn</th>
+                <th className="px-6 py-4">Ngày dự kiến</th>
                 <th className="px-6 py-4">Ngày đặt</th>
                 <th className="px-6 py-4">Tổng tiền</th>
                 <th className="px-6 py-4 text-center">Trạng thái</th>
@@ -408,7 +535,7 @@ const OrderManagement: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700 text-gray-700 dark:text-gray-300">
               {loading ? (
-                  <tr><td colSpan={7} className="p-8 text-center">Đang tải dữ liệu...</td></tr>
+                  <tr><td colSpan={8} className="p-8 text-center">Đang tải dữ liệu...</td></tr>
               ) : currentItems.length > 0 ? (
                   currentItems.map((order) => (
                     <tr key={order.maDonHang} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group">
@@ -420,7 +547,10 @@ const OrderManagement: React.FC = () => {
                             <div className="text-xs text-gray-500 dark:text-gray-400">{order.soDienThoaiKhach}</div>
                         </td>
                         <td className="px-6 py-4 text-blue-600 dark:text-blue-400 font-medium">
-                            {formatDate(order.tgNhanBan || "")}
+                            {formatDate(order.tgNhanBan || order.thoiGianNhanBan || "")}
+                        </td>
+                        <td className="px-6 py-4 text-purple-600 dark:text-purple-400 font-medium">
+                            {formatDate(order.tgDatDuKien || "")}
                         </td>
                         <td className="px-6 py-4 text-gray-500 dark:text-gray-400 text-xs">
                             {formatDate(order.thoiGianDatHang)}
@@ -460,7 +590,7 @@ const OrderManagement: React.FC = () => {
                     </tr>
                   ))
               ) : (
-                  <tr><td colSpan={7} className="p-12 text-center text-gray-500 dark:text-gray-400">Không có đơn hàng nào</td></tr>
+                  <tr><td colSpan={8} className="p-12 text-center text-gray-500 dark:text-gray-400">Không có đơn hàng nào</td></tr>
               )}
             </tbody>
           </table>
