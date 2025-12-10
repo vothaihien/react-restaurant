@@ -41,3 +41,17 @@ export interface InventoryTransaction {
   note?: string;
 }
 
+export interface StockItem {
+    maNguyenLieu: string;
+    tenNguyenLieu: string;
+    donViTinh: string;
+    soLuongTon: number;
+    trangThai: string;
+    // Mảng này khớp với cái Backend mới sửa ở trên
+    cacNhaCungCap: {
+        maNhaCungCap: string;
+        tenNhaCungCap: string;
+        maCungUng: string;
+        giaGoiY: number;
+    }[]; 
+}
