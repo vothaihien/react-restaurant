@@ -54,8 +54,7 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({ onBookingSucc
   const [isCustomerFound, setIsCustomerFound] = useState(false);
   const [loyaltyMessage, setLoyaltyMessage] = useState<string | null>(null);
 
-  // --- TÌM BÀN TRỐNG ---
-  const fetchAvailableTables = useCallback(async () => {
+const fetchAvailableTables = useCallback(async () => {
     if (!bookingDate || !bookingTime || partySize < 1) {
       setAvailableTables([]);
       return;
@@ -66,23 +65,30 @@ const BookingForm: React.FC<{ onBookingSuccess: () => void }> = ({ onBookingSucc
       const dateTimeStr = `${bookingDate}T${bookingTime}:00`;
       const tables = await tableService.getTablesByTime(dateTimeStr, partySize);
       
-      // LOGIC LỌC BÀN (ĐÃ SỬA)
+      // LOGIC LỌC BÀN (CORRECTED)
       const available = Array.isArray(tables) ? tables.filter((t: any) => {
-        const statusName = (t.tenTrangThai || '').toLowerCase();
+        const statusName = (t.tenTrangThai || '').toLowerCase(); // Convert to lowercase
         const statusCode = t.maTrangThai;
 
-        // 1. LOẠI BỎ CÁC BÀN ĐANG BẬN
-        // TTBA002: Đang phục vụ (Có khách)
-        // TTBA003: Đã đặt (Booking)
-        if (statusCode === 'TTBA002' || statusCode === 'TTBA003' || 
-            statusName.includes('có khách') || statusName.includes('đã đặt') || statusName.includes('phục vụ')) {
-            return false; 
+        // 1. STRICTLY HIDE BUSY TABLES
+        // Check for specific API keywords or standard status codes
+        if (
+            statusCode === 'TTBA002' || 
+            statusCode === 'TTBA003' || 
+            statusName === 'dadat' ||        // From API GetAvailableBanAns
+            statusName === 'baotri' ||       // From API GetAvailableBanAns
+            statusName === 'canghep' ||      // From API GetAvailableBanAns
+            statusName.includes('có khách') || 
+            statusName.includes('đã đặt') || 
+            statusName.includes('phục vụ')
+        ) {
+            return false; // HIDE this table completely
         }
 
-        // 2. CHỈ LẤY BÀN TRỐNG
-        // TTBA001: Bàn trống
-        return statusCode === 'TTBA001' || statusName.includes('trống');
-
+        // 2. ONLY RETURN EMPTY TABLES
+        // TTBA001: Bàn trống, or text contains "trống"/"trong"/"cuatui"
+        return statusCode === 'TTBA001' || statusName.includes('trống') || statusName === 'trong' || statusName === 'cuatui';
+        
       }).sort((a: BanAn, b: BanAn) => {
           // Sắp xếp ưu tiên bàn vừa vặn
           const diffA = a.sucChua - partySize;

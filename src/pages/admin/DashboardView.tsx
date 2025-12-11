@@ -37,7 +37,7 @@ const DashboardView: React.FC = () => {
   // --- STATE BỘ LỌC ---
   const [selectedFloor, setSelectedFloor] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [selectedPeople, setSelectedPeople] = useState<string>(''); // Thêm lọc theo số người
+  const [selectedPeople, setSelectedPeople] = useState<string>(''); 
   const [searchQuery, setSearchQuery] = useState('');
   
   // State Thời gian
@@ -106,30 +106,51 @@ const DashboardView: React.FC = () => {
     return matchFloor && matchStatus && matchPeople && matchSearch;
   });
 
-  // --- HELPER STYLE ---
-  const getStatusStyle = (statusName: string | undefined) => {
-    // Dựa vào trangThaiHienThi hoặc tenTrangThai trả về từ API
-    const s = statusName || 'Trống';
-    
-    if (s === 'Đang phục vụ' || s === 'Chờ thanh toán' || s === 'Đang phục vụ (Walk-in/Cũ)') {
-        return {
-          cardBorder: 'border-rose-200 dark:border-rose-900',
-          bg: 'bg-white dark:bg-gray-800',
-          iconBg: 'bg-rose-100 dark:bg-rose-900/50',
-          iconColor: 'text-rose-600 dark:text-rose-400',
-          badge: 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300',
-          label: s.includes('Chờ thanh toán') ? 'Chờ thanh toán' : 'Đang phục vụ'
-        };
-    } else if (s.includes('Đã đặt') || s === 'Đã đặt (Sắp đến)' || s === 'Đã đặt (Quá giờ)') {
+  // --- HELPER STYLE (UPDATED) ---
+  const getStatusStyle = (statusName: string | undefined, note: string | undefined) => {
+    const s = (statusName || '').toLowerCase(); // Chuyển về chữ thường để so sánh
+    const n = (note || '').toLowerCase();       // Kiểm tra cả ghi chú
+
+    // 1. ƯU TIÊN MÀU CAM (ĐÃ ĐẶT) LÊN ĐẦU TIÊN
+    // Nếu trạng thái HOẶC ghi chú có chữ "đã đặt" -> Màu Cam
+    if (
+        s.includes('đã đặt') || 
+        s.includes('sắp đến') || 
+        s.includes('quá giờ') || 
+        s === 'dadat' ||
+        n.includes('đã đặt') 
+    ) {
+      console.log("Xác định màu Đã đặt cho trạng thái:", statusName, "và ghi chú:", note);
         return {
           cardBorder: 'border-orange-200 dark:border-orange-900',
           bg: 'bg-white dark:bg-gray-800',
           iconBg: 'bg-orange-100 dark:bg-orange-900/50',
           iconColor: 'text-orange-600 dark:text-orange-400',
           badge: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
-          label: s.includes('Sắp đến') ? 'Đã đặt (Sắp đến)' : s.includes('Quá giờ') ? 'Đã đặt (Quá giờ)' : 'Đã đặt trước'
+          label: s.includes('sắp đến') ? 'Đã đặt (Sắp đến)' : 
+                 s.includes('quá giờ') ? 'Đã đặt (Quá giờ)' : 'Đã đặt trước'
         };
-    } else if (s === 'Bảo trì') {
+    } 
+    
+    // 2. MÀU ĐỎ (ĐANG PHỤC VỤ)
+    else if (
+        s.includes('đang phục vụ') || 
+        s.includes('chờ thanh toán') || 
+        s.includes('có khách') ||
+        s === 'dang_phuc_vu'
+    ) {
+      console.log("Xác định màu Đang phục vụ cho trạng thái:", statusName, "và ghi chú:", note);
+        return {
+          cardBorder: 'border-rose-200 dark:border-rose-900',
+          bg: 'bg-white dark:bg-gray-800',
+          iconBg: 'bg-rose-100 dark:bg-rose-900/50',
+          iconColor: 'text-rose-600 dark:text-rose-400',
+          badge: 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300',
+          label: s.includes('chờ thanh toán') ? 'Chờ thanh toán' : 'Đang phục vụ'
+        };
+    } 
+    // 3. MÀU XÁM (BẢO TRÌ)
+    else if (s.includes('bảo trì') || s === 'baotri') {
         return {
           cardBorder: 'border-gray-200 dark:border-gray-700',
           bg: 'bg-gray-50 dark:bg-gray-800/50',
@@ -138,7 +159,9 @@ const DashboardView: React.FC = () => {
           badge: 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
           label: 'Bảo trì'
         };
-    } else {
+    } 
+    // 4. MẶC ĐỊNH: MÀU XANH (TRỐNG)
+    else {
         return {
           cardBorder: 'border-emerald-200 dark:border-emerald-900',
           bg: 'bg-white dark:bg-gray-800',
@@ -148,6 +171,7 @@ const DashboardView: React.FC = () => {
           label: 'Bàn trống'
         };
     }
+    console.log("Xác định màu cho trạng thái:", s, "và ghi chú:", n);
   };
 
   return (

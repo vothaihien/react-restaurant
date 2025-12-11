@@ -3,10 +3,10 @@ import { useReactToPrint } from 'react-to-print';
 import { 
     Package, History, Plus, Printer, Save, CheckCircle, 
     Trash2, Search, Filter, RefreshCcw, Truck, ShoppingCart ,
-    AlertTriangle, Boxes
+    AlertTriangle, Boxes, X // Đã thêm icon X
 } from 'lucide-react';
 
-// --- IMPORT TYPES & SERVICES (Giữ nguyên) ---
+// --- IMPORT TYPES & SERVICES ---
 import { 
     NhaCungCap, 
     NguyenLieuNCC, 
@@ -16,7 +16,23 @@ import {
 } from '@/types/InventoryTypes';
 import InventoryService from '@/services/inventoryService';
 import { MauInPhieuNhap } from '@/components/printing/MauInPhieuNhap';
-import { useAuth } from '@/contexts'; // Đảm bảo đường dẫn import đúng
+import { useAuth } from '@/contexts'; 
+
+// --- ĐỊNH NGHĨA TYPE CHO STOCK ITEM (Khớp với Backend C# mới sửa) ---
+interface StockItem {
+    maNguyenLieu: string;
+    tenNguyenLieu: string;
+    donViTinh: string;
+    soLuongTon: number;
+    trangThai: string;
+    // Danh sách NCC trả về từ API GetInventoryStock
+    cacNhaCungCap: {
+        maNhaCungCap: string;
+        tenNhaCungCap: string;
+        maCungUng: string;
+        giaGoiY: number;
+    }[]; 
+}
 
 const InventoryScreen = () => {
     const { user } = useAuth();
@@ -30,21 +46,26 @@ const InventoryScreen = () => {
     const [ingredients, setIngredients] = useState<NguyenLieuNCC[]>([]);
     const [historyList, setHistoryList] = useState<PhieuNhapHistory[]>([]); 
 
-    const [stockList, setStockList] = useState<any[]>([]);
+    // Sử dụng StockItem[] thay vì any[] để an toàn type
+    const [stockList, setStockList] = useState<StockItem[]>([]); 
     const [loadingStock, setLoadingStock] = useState(false);
 
-    // Form nhập liệu
+    // Form nhập liệu (Tab 1)
     const [selectedSupplier, setSelectedSupplier] = useState<NhaCungCap | null>(null);
     const [selectedIngredientId, setSelectedIngredientId] = useState<string>('');
     const [inputQuantity, setInputQuantity] = useState<number>(1);
     const [inputPrice, setInputPrice] = useState<number>(0);
     const [cart, setCart] = useState<CartItem[]>([]);
 
+    // --- STATE CHO MODAL NHẬP NHANH (MỚI) ---
+    const [showQuickModal, setShowQuickModal] = useState(false);
+    const [quickItem, setQuickItem] = useState<StockItem | null>(null);
+    const [quickQty, setQuickQty] = useState(10);
+    const [quickSupplierId, setQuickSupplierId] = useState('');
+
     // Bộ lọc & In ấn
     const [filterStatus, setFilterStatus] = useState<string | null>(null);
     const [printData, setPrintData] = useState<any>(null); 
-
-    // Ref cho chức năng in
     const componentRef = useRef<HTMLDivElement>(null);
 
     // --- INIT DATA ---
@@ -53,7 +74,6 @@ const InventoryScreen = () => {
         fetchHistory();
         fetchStock();
     }, []);
-
 
     const fetchStock = async () => {
         setLoadingStock(true);
@@ -71,13 +91,11 @@ const InventoryScreen = () => {
         fetchHistory();
     }, [filterStatus]);
 
-    // --- HÀM GỌI LỆNH IN ---
     const handlePrintTrigger = useReactToPrint({
         contentRef: componentRef, 
         documentTitle: `PhieuNhap_${printData?.maNhapHang || 'Temp'}`,
     });
 
-    // --- GỌI SERVICE ---
     const fetchSuppliers = async () => {
         try {
             const data = await InventoryService.getSuppliers();
@@ -89,7 +107,8 @@ const InventoryScreen = () => {
         try {
             const data = await InventoryService.getIngredientsBySupplier(maNCC);
             setIngredients(Array.isArray(data) ? data : []);
-        } catch (err) { console.error(err); setIngredients([]); }
+            return data; // Return data để dùng cho logic nhập nhanh
+        } catch (err) { console.error(err); setIngredients([]); return []; }
     };
 
     const fetchHistory = async () => {
@@ -100,19 +119,38 @@ const InventoryScreen = () => {
     };
 
     // --- XỬ LÝ LOGIC FORM ---
-    const handleSelectSupplier = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const maNCC = e.target.value;
+    const handleSelectSupplier = async (val: string) => {
+        const maNCC = val;
         if (!maNCC) {
             setSelectedSupplier(null); setIngredients([]); return;
         }
-        if (cart.length > 0 && !editingId) {
-            if (!confirm("Đổi NCC sẽ xóa danh sách hàng hiện tại trong phiếu?")) return;
+        
+        // Nếu đang có giỏ hàng mà chọn NCC khác -> Confirm
+        if (selectedSupplier && selectedSupplier.maNhaCungCap !== maNCC && cart.length > 0 && !editingId) {
+             // Logic confirm đã được xử lý ở UI hoặc hàm gọi, ở đây ta cứ set
         }
+
         const supplier = suppliers.find(s => s.maNhaCungCap === maNCC) || null;
         setSelectedSupplier(supplier);
-        setCart([]); setSelectedIngredientId(''); setInputPrice(0);
-        fetchIngredientsBySupplier(maNCC);
+        
+        // Reset nếu đổi sang NCC khác
+        if (selectedSupplier?.maNhaCungCap !== maNCC) {
+            setCart([]); 
+        }
+        
+        setSelectedIngredientId(''); 
+        setInputPrice(0);
+        await fetchIngredientsBySupplier(maNCC);
     };
+
+    // Wrapper cho sự kiện onChange của Select
+    const onSupplierChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const maNCC = e.target.value;
+        if (cart.length > 0 && !editingId && selectedSupplier?.maNhaCungCap !== maNCC) {
+            if (!confirm("Đổi NCC sẽ xóa danh sách hàng hiện tại trong phiếu?")) return;
+        }
+        handleSelectSupplier(maNCC);
+    }
 
     const handleSelectIngredient = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const maCungUng = e.target.value;
@@ -124,27 +162,36 @@ const InventoryScreen = () => {
     const handleAddProduct = () => {
         if (!selectedIngredientId) return alert("Vui lòng chọn nguyên liệu!");
         if (inputQuantity <= 0) return alert("Số lượng phải lớn hơn 0!");
+        
         const ing = ingredients.find(i => i.maCungUng === selectedIngredientId);
         if (!ing) return;
 
-        const idx = cart.findIndex(c => c.maCungUng === selectedIngredientId);
-        if (idx !== -1) {
-            const newCart = [...cart];
-            newCart[idx].soLuong += inputQuantity;
-            if (inputPrice > 0) newCart[idx].giaNhap = inputPrice;
-            setCart(newCart);
-        } else {
-            setCart([...cart, {
-                maCungUng: ing.maCungUng,
-                maNguyenLieu: ing.maNguyenLieu,
-                tenNguyenLieu: ing.tenNguyenLieu,
-                donViTinh: ing.donViTinh,
-                soLuong: inputQuantity,
-                giaNhap: inputPrice
-            }]);
-        }
-        // Reset input số lượng về 1 để nhập tiếp cho nhanh
+        // Logic thêm vào cart
+        addToCartLogic(ing.maCungUng, ing.maNguyenLieu, ing.tenNguyenLieu, ing.donViTinh, inputQuantity, inputPrice);
+        
         setInputQuantity(1);
+    };
+
+    // Hàm logic chung để thêm vào giỏ hàng (tách ra để tái sử dụng)
+    const addToCartLogic = (maCungUng: string, maNL: string, tenNL: string, dvt: string, qty: number, price: number) => {
+        setCart(prevCart => {
+            const idx = prevCart.findIndex(c => c.maCungUng === maCungUng);
+            if (idx !== -1) {
+                const newCart = [...prevCart];
+                newCart[idx].soLuong += qty;
+                if (price > 0) newCart[idx].giaNhap = price;
+                return newCart;
+            } else {
+                return [...prevCart, {
+                    maCungUng: maCungUng,
+                    maNguyenLieu: maNL,
+                    tenNguyenLieu: tenNL,
+                    donViTinh: dvt,
+                    soLuong: qty,
+                    giaNhap: price
+                }];
+            }
+        });
     };
 
     const handleUpdateRowPrice = (idx: number, val: number) => {
@@ -158,6 +205,62 @@ const InventoryScreen = () => {
     const handleRemoveItem = (idx: number) => {
         const newCart = [...cart]; newCart.splice(idx, 1); setCart(newCart);
     };
+
+    // --- LOGIC NHẬP NHANH TỪ TAB 3 (MỚI) ---
+    const openQuickImport = (item: StockItem) => {
+        setQuickItem(item);
+        setQuickQty(item.soLuongTon <= 10 ? 20 : 10); // Gợi ý nhập 20 nếu sắp hết
+        
+        // Logic tự động chọn NCC trong Modal
+        if (selectedSupplier) {
+            // Nếu Tab 1 đang chọn NCC, kiểm tra xem NCC đó có bán món này không
+            const supplierSellThisItem = item.cacNhaCungCap?.find(s => s.maNhaCungCap === selectedSupplier.maNhaCungCap);
+            if (supplierSellThisItem) {
+                setQuickSupplierId(selectedSupplier.maNhaCungCap);
+            } else {
+                setQuickSupplierId(''); 
+            }
+        } else {
+            // Nếu món này chỉ có 1 NCC độc quyền -> chọn luôn
+            if (item.cacNhaCungCap?.length === 1) {
+                setQuickSupplierId(item.cacNhaCungCap[0].maNhaCungCap);
+            } else {
+                setQuickSupplierId('');
+            }
+        }
+        setShowQuickModal(true);
+    };
+
+    const handleConfirmQuickImport = async () => {
+        if (!quickSupplierId || !quickItem) return alert("Vui lòng chọn Nhà Cung Cấp!");
+        
+        // 1. Lấy thông tin cung ứng (để lấy MaCungUng và Giá)
+        const targetSupplyInfo = quickItem.cacNhaCungCap?.find(s => s.maNhaCungCap === quickSupplierId);
+        if (!targetSupplyInfo) return alert("Lỗi dữ liệu nhà cung cấp!");
+
+        // 2. Chuyển sang Tab 1
+        setActiveTab(1);
+
+        // 3. Nếu NCC được chọn KHÁC với NCC đang active ở Tab 1
+        if (selectedSupplier?.maNhaCungCap !== quickSupplierId) {
+            // Gọi hàm chọn NCC (nó sẽ reset giỏ hàng cũ và fetch list ingredients mới)
+            await handleSelectSupplier(quickSupplierId);
+        }
+
+        // 4. Thêm hàng vào giỏ
+        // Ta dùng thông tin từ API Stock để thêm ngay mà ko cần chờ API ingredients
+        addToCartLogic(
+            targetSupplyInfo.maCungUng,
+            quickItem.maNguyenLieu,
+            quickItem.tenNguyenLieu,
+            quickItem.donViTinh,
+            quickQty,
+            targetSupplyInfo.giaGoiY || 0
+        );
+
+        setShowQuickModal(false);
+    };
+
 
     // --- XỬ LÝ EDIT & IN ẤN ---
     const handleEditClick = async (maPhieu: string) => {
@@ -251,8 +354,90 @@ const InventoryScreen = () => {
 
     // --- RENDER ---
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6 transition-colors duration-300 font-sans text-gray-900 dark:text-white">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6 transition-colors duration-300 font-sans text-gray-900 dark:text-white relative">
             
+            {/* --- MODAL NHẬP NHANH (MỚI) --- */}
+            {showQuickModal && quickItem && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700 animate-in fade-in zoom-in duration-200">
+                        <div className="flex justify-between items-center mb-5">
+                            <h3 className="text-lg font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                                <Plus className="w-5 h-5" /> Nhập nhanh nguyên liệu
+                            </h3>
+                            <button onClick={() => setShowQuickModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            {/* Thông tin mặt hàng */}
+                            <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+                                <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Mặt hàng</p>
+                                <p className="text-xl font-bold text-gray-800 dark:text-white">{quickItem.tenNguyenLieu}</p>
+                                <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
+                                    Tồn kho: 
+                                    <span className={`font-bold px-2 py-0.5 rounded text-xs ${quickItem.soLuongTon <= 10 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                        {quickItem.soLuongTon} {quickItem.donViTinh}
+                                    </span>
+                                </p>
+                            </div>
+
+                            {/* Chọn Nhà Cung Cấp */}
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Nhập từ Nhà Cung Cấp</label>
+                                <select 
+                                    className="w-full p-3 border rounded-xl bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                    value={quickSupplierId}
+                                    onChange={(e) => setQuickSupplierId(e.target.value)}
+                                >
+                                    <option value="">-- Chọn nhà cung cấp --</option>
+                                    {quickItem.cacNhaCungCap && quickItem.cacNhaCungCap.length > 0 ? (
+                                        quickItem.cacNhaCungCap.map((s) => (
+                                            <option key={s.maNhaCungCap} value={s.maNhaCungCap}>
+                                                {s.tenNhaCungCap} {s.giaGoiY > 0 ? ` - Giá: ${s.giaGoiY.toLocaleString()}đ` : ''}
+                                            </option>
+                                        ))
+                                    ) : (
+                                        <option disabled>Chưa có NCC nào cung cấp</option>
+                                    )}
+                                </select>
+                                
+                                {/* Cảnh báo nếu đổi NCC */}
+                                {selectedSupplier && quickSupplierId && selectedSupplier.maNhaCungCap !== quickSupplierId && (
+                                    <div className="mt-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400 p-2 rounded-lg flex items-start gap-2 border border-amber-100 dark:border-amber-800">
+                                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                                        <span>Chú ý: Bạn đang nhập hàng cho <b>{selectedSupplier.tenNhaCungCap}</b>. Nếu chọn NCC này, phiếu hiện tại sẽ bị reset.</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Số lượng */}
+                            <div>
+                                <label className="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Số lượng nhập thêm</label>
+                                <div className="flex items-center gap-0">
+                                    <button onClick={() => setQuickQty(q => Math.max(1, q - 1))} className="p-3 bg-gray-100 dark:bg-gray-700 rounded-l-xl hover:bg-gray-200 dark:hover:bg-gray-600 border border-r-0 border-gray-200 dark:border-gray-600">-</button>
+                                    <input 
+                                        type="number" 
+                                        className="w-full p-3 text-center border-y border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 font-bold outline-none"
+                                        value={quickQty}
+                                        onChange={(e) => setQuickQty(Number(e.target.value))}
+                                    />
+                                    <button onClick={() => setQuickQty(q => q + 1)} className="p-3 bg-gray-100 dark:bg-gray-700 rounded-r-xl hover:bg-gray-200 dark:hover:bg-gray-600 border border-l-0 border-gray-200 dark:border-gray-600">+</button>
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={handleConfirmQuickImport}
+                                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 dark:shadow-none transition-all flex justify-center items-center gap-2 mt-2"
+                            >
+                                <ShoppingCart className="w-5 h-5" />
+                                Thêm vào phiếu nhập
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* COMPONENT ẨN ĐỂ IN */}
             <div style={{ display: "none" }}>
                 <MauInPhieuNhap ref={componentRef} data={printData} />
@@ -327,7 +512,7 @@ const InventoryScreen = () => {
                             <select 
                                 className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white transition-colors"
                                 value={selectedSupplier?.maNhaCungCap || ''} 
-                                onChange={handleSelectSupplier} 
+                                onChange={onSupplierChange} 
                                 disabled={!!editingId}
                             >
                                 <option value="">-- Chọn nhà cung cấp --</option>
@@ -505,7 +690,7 @@ const InventoryScreen = () => {
                 </div>
             )}
 
-            {/* CONTENT TAB 2: LỊCH SỬ */}
+            {/* CONTENT TAB 2: LỊCH SỬ (Giữ nguyên) */}
             {activeTab === 2 && (
                 <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                     <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 flex flex-wrap gap-3 items-center">
@@ -626,6 +811,7 @@ const InventoryScreen = () => {
                 </div>
             )}
 
+            {/* CONTENT TAB 3: DANH SÁCH TỒN KHO (CẬP NHẬT) */}
             {activeTab === 3 && (
                 <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                     <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
@@ -644,29 +830,50 @@ const InventoryScreen = () => {
                                     <th className="p-4 text-center">ĐVT</th>
                                     <th className="p-4 text-right">Số lượng tồn</th>
                                     <th className="p-4 text-center">Trạng thái</th>
+                                    {/* Cột Hành Động (Mới) */}
+                                    <th className="p-4 text-center w-32">Hành động</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                 {loadingStock ? (
-                                    <tr><td colSpan={5} className="p-8 text-center">Đang tải dữ liệu...</td></tr>
+                                    <tr><td colSpan={6} className="p-8 text-center">Đang tải dữ liệu...</td></tr>
                                 ) : stockList.length > 0 ? (
-                                    stockList.map((item) => (
-                                        <tr key={item.maNguyenLieu} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                                            <td className="p-4 font-mono text-gray-500">{item.maNguyenLieu}</td>
-                                            <td className="p-4 font-bold text-gray-900 dark:text-white">{item.tenNguyenLieu}</td>
-                                            <td className="p-4 text-center">{item.donViTinh}</td>
-                                            <td className={`p-4 text-right font-bold text-lg ${item.soLuongTon <= 10 ? 'text-red-600' : 'text-green-600'}`}>
-                                                {item.soLuongTon}
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                {item.trangThai === 'HET_HANG' && <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold">Hết hàng</span>}
-                                                {item.trangThai === 'SAP_HET' && <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-bold flex items-center justify-center gap-1"><AlertTriangle className="w-3 h-3"/> Sắp hết</span>}
-                                                {item.trangThai === 'CON_HANG' && <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">Ổn định</span>}
-                                            </td>
-                                        </tr>
-                                    ))
+                                    stockList.map((item) => {
+                                        // Logic màu sắc nút nhập hàng
+                                        const isLowStock = item.soLuongTon <= 10;
+                                        const btnClass = isLowStock 
+                                            ? "bg-red-100 hover:bg-red-200 text-red-700 border border-red-200" 
+                                            : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200";
+
+                                        return (
+                                            <tr key={item.maNguyenLieu} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                                                <td className="p-4 font-mono text-gray-500">{item.maNguyenLieu}</td>
+                                                <td className="p-4 font-bold text-gray-900 dark:text-white">{item.tenNguyenLieu}</td>
+                                                <td className="p-4 text-center">{item.donViTinh}</td>
+                                                <td className={`p-4 text-right font-bold text-lg ${isLowStock ? 'text-red-600' : 'text-green-600'}`}>
+                                                    {item.soLuongTon}
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    {item.trangThai === 'HET_HANG' && <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold">Hết hàng</span>}
+                                                    {item.trangThai === 'SAP_HET' && <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-bold flex items-center justify-center gap-1"><AlertTriangle className="w-3 h-3"/> Sắp hết</span>}
+                                                    {item.trangThai === 'CON_HANG' && <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">Ổn định</span>}
+                                                </td>
+                                                
+                                                {/* Button Nhập Hàng */}
+                                                <td className="p-4 text-center">
+                                                    <button 
+                                                        onClick={() => openQuickImport(item)}
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1 mx-auto ${btnClass}`}
+                                                    >
+                                                        <Plus className="w-3 h-3" />
+                                                        Nhập hàng
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })
                                 ) : (
-                                    <tr><td colSpan={5} className="p-8 text-center text-gray-500">Kho đang trống</td></tr>
+                                    <tr><td colSpan={6} className="p-8 text-center text-gray-500">Kho đang trống</td></tr>
                                 )}
                             </tbody>
                         </table>
