@@ -16,7 +16,7 @@ import {
   LoginView,
 } from "@/pages/admin";
 import CustomerPortalView, { CustomerTab } from "@/pages/customer/CustomerPortalView";
-import InventoryScreen from "@/pages/admin/InventoryView"; 
+import InventoryScreen from "@/pages/admin/InventoryView";
 import ProtectedRoute from "./ProtectedRoute";
 import UnauthorizedView from "@/pages/admin/UnauthorizedView";
 
@@ -27,7 +27,7 @@ const AppRoutes: React.FC = () => {
       {/* Public Routes (Ai cũng vào được) */}
       <Route path="/login" element={<LoginView />} />
       <Route path="/unauthorized" element={<UnauthorizedView />} />
-      
+
       <Route path="*" element={<div>404: Page Not Found</div>} />
 
       {/* --- NHÓM 1: ADMIN & STAFF (Cả 2 đều vào được) --- */}
@@ -48,7 +48,9 @@ const AppRoutes: React.FC = () => {
         <Route path="/reports" element={<ReportsView />} />
         <Route path="/settings" element={<SettingsView />} />
         <Route path="/promotions" element={<PromotionManagement />} />
+
       </Route>
+
 
     </Routes>
   );
