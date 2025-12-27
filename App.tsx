@@ -26,7 +26,6 @@ const MainLayout: React.FC = () => {
 
   // Layout Admin chính
   return (
-    // 2. CẬP NHẬT MÀU NỀN CHO LAYOUT CHÍNH
     // bg-gray-100 -> dark:bg-gray-900 (Nền tổng thể tối)
     // text-gray-900 -> dark:text-gray-100 (Chữ chuyển sang trắng)
     <div className="flex h-screen bg-gray-100 dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-300">

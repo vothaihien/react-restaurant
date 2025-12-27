@@ -34,7 +34,7 @@ const DEFAULT_DURATION = 4000;
 export const FeedbackProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [notifications, setNotifications] = useState<FeedbackNotification[]>([]);
     const [dialog, setDialog] = useState<FeedbackDialogState | null>(null);
-    const resolverRef = useRef<(result: boolean) => void>();
+    const resolverRef = useRef<((result: boolean) => void) | undefined>(undefined);
     const timeoutMap = useRef<Record<string, number>>({});
 
     const dismiss = useCallback((id: string) => {

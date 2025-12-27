@@ -12,13 +12,13 @@ interface TableData {
   tenBan: string;
   sucChua: number;
   maTrangThai?: string; 
-  tenTrangThai?: string; // Tên hiển thị (Trống, Đang phục vụ...)
-  trangThaiHienThi?: string; // Trạng thái từ API GetManagerTableStatus
+  tenTrangThai?: string; 
+  trangThaiHienThi?: string; 
   maTang?: string;
   tenTang?: string;
   thoiGianVao?: string;
-  ghiChu?: string; // Thông tin hóa đơn, khách hàng
-  maDonHang?: string; // Mã đơn hàng nếu có
+  ghiChu?: string; 
+  maDonHang?: string; 
 }
 
 interface TangData {
@@ -68,13 +68,12 @@ const DashboardView: React.FC = () => {
     fetchData();
   }, [selectedTime]); 
 
-  // --- LOGIC LỌC CLIENT-SIDE (Đầy đủ Tầng, Trạng thái, Số người) ---
+  // --- LOGIC LỌC CLIENT-SIDE (ĐÃ CHUẨN HÓA) ---
   const filteredTables = tables.filter(t => {
     // 1. Lọc Tầng
     const matchFloor = selectedFloor === 'all' || t.maTang === selectedFloor;
     
     // 2. Lọc Trạng Thái
-    // Sử dụng trangThaiHienThi nếu có, nếu không thì dùng tenTrangThai
     const statusToCheck = t.trangThaiHienThi || t.tenTrangThai || '';
     let matchStatus = true;
     if (selectedStatus !== 'all') {
@@ -82,21 +81,34 @@ const DashboardView: React.FC = () => {
           matchStatus = statusToCheck === 'Trống' || statusToCheck === 'Đang trống';
         } else if (selectedStatus === 'dang_phuc_vu') {
           matchStatus = statusToCheck === 'Đang phục vụ' || 
-                       statusToCheck === 'Chờ thanh toán' || 
-                       statusToCheck === 'Đang phục vụ (Walk-in/Cũ)';
+                        statusToCheck === 'Chờ thanh toán' || 
+                        statusToCheck === 'Đang phục vụ (Walk-in/Cũ)';
         } else if (selectedStatus === 'dat_truoc') {
           matchStatus = statusToCheck.includes('Đã đặt') || 
-                       statusToCheck === 'Đã đặt (Sắp đến)' || 
-                       statusToCheck === 'Đã đặt (Quá giờ)';
+                        statusToCheck === 'Đã đặt (Sắp đến)' || 
+                        statusToCheck === 'Đã đặt (Quá giờ)';
         } else if (selectedStatus === 'bao_tri') {
           matchStatus = statusToCheck === 'Bảo trì';
         }
     }
 
-    // 3. Lọc Số Người (Sức chứa >= Số người chọn)
-    const matchPeople = selectedPeople === '' || t.sucChua >= parseInt(selectedPeople);
+    // 3. Lọc Số Người
+    // Logic: Chỉ ẩn bàn khi nó QUÁ LỚN (lãng phí). Bàn nhỏ (để ghép) vẫn hiện.
+    let matchPeople = true;
+    if (selectedPeople && parseInt(selectedPeople) > 0) {
+        const numPeople = parseInt(selectedPeople);
+        const capacity = Number(t.sucChua);
+        const MAX_EXTRA_SEATS = 3; // Cho phép dư tối đa 4 ghế
 
-    // 4. Tìm kiếm tên bàn hoặc thông tin hóa đơn
+        // Điều kiện ẩn: Sức chứa lớn hơn Số khách quá 4 đơn vị
+        if ((capacity - numPeople) > MAX_EXTRA_SEATS) {
+            matchPeople = false; // Ẩn đi
+        } else {
+            matchPeople = true; // Giữ lại (Bao gồm cả bàn nhỏ hơn số khách)
+        }
+    }
+
+    // 4. Tìm kiếm
     const searchText = searchQuery.toLowerCase();
     const matchSearch = searchText === '' || 
       (t.tenBan || '').toLowerCase().includes(searchText) ||
@@ -106,21 +118,12 @@ const DashboardView: React.FC = () => {
     return matchFloor && matchStatus && matchPeople && matchSearch;
   });
 
-  // --- HELPER STYLE (UPDATED) ---
-  const getStatusStyle = (statusName: string | undefined, note: string | undefined) => {
-    const s = (statusName || '').toLowerCase(); // Chuyển về chữ thường để so sánh
-    const n = (note || '').toLowerCase();       // Kiểm tra cả ghi chú
+  // --- HELPER STYLE ---
+  const getStatusStyle = (statusName: string | undefined, note?: string | undefined) => {
+    const s = (statusName || '').toLowerCase();
+    const n = (note || '').toLowerCase();
 
-    // 1. ƯU TIÊN MÀU CAM (ĐÃ ĐẶT) LÊN ĐẦU TIÊN
-    // Nếu trạng thái HOẶC ghi chú có chữ "đã đặt" -> Màu Cam
-    if (
-        s.includes('đã đặt') || 
-        s.includes('sắp đến') || 
-        s.includes('quá giờ') || 
-        s === 'dadat' ||
-        n.includes('đã đặt') 
-    ) {
-      console.log("Xác định màu Đã đặt cho trạng thái:", statusName, "và ghi chú:", note);
+    if (s.includes('đã đặt') || s.includes('sắp đến') || s.includes('quá giờ') || s === 'dadat' || n.includes('đã đặt')) {
         return {
           cardBorder: 'border-orange-200 dark:border-orange-900',
           bg: 'bg-white dark:bg-gray-800',
@@ -131,15 +134,7 @@ const DashboardView: React.FC = () => {
                  s.includes('quá giờ') ? 'Đã đặt (Quá giờ)' : 'Đã đặt trước'
         };
     } 
-    
-    // 2. MÀU ĐỎ (ĐANG PHỤC VỤ)
-    else if (
-        s.includes('đang phục vụ') || 
-        s.includes('chờ thanh toán') || 
-        s.includes('có khách') ||
-        s === 'dang_phuc_vu'
-    ) {
-      console.log("Xác định màu Đang phục vụ cho trạng thái:", statusName, "và ghi chú:", note);
+    else if (s.includes('đang phục vụ') || s.includes('chờ thanh toán') || s.includes('có khách') || s === 'dang_phuc_vu') {
         return {
           cardBorder: 'border-rose-200 dark:border-rose-900',
           bg: 'bg-white dark:bg-gray-800',
@@ -149,7 +144,6 @@ const DashboardView: React.FC = () => {
           label: s.includes('chờ thanh toán') ? 'Chờ thanh toán' : 'Đang phục vụ'
         };
     } 
-    // 3. MÀU XÁM (BẢO TRÌ)
     else if (s.includes('bảo trì') || s === 'baotri') {
         return {
           cardBorder: 'border-gray-200 dark:border-gray-700',
@@ -160,7 +154,6 @@ const DashboardView: React.FC = () => {
           label: 'Bảo trì'
         };
     } 
-    // 4. MẶC ĐỊNH: MÀU XANH (TRỐNG)
     else {
         return {
           cardBorder: 'border-emerald-200 dark:border-emerald-900',
@@ -171,7 +164,6 @@ const DashboardView: React.FC = () => {
           label: 'Bàn trống'
         };
     }
-    console.log("Xác định màu cho trạng thái:", s, "và ghi chú:", n);
   };
 
   return (
@@ -244,7 +236,7 @@ const DashboardView: React.FC = () => {
                     <option value="bao_tri">Bảo trì</option>
                 </select>
 
-                {/* 4. MỚI: Lọc Số Người */}
+                {/* 4. Lọc Số Người */}
                 <div className="relative group w-28">
                     <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 z-10" />
                     <input 
@@ -283,16 +275,22 @@ const DashboardView: React.FC = () => {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
             {filteredTables.map((table) => {
-                // Sử dụng trangThaiHienThi nếu có, nếu không thì dùng tenTrangThai
                 const statusDisplay = table.trangThaiHienThi || table.tenTrangThai || 'Trống';
                 const style = getStatusStyle(statusDisplay);
                 const hasOrder = table.ghiChu && (statusDisplay.includes('phục vụ') || statusDisplay.includes('đặt'));
                 
+                // Ở đây KHÔNG có logic làm mờ hay chặn click.
+                // Nếu bàn không phù hợp, nó đã bị loại khỏi filteredTables ở trên rồi.
+
                 return (
                     <div 
                         key={table.maBan}
                         className={`relative group flex flex-col items-center p-4 rounded-2xl border ${style.bg} ${style.cardBorder} hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer shadow-sm`}
-                        title={table.ghiChu || ''} // Tooltip hiển thị thông tin hóa đơn
+                        title={table.ghiChu || ''}
+                        onClick={() => {
+                             // Logic chọn bàn của bạn ở đây
+                             console.log("Chọn bàn:", table.tenBan);
+                        }}
                     >
                         <div className="w-full flex justify-between items-start mb-3">
                             <div className="flex-1 min-w-0">
@@ -316,7 +314,6 @@ const DashboardView: React.FC = () => {
                             {style.label}
                         </span>
 
-                        {/* Hiển thị thông tin hóa đơn nếu có */}
                         {hasOrder && (
                             <div className="w-full mb-2 px-2 py-1 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
                                 <p className="text-[9px] text-indigo-700 dark:text-indigo-300 font-medium truncate text-center">
@@ -353,7 +350,7 @@ const DashboardView: React.FC = () => {
               </div>
               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Không tìm thấy bàn nào</h3>
               <p className="text-gray-500 dark:text-gray-400 mb-4">
-                 {selectedPeople ? `Không có bàn nào đủ chỗ cho ${selectedPeople} người.` : 'Thử thay đổi bộ lọc hoặc tìm kiếm từ khóa khác.'}
+                 {selectedPeople ? `Không có bàn nào phù hợp với bộ lọc.` : 'Thử thay đổi bộ lọc hoặc tìm kiếm từ khóa khác.'}
               </p>
               <button 
                 onClick={() => {

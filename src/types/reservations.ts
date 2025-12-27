@@ -13,6 +13,7 @@ export interface Reservation {
     tableIds?: string[];
     source?: 'App' | 'Phone' | 'InPerson';
     notes?: string;
+    tienDatCoc?: number;
 }
 
 
