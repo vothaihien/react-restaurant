@@ -3,12 +3,20 @@ import { useAppContext } from "@/contexts/AppContext";
 import MenuManagementView from "./MenuManagementView"; // Giữ nguyên component con này
 import { menuApi } from "@/api/menu";
 import { useFeedback } from "@/contexts/FeedbackContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { Navigate } from "react-router-dom";
 import { 
   LayoutGrid, UtensilsCrossed, Truck, Layers, Plus, 
   Edit2, Trash2, Save, X, Search 
 } from "lucide-react";
 
 const MasterDataView: React.FC = () => {
+  const { user } = useAuth();
+  
+  // Kiểm tra quyền truy cập - chỉ admin mới được vào
+  if (!user || user.type !== 'admin') {
+    return <Navigate to="/unauthorized" replace />;
+  }
   const { suppliers, addSupplier } = useAppContext() as any;
   const [name, setName] = useState<string>("");
 

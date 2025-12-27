@@ -53,6 +53,12 @@ axiosClient.interceptors.response.use(
                      localStorage.setItem(StorageKeys.REFRESH_TOKEN, newRefreshToken);
                 }
 
+                // 3.1. Dispatch event để AuthContext biết token đã được refresh
+                // AuthContext sẽ lắng nghe event này và cập nhật user state
+                window.dispatchEvent(new CustomEvent('tokenRefreshed', { 
+                    detail: { accessToken, newRefreshToken } 
+                }));
+
                 // 4. Gắn Token mới vào header của request cũ bị lỗi
                 if (originalRequest.headers) {
                     originalRequest.headers.Authorization = `Bearer ${accessToken}`;

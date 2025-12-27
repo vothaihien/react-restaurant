@@ -33,11 +33,12 @@ export const tableService = {
   },
 
   // 2. Lấy trạng thái bàn theo thời gian (Check đặt bàn)
-  getTablesByTime: async (dateTime: string, soNguoi: number) => {
+  getTablesByTime: async (dateTime: string, soNguoi: number, maKhachHang?: string) => {
     const rawResponse = await axiosClient.get("/BanAnsAPI/GetStatusByTime", {
       params: {
         dateTime: dateTime,
         soNguoi: soNguoi,
+        maKhachHang: maKhachHang || undefined,
       },
     });
     // API này trả về danh sách bàn kèm trạng thái khả dụng

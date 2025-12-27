@@ -121,7 +121,11 @@ const BookingTab: React.FC = () => {
     const fetchTables = async () => {
       setLoadingTables(true);
       try {
-        const tables = await getAvailableTables(dateTime.getTime(), party);
+        const tables = await getAvailableTables(
+          dateTime.getTime(),
+          party,
+          customerId
+        );
         setAvailableTables(tables || []);
         setSelectedTableIds([]);
       } catch (error: any) {

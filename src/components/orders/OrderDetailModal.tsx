@@ -68,17 +68,23 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ maDonHang, onClose,
 
     // 3. Gom nhóm món ăn theo Bàn (để in cho đẹp)
     const itemsByTable: Record<string, any[]> = {};
-    if (orderData.monAns) {
+    if (orderData?.monAns && Array.isArray(orderData.monAns)) {
         orderData.monAns.forEach((item: any) => {
-            const tableName = item.tenBan || "Chung";
+            // Xử lý cả PascalCase và camelCase từ backend
+            const tableName = item.tenBan || item.TenBan || "Chung";
             if (!itemsByTable[tableName]) itemsByTable[tableName] = [];
             itemsByTable[tableName].push(item);
         });
     }
 
-    // Tính tổng tiền
-    const grandTotal = orderData.monAns?.reduce((sum: number, item: any) => sum + (item.donGia * item.soLuong), 0) || 0;
-    const customerPay = grandTotal - (orderData.tienDatCoc || 0);
+    // Tính tổng tiền - xử lý cả PascalCase và camelCase
+    const grandTotal = orderData?.monAns?.reduce((sum: number, item: any) => {
+        const donGia = item.donGia ?? item.DonGia ?? 0;
+        const soLuong = item.soLuong ?? item.SoLuong ?? 0;
+        return sum + (donGia * soLuong);
+    }, 0) || 0;
+    const tienDatCoc = orderData?.tienDatCoc ?? orderData?.TienDatCoc ?? 0;
+    const customerPay = Math.max(0, grandTotal - tienDatCoc);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
@@ -99,10 +105,14 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ maDonHang, onClose,
                     </div>
 
                     <div className="mb-6 grid grid-cols-2 gap-y-2 text-sm">
-                        <div><strong>Khách hàng:</strong> {orderData.tenNguoiDat}</div>
-                        <div><strong>SĐT:</strong> {orderData.sdtNguoiDat || '---'}</div>
-                        <div><strong>Thu ngân:</strong> {orderData.tenNhanVien || 'Admin'}</div>
-                        <div><strong>Giờ vào:</strong> {new Date(orderData.thoiGianNhanBan).toLocaleTimeString('vi-VN')}</div>
+                        <div><strong>Khách hàng:</strong> {orderData?.tenNguoiDat || orderData?.TenNguoiDat || orderData?.tenNguoiNhan || orderData?.TenNguoiNhan || '---'}</div>
+                        <div><strong>SĐT:</strong> {orderData?.sdtNguoiDat || orderData?.SDTNguoiDat || orderData?.sdtNguoiNhan || orderData?.SDTNguoiNhan || '---'}</div>
+                        <div><strong>Thu ngân:</strong> {orderData?.tenNhanVien || orderData?.TenNhanVien || 'Admin'}</div>
+                        <div><strong>Giờ vào:</strong> {
+                            orderData?.thoiGianNhanBan || orderData?.ThoiGianNhanBan 
+                                ? new Date(orderData.thoiGianNhanBan || orderData.ThoiGianNhanBan).toLocaleTimeString('vi-VN')
+                                : '---'
+                        }</div>
                     </div>
 
                     <div className="space-y-6">
@@ -112,21 +122,41 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ maDonHang, onClose,
         // Gom các món trùng tên + trùng size lại với nhau
         const groupedItems: any[] = [];
         items.forEach((item: any) => {
+            // Xử lý cả PascalCase và camelCase từ backend
+            const tenMon = item.tenMon || item.TenMon || '';
+            const tenPhienBan = item.tenPhienBan || item.TenPhienBan || '';
+            const donGia = item.donGia ?? item.DonGia ?? 0;
+            const soLuong = item.soLuong ?? item.SoLuong ?? 0;
+
             const existingItem = groupedItems.find(g => 
-                g.tenMon === item.tenMon && 
-                g.tenPhienBan === item.tenPhienBan
+                (g.tenMon || g.TenMon) === tenMon && 
+                (g.tenPhienBan || g.TenPhienBan) === tenPhienBan
             );
 
             if (existingItem) {
-                existingItem.soLuong += item.soLuong;
+                existingItem.soLuong = (existingItem.soLuong || existingItem.SoLuong || 0) + soLuong;
+                // Đảm bảo dùng camelCase cho frontend
+                if (existingItem.SoLuong) {
+                    existingItem.soLuong = existingItem.SoLuong;
+                    delete existingItem.SoLuong;
+                }
             } else {
-                // Copy object để tránh sửa vào mảng gốc (quan trọng!)
-                groupedItems.push({ ...item }); 
+                // Copy object và normalize về camelCase
+                groupedItems.push({ 
+                    tenMon,
+                    tenPhienBan,
+                    donGia,
+                    soLuong
+                }); 
             }
         });
 
         // Tính tổng tiền riêng của bàn này (Dựa trên danh sách ĐÃ GỘP)
-        const tableTotal = groupedItems.reduce((sum, i) => sum + (i.donGia * i.soLuong), 0);
+        const tableTotal = groupedItems.reduce((sum, i) => {
+            const donGia = i.donGia ?? i.DonGia ?? 0;
+            const soLuong = i.soLuong ?? i.SoLuong ?? 0;
+            return sum + (donGia * soLuong);
+        }, 0);
 
         return (
             <div key={tableName} className="border rounded-lg p-3">
@@ -145,19 +175,26 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ maDonHang, onClose,
                     </thead>
                     <tbody>
                         {/* 2. MAP QUA DANH SÁCH ĐÃ GỘP (groupedItems) THAY VÌ items */}
-                        {groupedItems.map((item: any, idx: number) => (
-                            <tr key={idx} className="border-b last:border-0">
-                                <td className="py-2">
-                                    {item.tenMon} <br/>
-                                    <span className="text-xs text-gray-400">{item.tenPhienBan}</span>
-                                </td>
-                                <td className="py-2 text-center font-medium">{item.soLuong}</td>
-                                <td className="py-2 text-right">{formatVND(item.donGia)}</td>
-                                <td className="py-2 text-right font-medium">
-                                    {formatVND(item.soLuong * item.donGia)}
-                                </td>
-                            </tr>
-                        ))}
+                        {groupedItems.map((item: any, idx: number) => {
+                            const tenMon = item.tenMon || item.TenMon || 'Món không xác định';
+                            const tenPhienBan = item.tenPhienBan || item.TenPhienBan || '';
+                            const donGia = item.donGia ?? item.DonGia ?? 0;
+                            const soLuong = item.soLuong ?? item.SoLuong ?? 0;
+                            
+                            return (
+                                <tr key={idx} className="border-b last:border-0">
+                                    <td className="py-2">
+                                        {tenMon} <br/>
+                                        {tenPhienBan && <span className="text-xs text-gray-400">{tenPhienBan}</span>}
+                                    </td>
+                                    <td className="py-2 text-center font-medium">{soLuong}</td>
+                                    <td className="py-2 text-right">{formatVND(donGia)}</td>
+                                    <td className="py-2 text-right font-medium">
+                                        {formatVND(soLuong * donGia)}
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -172,10 +209,10 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ maDonHang, onClose,
                             <span>{formatVND(grandTotal)}</span>
                         </div>
                         
-                        {orderData.tienDatCoc > 0 && (
+                        {tienDatCoc > 0 && (
                             <div className="flex justify-between text-gray-600">
                                 <span>Đã đặt cọc:</span>
-                                <span>- {formatVND(orderData.tienDatCoc)}</span>
+                                <span>- {formatVND(tienDatCoc)}</span>
                             </div>
                         )}
                         
