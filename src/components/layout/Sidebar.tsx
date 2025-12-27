@@ -2,8 +2,9 @@ import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { NavLink } from 'react-router-dom';
 import {
-  Package, Users, ChefHat, BarChart3, Settings, Tag, User2Icon,
+  Package, Users, BarChart3, Settings, Tag, User2Icon,
   LayoutGrid, UtensilsCrossed, CalendarDays, Warehouse, FileSpreadsheet,
+  Store // <-- Import thêm icon Store (Cửa hàng)
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -24,9 +25,8 @@ const Sidebar: React.FC<SidebarProps> = () => {
   const { user } = useAuth();
   const currentRole = user?.type || "";
 
-  // Config giữ nguyên
+  // --- GIỮ NGUYÊN TOÀN BỘ CONFIG CŨ ---
   const navItems: NavItem[] = [
-    // --- GIỮ NGUYÊN CONFIG CŨ CỦA BẠN Ở ĐÂY ---
     { path: '/', label: 'Sơ đồ bàn', icon: LayoutGrid, allowedRoles: ['admin', 'staff'], group: 'operation', iconColor: 'text-indigo-600 dark:text-indigo-400', activeBg: 'bg-indigo-600 shadow-indigo-200 dark:shadow-none' },
     { path: '/menu', label: 'Thực đơn', icon: UtensilsCrossed, allowedRoles: ['admin', 'staff'], group: 'operation', iconColor: 'text-orange-500 dark:text-orange-400', activeBg: 'bg-orange-500 shadow-orange-200 dark:shadow-none' },
     { path: '/reservations', label: 'Đặt bàn', icon: CalendarDays, allowedRoles: ['admin', 'staff'], group: 'operation', iconColor: 'text-sky-500 dark:text-sky-400', activeBg: 'bg-sky-500 shadow-sky-200 dark:shadow-none' },
@@ -52,13 +52,7 @@ const Sidebar: React.FC<SidebarProps> = () => {
         end={item.path === "/"}
         className={({ isActive }) => {
             const baseClass = "group flex items-center px-3 py-3 mb-2 mx-4 rounded-xl transition-all duration-300 font-medium cursor-pointer";
-            
-            // ACTIVE: Giữ nguyên nền màu, nhưng bỏ shadow hoặc làm tối shadow trong Dark Mode
             const activeClass = `${item.activeBg} text-white shadow-md transform scale-105`; 
-            
-            // INACTIVE: 
-            // Light: Text xám đậm, Hover xám nhạt
-            // Dark: Text xám nhạt (gray-300), Hover xám đậm (gray-800)
             const inactiveClass = "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:pl-5";
 
             return isActive ? `${baseClass} ${activeClass}` : `${baseClass} ${inactiveClass}`;
@@ -86,25 +80,32 @@ const Sidebar: React.FC<SidebarProps> = () => {
   };
 
   return (
-    // CONTAINER CHÍNH: Thêm dark:bg-gray-900 và dark:border-gray-800
     <div className="h-screen w-20 md:w-64 bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 flex flex-col shadow-2xl z-50 font-sans transition-colors duration-300">
       
-      {/* LOGO: Thêm border dark */}
+      {/* --- PHẦN LOGO MỚI (ICON STORE + CHỮ KHÁC) --- */}
       <div className="flex items-center justify-center md:justify-start md:px-6 h-24 border-b border-gray-100 dark:border-gray-800 mb-2">
-        <div className="relative">
-            <div className="w-12 h-12 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-xl flex items-center justify-center shadow-lg transform rotate-3 hover:rotate-0 transition-transform duration-300">
-                <ChefHat className="w-7 h-7 text-white" />
+        {/* Icon Store: Dùng nền Gradient Cam-Đỏ (Tạo cảm giác năng động, F&B) */}
+        <div className="relative group cursor-pointer">
+            <div className="w-11 h-11 bg-gradient-to-br from-orange-500 to-rose-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200 dark:shadow-none transform transition-transform duration-300 group-hover:scale-105">
+                <Store className="w-6 h-6 text-white" strokeWidth={2} />
             </div>
+            {/* Chấm xanh trạng thái */}
+            <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-green-500 border-[3px] border-white dark:border-gray-900 rounded-full"></div>
         </div>
         
-        <div className="hidden md:block ml-4">
-            {/* Chữ POS Pro sáng lên trong DarkMode */}
-            <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600 dark:from-indigo-400 dark:to-violet-400 tracking-tight">POS Pro</h1>
-            <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full uppercase tracking-wider">Manager</span>
+      
+        <div className="hidden md:flex flex-col ml-3 justify-center">
+            <h1 className="text-xl font-black tracking-tight text-gray-800 dark:text-white leading-none uppercase">
+                Viet <span className="text-rose-600">Rest</span>
+            </h1>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] mt-1">
+                Trang quản trị
+            </span>
         </div>
       </div>
+      {/* --- KẾT THÚC LOGO --- */}
 
-      {/* NAVIGATION */}
+      {/* NAVIGATION GIỮ NGUYÊN */}
       <nav className="flex-1 py-4 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-700 scrollbar-track-transparent">
         <div className="mb-6">
             <p className="hidden md:block px-6 mb-3 text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Khu vực vận hành</p>
@@ -118,19 +119,6 @@ const Sidebar: React.FC<SidebarProps> = () => {
             </div>
         )}
       </nav>
-
-      {/* FOOTER USER PROFILE */}
-      {/* <div className="p-4 border-t border-gray-100 dark:border-gray-800">
-        <div className="flex items-center w-full p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-indigo-200 dark:hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-gray-700 transition-all cursor-pointer group">
-            <div className="w-10 h-10 rounded-full bg-white dark:bg-gray-700 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-lg shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
-            </div>
-            <div className="hidden md:block ml-3 overflow-hidden">
-                <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate group-hover:text-indigo-900 dark:group-hover:text-white">{user?.name || 'Admin'}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-300">{currentRole === 'admin' ? 'Quản trị viên' : 'Nhân viên'}</p>
-            </div>
-        </div>
-      </div> */}
     </div>
   );
 };
