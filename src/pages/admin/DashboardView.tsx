@@ -11,14 +11,14 @@ interface TableData {
   maBan: string;
   tenBan: string;
   sucChua: number;
-  maTrangThai?: string;
-  tenTrangThai?: string; // Tên hiển thị (Trống, Đang phục vụ...)
-  trangThaiHienThi?: string; // Trạng thái từ API GetManagerTableStatus
+  maTrangThai?: string; 
+  tenTrangThai?: string; 
+  trangThaiHienThi?: string; 
   maTang?: string;
   tenTang?: string;
   thoiGianVao?: string;
-  ghiChu?: string; // Thông tin hóa đơn, khách hàng
-  maDonHang?: string; // Mã đơn hàng nếu có
+  ghiChu?: string; 
+  maDonHang?: string; 
 }
 
 interface TangData {
@@ -68,13 +68,12 @@ const DashboardView: React.FC = () => {
     fetchData();
   }, [selectedTime]);
 
-  // --- LOGIC LỌC CLIENT-SIDE (Đầy đủ Tầng, Trạng thái, Số người) ---
+  // --- LOGIC LỌC CLIENT-SIDE (ĐÃ CHUẨN HÓA) ---
   const filteredTables = tables.filter(t => {
     // 1. Lọc Tầng
     const matchFloor = selectedFloor === 'all' || t.maTang === selectedFloor;
 
     // 2. Lọc Trạng Thái
-    // Sử dụng trangThaiHienThi nếu có, nếu không thì dùng tenTrangThai
     const statusToCheck = t.trangThaiHienThi || t.tenTrangThai || '';
     let matchStatus = true;
     if (selectedStatus !== 'all') {
@@ -93,10 +92,23 @@ const DashboardView: React.FC = () => {
       }
     }
 
-    // 3. Lọc Số Người (Sức chứa >= Số người chọn)
-    const matchPeople = selectedPeople === '' || t.sucChua >= parseInt(selectedPeople);
+    // 3. Lọc Số Người
+    // Logic: Chỉ ẩn bàn khi nó QUÁ LỚN (lãng phí). Bàn nhỏ (để ghép) vẫn hiện.
+    let matchPeople = true;
+    if (selectedPeople && parseInt(selectedPeople) > 0) {
+        const numPeople = parseInt(selectedPeople);
+        const capacity = Number(t.sucChua);
+        const MAX_EXTRA_SEATS = 3; // Cho phép dư tối đa 4 ghế
 
-    // 4. Tìm kiếm tên bàn hoặc thông tin hóa đơn
+        // Điều kiện ẩn: Sức chứa lớn hơn Số khách quá 4 đơn vị
+        if ((capacity - numPeople) > MAX_EXTRA_SEATS) {
+            matchPeople = false; // Ẩn đi
+        } else {
+            matchPeople = true; // Giữ lại (Bao gồm cả bàn nhỏ hơn số khách)
+        }
+    }
+
+    // 4. Tìm kiếm
     const searchText = searchQuery.toLowerCase();
     const matchSearch = searchText === '' ||
       (t.tenBan || '').toLowerCase().includes(searchText) ||
@@ -171,7 +183,6 @@ const DashboardView: React.FC = () => {
         label: 'Bàn trống'
       };
     }
-    console.log("Xác định màu cho trạng thái:", s, "và ghi chú:", n);
   };
 
   return (

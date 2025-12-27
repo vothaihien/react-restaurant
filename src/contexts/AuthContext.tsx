@@ -43,7 +43,7 @@ interface AuthContextType {
   user: AuthUser;
   isAuthenticated: boolean;
   isAdmin: boolean;
-  isLoading: boolean; // <--- THÊM CÁI NÀY ĐỂ FIX LỖI F5
+  isLoading: boolean; 
   checkUser: (identifier: string) => Promise<{ userExists: boolean }>;
   login: (identifier: string, otp: string) => Promise<void>;
   register: (identifier: string, name: string, otp: string) => Promise<void>;

@@ -206,6 +206,22 @@ const BookingTab: React.FC = () => {
       });
     }
 
+    if (party > 0) {
+        const MAX_EXTRA_SEATS = 3; // Quy định: Chỉ cho phép dư tối đa 4 ghế
+        
+        tables = tables.filter(t => {
+            const capacity = Number(t.capacity) || 0;
+            // Logic:
+            // 1. Backend thường đã lọc capacity >= party rồi.
+            // 2. Ở đây ta lọc thêm: capacity - party <= 4
+            // Ví dụ: Khách 2 người.
+            // - Bàn 4 (Dư 2) -> OK (Hiện)
+            // - Bàn 6 (Dư 4) -> OK (Hiện)
+            // - Bàn 8 (Dư 6) -> Ẩn luôn
+            return (capacity - party) <= MAX_EXTRA_SEATS;
+        });
+    }
+
     return tables;
   }, [availableTables, selectedTang]);
 
