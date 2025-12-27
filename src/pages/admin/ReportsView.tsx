@@ -4,6 +4,8 @@ import { reportsApi } from "@/api/other";
 import dashboardService, { TimeRange } from "@/services/dashboardService";
 import { DashboardStat } from "@/models/DashboardStat";
 import { useTheme } from "@/contexts/ThemeContext"; // Import theme context
+import { useAuth } from "@/contexts/AuthContext";
+import { Navigate } from "react-router-dom";
 import {
   BarChart,
   Bar,
@@ -21,7 +23,13 @@ interface MonthlyRevenue {
 }
 
 const StatisticsDashboard: React.FC = () => {
+  const { user } = useAuth();
   const { theme } = useTheme(); // Lấy theme hiện tại
+  
+  // Kiểm tra quyền truy cập - chỉ admin mới được vào
+  if (!user || user.type !== 'admin') {
+    return <Navigate to="/unauthorized" replace />;
+  }
   
   // Logic kiểm tra Dark Mode để chỉnh màu biểu đồ
   const isDarkMode = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);

@@ -1,11 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { promotionsApi, Promotion, CreatePromotionData, UpdatePromotionData } from 'src/api/khuyenmai';
+import { useAuth } from '@/contexts/AuthContext';
+import { Navigate } from 'react-router-dom';
 import { 
   Tag, Plus, Search, Calendar, DollarSign, Percent, 
   Trash2, Edit, X, Filter, CheckCircle2, AlertCircle, Gift 
 } from 'lucide-react';
 
 const PromotionManagement: React.FC = () => {
+  const { user } = useAuth();
+  
+  // Kiểm tra quyền truy cập - chỉ admin mới được vào
+  if (!user || user.type !== 'admin') {
+    return <Navigate to="/unauthorized" replace />;
+  }
   // --- STATE & LOGIC (GIỮ NGUYÊN) ---
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [recipes, setRecipes] = useState<any[]>([]);

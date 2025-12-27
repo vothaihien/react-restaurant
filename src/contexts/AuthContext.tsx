@@ -6,10 +6,13 @@ import React, {
   useState,
   ReactNode,
   useEffect,
+  useRef,
 } from "react";
 import { authService } from "@/services/authService";
 import { StorageKeys } from "@/constants/StorageKeys";
 import { khachHangService } from "@/services/khachHangService";
+import { isTokenExpiringSoon, getTimeUntilExpiration } from "@/utils/jwt";
+import axios from "axios";
 
 // --- CÁC TYPE GIỮ NGUYÊN ---
 type ContactInfo = {
@@ -56,6 +59,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const [user, setUser] = useState<AuthUser>(null);
   // Thêm state loading, mặc định là TRUE để chặn redirect lung tung lúc mới F5
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  // Ref để lưu timeout ID cho việc tự động refresh token
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Ref để tránh refresh đồng thời nhiều lần
+  const isRefreshingRef = useRef<boolean>(false);
 
   // --- CÁC HÀM XỬ LÝ CONTACT (GIỮ NGUYÊN) ---
   const buildContactInfo = (identifier?: string): ContactInfo => {
@@ -80,6 +87,102 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       return contact;
     } catch {
       return contact;
+    }
+  };
+
+  // Function để refresh token tự động
+  const refreshTokenSilently = async (): Promise<boolean> => {
+    // Tránh refresh đồng thời nhiều lần
+    if (isRefreshingRef.current) {
+      return false;
+    }
+
+    try {
+      isRefreshingRef.current = true;
+      const refreshToken = localStorage.getItem(StorageKeys.REFRESH_TOKEN);
+      
+      if (!refreshToken) {
+        return false;
+      }
+
+      // Gọi API refresh token (dùng axios thường để tránh interceptor loop)
+      const result = await axios.post('http://localhost:5555/api/Auth/refresh-token', {
+        refreshToken: refreshToken
+      });
+
+      const { accessToken, newRefreshToken } = result.data;
+
+      if (!accessToken) {
+        return false;
+      }
+
+      // Lưu token mới
+      localStorage.setItem(StorageKeys.ACCESS_TOKEN, accessToken);
+      if (newRefreshToken) {
+        localStorage.setItem(StorageKeys.REFRESH_TOKEN, newRefreshToken);
+      }
+
+      // Cập nhật user state với token mới
+      setUser((prevUser) => {
+        if (!prevUser) return null;
+        return {
+          ...prevUser,
+          token: accessToken,
+        };
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Lỗi refresh token tự động:', error);
+      // Nếu refresh thất bại, logout user
+      setUser(null);
+      localStorage.removeItem("auth_user");
+      localStorage.removeItem(StorageKeys.ACCESS_TOKEN);
+      localStorage.removeItem(StorageKeys.REFRESH_TOKEN);
+      return false;
+    } finally {
+      isRefreshingRef.current = false;
+    }
+  };
+
+  // Function để setup auto refresh token
+  const setupAutoRefresh = (token: string) => {
+    // Clear timeout cũ nếu có
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
+    }
+
+    // Kiểm tra token có hợp lệ không
+    if (!token) {
+      return;
+    }
+
+    // Kiểm tra xem token có sắp hết hạn không (trong 5 phút)
+    if (isTokenExpiringSoon(token, 300)) {
+      // Nếu sắp hết hạn, refresh ngay
+      refreshTokenSilently();
+    }
+
+    // Tính thời gian đến khi cần refresh (5 phút trước khi hết hạn)
+    const timeUntilRefresh = getTimeUntilExpiration(token) - 5 * 60 * 1000; // 5 phút = 300000ms
+
+    if (timeUntilRefresh > 0) {
+      // Set timeout để refresh trước khi hết hạn
+      refreshTimeoutRef.current = setTimeout(() => {
+        refreshTokenSilently().then((success) => {
+          if (success) {
+            // Sau khi refresh thành công, setup lại cho token mới
+            const newToken = localStorage.getItem(StorageKeys.ACCESS_TOKEN);
+            if (newToken) {
+              setupAutoRefresh(newToken);
+            }
+          }
+        });
+      }, timeUntilRefresh);
+    } else {
+      // Nếu token đã hết hạn hoặc sắp hết hạn, refresh ngay
+      refreshTokenSilently();
     }
   };
 
@@ -108,20 +211,58 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     };
 
     initAuth();
+
+    // Lắng nghe event khi token được refresh bởi axiosClient interceptor
+    const handleTokenRefreshed = (event: CustomEvent) => {
+      const { accessToken, newRefreshToken } = event.detail;
+      setUser((prevUser) => {
+        if (!prevUser) return null;
+        // Cập nhật token mới vào user state
+        const updatedUser = {
+          ...prevUser,
+          token: accessToken,
+        };
+        // Lưu lại vào localStorage
+        localStorage.setItem("auth_user", JSON.stringify(updatedUser));
+        // Setup auto refresh cho token mới
+        setupAutoRefresh(accessToken);
+        return updatedUser;
+      });
+    };
+
+    window.addEventListener('tokenRefreshed', handleTokenRefreshed as EventListener);
+
+    return () => {
+      window.removeEventListener('tokenRefreshed', handleTokenRefreshed as EventListener);
+    };
   }, []);
 
-  // Sync user state với localStorage
+  // Sync user state với localStorage và setup auto refresh
   useEffect(() => {
     try {
       if (user) {
         localStorage.setItem("auth_user", JSON.stringify(user));
         // Đảm bảo token luôn đồng bộ cho axiosClient dùng
         localStorage.setItem(StorageKeys.ACCESS_TOKEN, user.token);
+        // Setup auto refresh token
+        setupAutoRefresh(user.token);
       } else {
-        // Nếu user null thì dọn dẹp sạch sẽ
+        // Nếu user null thì dọn dẹp sạch sẽ và clear timeout
+        if (refreshTimeoutRef.current) {
+          clearTimeout(refreshTimeoutRef.current);
+          refreshTimeoutRef.current = null;
+        }
         // CHÚ Ý: Không xóa ngay ở đây nếu đang loading, nhưng logic logout đã handle rồi
       }
     } catch {}
+
+    // Cleanup khi component unmount
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+    };
   }, [user]);
 
   const value = useMemo<AuthContextType>(
@@ -190,6 +331,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       },
 
       logout: () => {
+        // Clear refresh timeout
+        if (refreshTimeoutRef.current) {
+          clearTimeout(refreshTimeoutRef.current);
+          refreshTimeoutRef.current = null;
+        }
         setUser(null);
         localStorage.removeItem("auth_user");
         localStorage.removeItem(StorageKeys.ACCESS_TOKEN);

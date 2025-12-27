@@ -86,7 +86,8 @@ interface AppContextType {
   markNoShow: (id: string, reason?: string) => void;
   getAvailableTables: (
     dateTime: number,
-    partySize: number
+    partySize: number,
+    maKhachHang?: string
   ) => Promise<
     Array<{ id: string; name: string; capacity: number; status: string }>
   >;
@@ -857,10 +858,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
-  const getAvailableTables = async (dateTime: number, partySize: number) => {
+  const getAvailableTables = async (
+    dateTime: number,
+    partySize: number,
+    maKhachHang?: string
+  ) => {
     try {
       const iso = new Date(dateTime).toISOString();
-      const data = await tableService.getTablesByTime(iso, partySize);
+      const data = await tableService.getTablesByTime(
+        iso,
+        partySize,
+        maKhachHang
+      );
       const mapped = (data || []).map((x: any) => {
         const result = {
           id: x.maBan || x.MaBan,
