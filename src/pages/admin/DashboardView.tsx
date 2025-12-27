@@ -14,9 +14,6 @@ interface TableData {
   maTrangThai?: string; 
   tenTrangThai?: string; 
   trangThaiHienThi?: string; 
-  maTrangThai?: string;
-  tenTrangThai?: string; // Tên hiển thị (Trống, Đang phục vụ...)
-  trangThaiHienThi?: string; // Trạng thái từ API GetManagerTableStatus
   maTang?: string;
   tenTang?: string;
   thoiGianVao?: string;

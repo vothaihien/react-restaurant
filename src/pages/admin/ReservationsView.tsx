@@ -63,37 +63,46 @@ const fetchAvailableTables = useCallback(async () => {
     setLoadingTables(true);
     try {
       const dateTimeStr = `${bookingDate}T${bookingTime}:00`;
+      // Gọi API lấy bàn theo giờ
       const tables = await tableService.getTablesByTime(dateTimeStr, partySize);
       
-      // LOGIC LỌC BÀN (CORRECTED)
+      const MAX_EXTRA_SEATS = 4; // Cho phép dư tối đa 4 ghế
+
       const available = Array.isArray(tables) ? tables.filter((t: any) => {
-        const statusName = (t.tenTrangThai || '').toLowerCase(); // Convert to lowercase
+        const statusName = (t.tenTrangThai || '').toLowerCase();
         const statusCode = t.maTrangThai;
 
-        // 1. STRICTLY HIDE BUSY TABLES
-        // Check for specific API keywords or standard status codes
+        // 1. LOẠI BỎ BÀN ĐANG BẬN/BẢO TRÌ (Giữ nguyên logic cũ của bạn)
         if (
             statusCode === 'TTBA002' || 
             statusCode === 'TTBA003' || 
-            statusName === 'dadat' ||        // From API GetAvailableBanAns
-            statusName === 'baotri' ||       // From API GetAvailableBanAns
-            statusName === 'canghep' ||      // From API GetAvailableBanAns
+            statusName === 'dadat' || 
+            statusName === 'baotri' || 
+            statusName === 'canghep' || 
             statusName.includes('có khách') || 
             statusName.includes('đã đặt') || 
             statusName.includes('phục vụ')
         ) {
-            return false; // HIDE this table completely
+            return false;
         }
 
-        // 2. ONLY RETURN EMPTY TABLES
-        // TTBA001: Bàn trống, or text contains "trống"/"trong"/"cuatui"
+        // 2. LOGIC ẨN BÀN QUÁ TO (Mới thêm vào)
+        // Bàn nhỏ (để ghép) -> GIỮ
+        // Bàn vừa -> GIỮ
+        // Bàn quá to (Sức chứa - Khách > 4) -> ẨN
+        if ((t.sucChua - partySize) > MAX_EXTRA_SEATS) {
+            return false; // Ẩn bàn quá to
+        }
+
+        // 3. CHỈ GIỮ LẠI BÀN TRỐNG
         return statusCode === 'TTBA001' || statusName.includes('trống') || statusName === 'trong' || statusName === 'cuatui';
         
       }).sort((a: BanAn, b: BanAn) => {
-          // Sắp xếp ưu tiên bàn vừa vặn
+          // Sắp xếp: Bàn vừa vặn nhất lên đầu
           const diffA = a.sucChua - partySize;
           const diffB = b.sucChua - partySize;
 
+          // Ưu tiên bàn đủ chỗ (diff >= 0) hơn bàn thiếu chỗ (diff < 0)
           const aDuCho = diffA >= 0;
           const bDuCho = diffB >= 0;
 
@@ -101,7 +110,7 @@ const fetchAvailableTables = useCallback(async () => {
           if (!aDuCho && bDuCho) return 1;
 
           if (aDuCho && bDuCho) return diffA - diffB; // Cả 2 đều đủ -> Chọn bàn nhỏ hơn (tiết kiệm)
-          return b.sucChua - a.sucChua; // Cả 2 đều thiếu -> Chọn bàn to hơn (để dễ ghép)
+          return b.sucChua - a.sucChua; // Cả 2 đều thiếu -> Chọn bàn to hơn (để ghép cho nhanh)
 
       }) : [];
       
@@ -113,6 +122,10 @@ const fetchAvailableTables = useCallback(async () => {
       setLoadingTables(false);
     }
   }, [bookingDate, bookingTime, partySize]);
+
+  useEffect(() => {
+    fetchAvailableTables();
+  }, [fetchAvailableTables]);
 
   useEffect(() => {
     fetchAvailableTables();
