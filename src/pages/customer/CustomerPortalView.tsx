@@ -46,7 +46,7 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   // Menu view mode: khungGio, eMenu, all
   const [menuViewMode, setMenuViewMode] = useState<
     "khungGio" | "eMenu" | "all"
-  >("khungGio");
+  >("all");
 
   // State để load menu items cho phần "all" nếu menuItems từ context rỗng
   const [allMenuItems, setAllMenuItems] = useState<any[]>([]);
@@ -91,46 +91,48 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
         setLoadingAllMenuItems(true);
         try {
           const data = await menuApi.getDishes();
-          
+
           // Map dữ liệu từ API sang format MenuItem
-          const mapped: any[] = (Array.isArray(data) ? data : []).map((m: any) => {
-            const imgs: string[] = (
-              m.hinhAnhMonAns ||
-              m.HinhAnhMonAns ||
-              []
-            ).map((h: any) => {
-              const url = h.urlHinhAnh || h.URLHinhAnh || h.url || h.URL;
-              return url?.startsWith("http") ? url : `${BASE_URL}/${url}`;
-            });
+          const mapped: any[] = (Array.isArray(data) ? data : []).map(
+            (m: any) => {
+              const imgs: string[] = (
+                m.hinhAnhMonAns ||
+                m.HinhAnhMonAns ||
+                []
+              ).map((h: any) => {
+                const url = h.urlHinhAnh || h.URLHinhAnh || h.url || h.URL;
+                return url?.startsWith("http") ? url : `${BASE_URL}/${url}`;
+              });
 
-            const tenDanhMuc =
-              m.maDanhMucNavigation?.tenDanhMuc ||
-              m.MaDanhMucNavigation?.TenDanhMuc ||
-              m.tenDanhMuc ||
-              m.TenDanhMuc ||
-              "";
+              const tenDanhMuc =
+                m.maDanhMucNavigation?.tenDanhMuc ||
+                m.MaDanhMucNavigation?.TenDanhMuc ||
+                m.tenDanhMuc ||
+                m.TenDanhMuc ||
+                "";
 
-            const sizes = (m.phienBanMonAns || m.PhienBanMonAns || []).map(
-              (p: any) => ({
-                id: p.maPhienBan || p.MaPhienBan || "",
-                name: p.tenPhienBan || p.TenPhienBan || "",
-                price: Number(p.gia || p.Gia) || 0,
-                recipe: { id: "", name: "", ingredients: [] },
-              })
-            );
+              const sizes = (m.phienBanMonAns || m.PhienBanMonAns || []).map(
+                (p: any) => ({
+                  id: p.maPhienBan || p.MaPhienBan || "",
+                  name: p.tenPhienBan || p.TenPhienBan || "",
+                  price: Number(p.gia || p.Gia) || 0,
+                  recipe: { id: "", name: "", ingredients: [] },
+                })
+              );
 
-            return {
-              id: m.maMonAn || m.MaMonAn || "",
-              name: m.tenMonAn || m.TenMonAn || "",
-              description: m.moTa || m.MoTa || "",
-              categoryId: m.maDanhMuc || m.MaDanhMuc || "",
-              category: tenDanhMuc,
-              imageUrls: imgs,
-              inStock: m.isShow !== false,
-              sizes,
-            };
-          });
-          
+              return {
+                id: m.maMonAn || m.MaMonAn || "",
+                name: m.tenMonAn || m.TenMonAn || "",
+                description: m.moTa || m.MoTa || "",
+                categoryId: m.maDanhMuc || m.MaDanhMuc || "",
+                category: tenDanhMuc,
+                imageUrls: imgs,
+                inStock: m.isShow !== false,
+                sizes,
+              };
+            }
+          );
+
           setAllMenuItems(mapped);
         } catch (error: any) {
           console.warn("Không thể tải món ăn từ API cho phần all:", error);
@@ -147,7 +149,8 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   // Also map category name from categoriesFromApi if category is missing
   // Sử dụng allMenuItems nếu menuItems từ context rỗng
   const availableMenuItems = useMemo(() => {
-    const sourceItems = (menuItems && menuItems.length > 0) ? menuItems : allMenuItems;
+    const sourceItems =
+      menuItems && menuItems.length > 0 ? menuItems : allMenuItems;
     const items = (sourceItems || [])
       .filter((m: any) => {
         // Show item if inStock is true or undefined (default to showing)
@@ -317,7 +320,10 @@ const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
             startIndex={startIndex}
             endIndex={endIndex}
             availableMenuItems={availableMenuItems}
-            menuItemsCount={(menuItems?.length || 0) + (allMenuItems.length > 0 ? allMenuItems.length : 0)}
+            menuItemsCount={
+              (menuItems?.length || 0) +
+              (allMenuItems.length > 0 ? allMenuItems.length : 0)
+            }
           />
         </TabsContent>
 

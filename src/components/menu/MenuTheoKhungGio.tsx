@@ -48,10 +48,10 @@ const MenuTheoKhungGio: React.FC = () => {
     setLoading(true);
     try {
       const response = await menuApi.getMenuHienTai();
-      
+
       // Xử lý response: API trả về { success: true, khungGio, tenKhungGio, data: [...] }
       let menuData: MenuData | null = null;
-      
+
       if (response && typeof response === "object") {
         // Nếu response có success và data
         if ((response as any).success && (response as any).data) {
@@ -62,7 +62,9 @@ const MenuTheoKhungGio: React.FC = () => {
             isNgayLe: (response as any).isNgayLe || false,
             timeRemaining: (response as any).timeRemaining || 0,
             nextTimeSlot: (response as any).nextTimeSlot || "",
-            data: Array.isArray((response as any).data) ? (response as any).data : [],
+            data: Array.isArray((response as any).data)
+              ? (response as any).data
+              : [],
           };
         } else {
           // Nếu response là object trực tiếp (không có wrapper)
@@ -73,16 +75,21 @@ const MenuTheoKhungGio: React.FC = () => {
             isNgayLe: (response as any).isNgayLe || false,
             timeRemaining: (response as any).timeRemaining || 0,
             nextTimeSlot: (response as any).nextTimeSlot || "",
-            data: Array.isArray((response as any).data) ? (response as any).data : [],
+            data: Array.isArray((response as any).data)
+              ? (response as any).data
+              : [],
           };
         }
       }
-      
+
       if (menuData) {
         setMenuData(menuData);
         setTimeRemaining(menuData.timeRemaining || 0);
       } else {
-        console.warn("MenuTheoKhungGio: Không có dữ liệu menu từ API", response);
+        console.warn(
+          "MenuTheoKhungGio: Không có dữ liệu menu từ API",
+          response
+        );
         setMenuData({
           success: false,
           khungGio: "",
@@ -218,7 +225,8 @@ const MenuTheoKhungGio: React.FC = () => {
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-gray-500">
-              Chưa có menu nào cho khung giờ {menuData.tenKhungGio.toLowerCase()}
+              Chưa có menu nào cho khung giờ{" "}
+              {menuData.tenKhungGio.toLowerCase()}
             </p>
           </CardContent>
         </Card>
@@ -303,7 +311,9 @@ const MenuTheoKhungGio: React.FC = () => {
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-2xl">{selectedMenu.tenMenu}</CardTitle>
+                  <CardTitle className="text-2xl">
+                    {selectedMenu.tenMenu}
+                  </CardTitle>
                   {selectedMenu.loaiMenu && (
                     <p className="text-sm text-gray-600 mt-1">
                       {selectedMenu.loaiMenu}
@@ -417,7 +427,3 @@ const MenuTheoKhungGio: React.FC = () => {
 };
 
 export default MenuTheoKhungGio;
-
-
-
-
